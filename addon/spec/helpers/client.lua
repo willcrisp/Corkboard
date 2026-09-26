@@ -400,6 +400,7 @@ function Client.new(options)
 		locked = false,
 		sentAddon = {},
 		received = {},
+		equipped = options.equipped or {}, -- slot -> { link, quality }
 	}, Client)
 	self.env = self:makeEnv()
 	return self
@@ -689,6 +690,14 @@ function Client:makeEnv()
 		return function(err)
 			client.errors[#client.errors + 1] = tostring(err)
 		end
+	end
+	env.GetInventoryItemLink = function(unit, slot)
+		local item = unit == "player" and client.equipped[slot]
+		return item and item.link or nil
+	end
+	env.GetInventoryItemQuality = function(unit, slot)
+		local item = unit == "player" and client.equipped[slot]
+		return item and item.quality or nil
 	end
 	env.issecretvalue = function(value)
 		return client.secrets[value] == true
@@ -1033,6 +1042,7 @@ function Client:reload()
 		class = self.class,
 		guild = self.guild,
 		network = self.network,
+		equipped = self.equipped,
 	})
 	-- The server keeps channel membership across a /reload.
 	fresh.myChannels = self.myChannels
@@ -1058,6 +1068,13 @@ function Client:typeInPopup(text)
 end
 
 -- A shift-click on a link somewhere in the game's UI.
+-- Puts an item in an equipment slot (nil empties it), as the paper doll does.
+function Client:equip(slot, link, quality)
+	self.equipped[slot] = link and { link = link, quality = quality } or nil
+	self.fire("PLAYER_EQUIPMENT_CHANGED", slot, link == nil)
+	return self:check()
+end
+
 function Client:shiftClick(link)
 	self.env.ChatFrameUtil.InsertLink(link)
 	return self:check()

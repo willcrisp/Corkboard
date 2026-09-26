@@ -55,6 +55,9 @@ local function randomNote(rand)
 		color = rand(2),
 		deleted = deleted,
 	}
+	if rand(3) == 1 then
+		note.kind = "gear" -- so ties between a gear entry and a plain note come up
+	end
 	if rand(20) == 1 then
 		note.rev = 0 -- invalid: must be dropped without disturbing anything
 	end

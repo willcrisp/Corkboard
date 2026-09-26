@@ -29,11 +29,15 @@ def compare_version(a: dict, b: dict) -> int:
 
 def compare_note(a: dict, b: dict) -> int:
     """Total order on two versions of one note: (rev, editor), then a tombstone
-    wins the tie, then the greater text, color, author and created."""
+    wins the tie, then the greater kind (missing counts as ""), text, color,
+    author and created."""
     c = compare_version(a, b)
     if c:
         return c
     c = _cmp(bool(a["deleted"]), bool(b["deleted"]))
+    if c:
+        return c
+    c = compare_bytes(a.get("kind") or "", b.get("kind") or "")
     if c:
         return c
     c = compare_bytes(a["text"], b["text"])
@@ -156,6 +160,7 @@ def create_note(board: dict, fields: dict, now: int):
     return _commit(board, "notes", "id", {
         "id": fields["id"], "author": fields["author"], "created": now, "rev": next_rev(board, now),
         "editor": fields["author"], "text": fields["text"], "color": fields.get("color", 1), "deleted": False,
+        "kind": fields.get("kind"),
     }, sanitise.note)
 
 
@@ -175,7 +180,7 @@ def edit_note(board: dict, note_id: str, changes: dict, editor: str, now: int):
     return _commit(board, "notes", "id", {
         "id": note_id, "author": note["author"], "created": note["created"], "rev": next_rev(board, now),
         "editor": editor, "text": changes.get("text", note["text"]), "color": changes.get("color", note["color"]),
-        "deleted": False,
+        "deleted": False, "kind": note.get("kind"),
     }, sanitise.note)
 
 
@@ -186,6 +191,7 @@ def delete_note(board: dict, note_id: str, editor: str, now: int):
     return _commit(board, "notes", "id", {
         "id": note_id, "author": note["author"], "created": note["created"], "rev": next_rev(board, now),
         "editor": editor, "text": "", "color": note["color"], "deleted": True,
+        "kind": note.get("kind"),
     }, sanitise.note)
 
 

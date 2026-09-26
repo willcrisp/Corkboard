@@ -40,8 +40,8 @@ end
 
 -- Total order on two notes with the same id. Content only matters on an exact
 -- (rev, editor) tie, which honest clients produce only when one character
--- edits on two installs. A tombstone wins the tie, then the greater text,
--- color, author and created. Taking the maximum of a total order is what makes
+-- edits on two installs. A tombstone wins the tie, then the greater kind (a
+-- missing kind counts as ""), text, color, author and created. Taking the maximum of a total order is what makes
 -- merging commutative, associative and idempotent.
 function Merge.compareNote(a, b)
 	local c = Merge.compareVersion(a, b)
@@ -49,6 +49,10 @@ function Merge.compareNote(a, b)
 		return c
 	end
 	c = compareBool(a.deleted, b.deleted)
+	if c ~= 0 then
+		return c
+	end
+	c = compareBytes(a.kind or "", b.kind or "")
 	if c ~= 0 then
 		return c
 	end
@@ -199,7 +203,7 @@ local function commit(board, field, key, record, sanitise)
 	return clean
 end
 
--- fields: id, author, text, color (default 1).
+-- fields: id, author, text, color (default 1), kind (default none).
 function Merge.createNote(board, fields, now)
 	if board.notes and board.notes[fields.id] then
 		return nil, "exists"
@@ -213,6 +217,7 @@ function Merge.createNote(board, fields, now)
 		text = fields.text,
 		color = fields.color or 1,
 		deleted = false,
+		kind = fields.kind,
 	}, Sanitise.note)
 end
 
@@ -249,6 +254,7 @@ function Merge.editNote(board, id, changes, editor, now)
 		text = text,
 		color = color,
 		deleted = false,
+		kind = note.kind,
 	}, Sanitise.note)
 end
 
@@ -267,6 +273,7 @@ function Merge.deleteNote(board, id, editor, now)
 		text = "",
 		color = note.color,
 		deleted = true,
+		kind = note.kind,
 	}, Sanitise.note)
 end
 

@@ -40,7 +40,9 @@ Forever has vanilla-era content but a **modern (Mainline-style) addon API**, and
 | Fact | Design consequence |
 |---|---|
 | The TOC interface is `16001` (check with `/dump (select(4, GetBuildInfo()))`). The client uses the modern `C_*` namespaces. | Write against the modern API (`C_ChatInfo.*`, etc.), not the 1.12 or Classic Era API. |
-| Combat and chat values can be **secret** in restricted contexts. `SendAddonMessage` refuses secret arguments. | Never send data derived from unit or combat APIs. Drop any received payload where `issecretvalue(msg)` is true. Corkboard only sends user-typed text, so this is a guardrail, not a limitation. |
+| Combat and chat values can be **secret** in restricted contexts. `SendAddonMessage` refuses secret arguments. | Never send data derived from unit or combat APIs. Drop any received payload where `issecretvalue(msg)` is true. Corkboard sends user-typed text, plus the item links of the gear feed (§9.1), which come from the inventory API and are checked with `issecretvalue` before use. |
+| **Addons can't read the combat log.** `CombatLogGetCurrentEventInfo` is nil, and registering `COMBAT_LOG_EVENT_UNFILTERED` is blocked as "only available to the Blizzard UI". `C_CombatLog` and `C_DamageMeter` exist. Seen in game on 2026-09-26. | No feature can use individual hits, so a "biggest crit" leaderboard was dropped. |
+| `PLAYER_EQUIPMENT_CHANGED` fires with the slot, and `GetInventoryItemLink("player", slot)` returns a plain (not secret) link with a quality from `C_Item.GetItemQualityByID`. Unequipping gives a nil link. Seen in game on 2026-09-26. | The gear feed (§9.1) is built on these. |
 | Outgoing addon messages are restricted during encounters, and briefly around death and resurrection too. | The lockdown gate polls the client's restriction check instead of tracking `ENCOUNTER_START`/`END` flags, which can get stuck (§5.5). |
 | Addon messages have a **per-prefix throttle across all chat types**: roughly 1 message per second, with a small burst allowance. `SendAddonMessage` returns a result code. | About 255 bytes/sec sustained per prefix. P2P is for live edits and small deltas. Bulk sync goes through the cloud (§5.6). |
 | The client's Lua raises "Division by zero" on `x / 0` (and `0/0`), where stock Lua 5.1 returns inf or nan. Seen in game on 2026-09-26. | Tests outside the game can't catch it. No code, vendored libraries included, may divide by a value that can be zero; `Libs/README.md` lists the patches this needed. |
@@ -90,6 +92,7 @@ CorkboardDB.global.boards[boardId] = {
   sync     = { lastPeer, lastPeerAt, lastCloudAt, cloudCursor, lastUsed, expired },
   cloud    = true,                 -- companion sync on by default now the API exists
   guild    = false,                -- sync over GUILD instead of a channel (§5.1)
+  gear     = true,                 -- post this account's new rare+ gear here (§9.1); local, false opts out
   oldSecrets = { … },              -- up to 5 retired secrets, newest first (§7.3 rotate)
   seen     = { ["Name-Realm"] = { at, class } },  -- local roster bookkeeping, never replicated
 }
@@ -112,6 +115,7 @@ Note = {
   text    = "Need 4x |cff…|Hitem:…|h[…]|h|r for …",
   color   = 1,
   deleted = false,             -- tombstone; text cleared when true
+  kind    = nil,               -- nil for an ordinary note, "gear" for a gear-feed entry (§9.1)
 }
 ```
 
@@ -129,7 +133,7 @@ Note = {
 
 - **Clock:** on a local change, `rev = max(GetServerTime(), board.clock + 1)`, then `board.clock = rev`. On receiving a record that passes the sanitiser, `board.clock = max(board.clock, rev)`. `rev` and `created` are integers from 0 to 2^53 − 1 (`rev` from 1), the largest a Lua number holds exactly.
 - **Winner:** the record with the greater `(rev, editor)`, compared lexicographically. `rev` compares as a number. `editor` compares byte by byte, not with Lua's `<`, whose order depends on the C locale. That way Lua and Python always agree.
-- **Exact ties:** honest clients only produce two different records with the same `(rev, editor)` when one character edits on two installs. The tie then breaks on content: a tombstone beats a live note, then the greater `text`, `color`, `author` and `created`, in that order. MemberRecords break ties on `removed`, then `role`. BoardMeta breaks ties on the greater `name`, byte-wise. The digest can't see such a tie, so it resolves wherever both records meet (live `PUT`s or the cloud), not through anti-entropy.
+- **Exact ties:** honest clients only produce two different records with the same `(rev, editor)` when one character edits on two installs. The tie then breaks on content: a tombstone beats a live note, then the greater `kind` (a missing kind counts as the empty string), `text`, `color`, `author` and `created`, in that order. MemberRecords break ties on `removed`, then `role`. BoardMeta breaks ties on the greater `name`, byte-wise. The digest can't see such a tie, so it resolves wherever both records meet (live `PUT`s or the cloud), not through anti-entropy.
 - **Delete** is an edit with `deleted = true, text = ""`. Tombstones are kept (not GC'd in v1). A stale copy can never bring a deleted note back. A later edit from someone who hadn't seen the delete still wins, like any later edit.
 - **Board state** is the union of all notes by `id`, with the winner rule applied per id. Merging is commutative, associative and idempotent, so relaying order and duplicates don't matter.
 
@@ -237,7 +241,7 @@ At about 255 bytes/sec per prefix, and with other traffic sharing that budget, P
 
   Any other `|` escape fails, including `|T`, `|A`, `|K` and `|n`. Text must also be strict UTF-8, with no control characters other than `\n`.
 
-  Records are checked as well. Note ids must be `<8 lower-case hex>-<digits>`, 18 bytes at most. Names must look like `Name-Realm`, 64 bytes at most, with no `|` or control characters. Board names (BoardMeta) must be 1–64 bytes of strict UTF-8 with at least one non-space character, and no `|` or control characters at all. `color` must be 1–8 (the UI uses 1–5), `deleted` must be a boolean, and a tombstone's text must be empty. Unknown fields are ignored, so notes from a newer client still load.
+  Records are checked as well. Note ids must be `<8 lower-case hex>-<digits>`, 18 bytes at most. Names must look like `Name-Realm`, 64 bytes at most, with no `|` or control characters. Board names (BoardMeta) must be 1–64 bytes of strict UTF-8 with at least one non-space character, and no `|` or control characters at all. `color` must be 1–8 (the UI uses 1–5), `deleted` must be a boolean, `kind` must be absent or `"gear"` (reason `kind`, checked after `deleted`), and a tombstone's text must be empty. Unknown fields are ignored, so notes from a newer client still load.
 
   `shared/test-vectors/sanitise.json` fixes the rules and the reason codes.
 - Item and quest IDs are the ones valid on Forever. Links are built by the client, so no ID tables are needed.
@@ -294,7 +298,8 @@ CorkboardCloudData = {
 boards  (id TEXT PK, secret_hash BLOB, created_at INT, seq INT NOT NULL DEFAULT 0,
          name TEXT, name_rev INT, name_editor TEXT, name_seq INT);   -- BoardMeta
 notes   (board_id TEXT, note_id TEXT, author TEXT, created INT, rev INT, editor TEXT,
-         text TEXT, color INT, deleted INT, seq INT, PRIMARY KEY (board_id, note_id));
+         text TEXT, color INT, deleted INT, seq INT, kind TEXT,  -- kind: NULL or "gear" (§9.1)
+         PRIMARY KEY (board_id, note_id));
 members (board_id TEXT, name TEXT, role TEXT, rev INT, editor TEXT, removed INT, seq INT,
          PRIMARY KEY (board_id, name));
 CREATE INDEX notes_seq ON notes(board_id, seq);
@@ -369,6 +374,17 @@ corkboard.<domain> {
 - **Opening the window:** `/cork` with nothing after it, the addon compartment by the minimap (`## AddonCompartmentFunc`), or the LibDataBroker launcher in a broker display. The minimap button waits for LibDBIcon.
 - Boards and notes are created, renamed, edited and deleted in the window only. (The Phase 1 store commands, `/cork create`, `add`, `list` and the rest, were removed once the window covered them; the specs drive the store directly instead.) Command output goes to the default chat frame with a gold `Corkboard:` prefix.
 - Works with Forever's modern and Classic visual presets (no reliance on retail-only art atlases; verify in Phase 1).
+
+### 9.1 Gear feed
+
+Added on 2026-09-26 at Will's request. When a member equips a rare (blue) or better item for the first time on that character, the board shows "Will equipped [Tidal Charm]" on a third window tab, **Gear**, newest first (the latest 50).
+
+- **Records.** A gear entry is a Note with `kind = "gear"` and the item link as its `text`, so it rides every existing path unchanged: live PUTs, anti-entropy, the digest, the cloud and the API. Only the sanitiser and the tie-break learned the field (§4.3, §6). A separate record type would have needed its own digest, messages, API table and companion handling for no gain. `Store.notes` leaves gear entries out, and `Store.gear` lists only them.
+- **Detection** (`Corkboard.lua`): `PLAYER_EQUIPMENT_CHANGED` for slots 1–19. The link comes from `GetInventoryItemLink`, the quality from `GetInventoryItemQuality`, or failing that `C_Item.GetItemQualityByID`. A secret link or quality is ignored.
+- **First time only.** Each character keeps the item ids it has equipped in `CorkboardDB.char.gearSeen`. At login, and again once the player's name is known, everything already worn is marked seen without posting, so only later upgrades post and swapping gear back and forth posts nothing.
+- **Which boards.** Every board on the account with `gear ~= false`, skipping boards that removed the player. The option is local and on by default; the Gear tab has a checkbox for it. Boards whose channel isn't active get the entry through anti-entropy or the cloud later.
+- **Volume.** Blue and better only, once per item per character: tens of entries per character over a levelling run, well under the API's 1,000-row cap. Entries count towards that cap like notes.
+- **Older clients** ignore `kind` (unknown fields are dropped), so they show gear entries as ordinary notes. Only dev builds exist before launch, so this is accepted. On an exact `(rev, editor)` tie the copy with a kind wins, so a newer client never loses it to a relayed copy without one.
 
 ---
 

@@ -27,7 +27,7 @@ CREATE TABLE IF NOT EXISTS boards (
 CREATE TABLE IF NOT EXISTS notes (
     board_id TEXT NOT NULL, note_id TEXT NOT NULL, author TEXT NOT NULL, created INTEGER NOT NULL,
     rev INTEGER NOT NULL, editor TEXT NOT NULL, text TEXT NOT NULL, color INTEGER NOT NULL,
-    deleted INTEGER NOT NULL, seq INTEGER NOT NULL,
+    deleted INTEGER NOT NULL, seq INTEGER NOT NULL, kind TEXT,
     PRIMARY KEY (board_id, note_id)
 );
 CREATE TABLE IF NOT EXISTS members (
@@ -45,10 +45,13 @@ def hash_secret(secret: str) -> bytes:
 
 
 def _note_row(row: sqlite3.Row) -> dict:
-    return {
+    note = {
         "id": row["note_id"], "author": row["author"], "created": row["created"], "rev": row["rev"],
         "editor": row["editor"], "text": row["text"], "color": row["color"], "deleted": bool(row["deleted"]),
     }
+    if row["kind"] is not None:
+        note["kind"] = row["kind"]
+    return note
 
 
 def _member_row(row: sqlite3.Row) -> dict:
@@ -65,6 +68,10 @@ class Database:
         self.conn.execute("PRAGMA journal_mode=WAL")
         self.conn.execute("PRAGMA synchronous=NORMAL")
         self.conn.executescript(SCHEMA)
+        # Databases made before note kinds (§4.2) lack the column.
+        columns = {r["name"] for r in self.conn.execute("PRAGMA table_info(notes)")}
+        if "kind" not in columns:
+            self.conn.execute("ALTER TABLE notes ADD COLUMN kind TEXT")
 
     def close(self) -> None:
         self.conn.close()
@@ -125,9 +132,9 @@ class Database:
                     seq += 1
                     c.execute(
                         "INSERT OR REPLACE INTO notes (board_id, note_id, author, created, rev, editor, text, color,"
-                        " deleted, seq) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                        " deleted, seq, kind) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                         (board_id, clean["id"], clean["author"], clean["created"], clean["rev"], clean["editor"],
-                         clean["text"], clean["color"], int(clean["deleted"]), seq))
+                         clean["text"], clean["color"], int(clean["deleted"]), seq, clean.get("kind")))
                 for record in members:
                     clean, reason = sanitise.member(record)
                     if clean is None:

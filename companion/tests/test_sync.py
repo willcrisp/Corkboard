@@ -132,7 +132,8 @@ def test_the_addon_loads_what_the_companion_writes(tmp_path, api):
     link = "|cffffffff|Hitem:13444::::::::60:::::::::|h[Major Mana Potion]|h|r"
     a_folder = make_install(tmp_path / "a", {"ACC1": [make_board([note(1)])]})
     b_folder = make_install(tmp_path / "b", {"ACC2": [make_board([
-        note(1), note(2, author="Bob-Realm", editor="Bob-Realm", text=f"Need 4x {link}\nand \"quotes\" é")])]})
+        note(1), note(2, author="Bob-Realm", editor="Bob-Realm", text=f"Need 4x {link}\nand \"quotes\" é"),
+        note(3, author="Bob-Realm", editor="Bob-Realm", text=link) | {"kind": "gear"}])]})
     sync.run(api, install_at(a_folder), state(tmp_path, "a.json"), now=T0 + 100)
     sync.run(api, install_at(b_folder), state(tmp_path, "b.json"), now=T0 + 200)  # B's edits reach the cloud
     sync.run(api, install_at(a_folder), state(tmp_path, "a.json"), now=T0 + 300)  # A's companion pulls them
@@ -142,4 +143,5 @@ def test_the_addon_loads_what_the_companion_writes(tmp_path, api):
     boards = json.loads(out.stdout)
     notes = boards[BOARD]["notes"]
     assert notes["a1b2c3d4-0002"]["text"] == f"Need 4x {link}\nand \"quotes\" é"
+    assert notes["a1b2c3d4-0003"]["kind"] == "gear"  # a gear-feed entry (§9.1) keeps its kind end to end
     assert boards[BOARD]["sync"]["lastCloudAt"] == T0 + 300

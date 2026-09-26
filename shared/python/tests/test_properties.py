@@ -18,7 +18,7 @@ TEXTS = ["a", "b", "|cffff0000c|r", ""]
 @st.composite
 def notes(draw):
     deleted = draw(st.booleans())
-    return {
+    note = {
         "id": draw(st.sampled_from(IDS)),
         "author": draw(st.sampled_from(NAMES)),
         "created": T0 + draw(st.integers(0, 2)),
@@ -28,6 +28,9 @@ def notes(draw):
         "color": draw(st.integers(1, 2)),
         "deleted": deleted,
     }
+    if draw(st.booleans()):  # ties between a gear entry and a plain note come up
+        note["kind"] = "gear"
+    return note
 
 
 def merged(records):

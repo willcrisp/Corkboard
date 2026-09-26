@@ -46,6 +46,30 @@ local function identity()
 	return name .. "-" .. realm, ns.Store.notePrefix(guid)
 end
 
+-- The gear feed (§9.1) watches equipment slots 1-19 (head to tabard).
+local GEAR_SLOTS = 19
+
+-- The item in an equipment slot: its id, link and quality, or nil when the
+-- slot is empty or the client hides the link.
+local function equippedItem(slot)
+	local link = GetInventoryItemLink("player", slot)
+	if type(link) ~= "string" or secret(link) then
+		return nil
+	end
+	local itemId = tonumber(link:match("|Hitem:(%d+)"))
+	if not itemId then
+		return nil
+	end
+	local quality = GetInventoryItemQuality and GetInventoryItemQuality("player", slot)
+	if (quality == nil or secret(quality)) and C_Item and C_Item.GetItemQualityByID then
+		quality = C_Item.GetItemQualityByID(link)
+	end
+	if secret(quality) then
+		quality = nil
+	end
+	return itemId, link, quality
+end
+
 local function classToken()
 	local _, class = UnitClass("player")
 	if not secret(class) and type(class) == "string" then
@@ -108,6 +132,7 @@ function Corkboard:OnEnable()
 	self.syncEnv.class = classToken()
 	-- Notes the companion fetched from the cloud since the last session (§7.2).
 	ns.Cloud.load(self.store, _G.CorkboardCloudData)
+	self:WatchGear()
 	ns.Net:Init(self)
 	C_Timer.NewTicker(PUMP, function()
 		self.outbox:pump()
@@ -115,6 +140,7 @@ function Corkboard:OnEnable()
 	-- Join the board channels once the game's own channels have their numbers.
 	C_Timer.After(ns.Net.JOIN_DELAY, function()
 		self:Identify()
+		self:SeedGear() -- in case the name wasn't known at login
 		ns.Net:Start()
 		self.sync:start()
 	end)
@@ -208,6 +234,34 @@ end
 
 -- /cork sync and /cork debug need the running addon; everything else is a
 -- store command in Core/Commands.lua.
+-- Gear feed (§9.1) ---------------------------------------------------------------
+
+-- What's already equipped counts as seen, so only later upgrades post.
+function Corkboard:SeedGear()
+	for slot = 1, GEAR_SLOTS do
+		local itemId, link, quality = equippedItem(slot)
+		if itemId then
+			self.store:equipped(itemId, link, quality, true)
+		end
+	end
+end
+
+function Corkboard:WatchGear()
+	self:SeedGear()
+	local events = CreateFrame("Frame")
+	events:RegisterEvent("PLAYER_EQUIPMENT_CHANGED")
+	events:SetScript("OnEvent", function(_, _, slot)
+		if type(slot) ~= "number" or slot < 1 or slot > GEAR_SLOTS then
+			return
+		end
+		local itemId, link, quality = equippedItem(slot)
+		if itemId then
+			self:Identify()
+			self.store:equipped(itemId, link, quality)
+		end
+	end)
+end
+
 function Corkboard:OnSlash(input)
 	if not input or not input:find("%S") then
 		return self:Toggle()

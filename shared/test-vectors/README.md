@@ -25,7 +25,7 @@ Expected FNV-1a and digest values were computed with a short Python reference im
 - `name[]`: `{ name, input | input_hex, append?, ok }` for character names (`Name-Realm`).
 - `board_name[]`: `{ name, input | input_hex, repeat?, append?, ok }` for board names: 1–64 bytes of strict UTF-8 with at least one non-space, and no control characters or `|` at all (not even `||`).
 - `note`, `member` and `meta`: `{ base, cases[] }`. Each case's record is `input` if present. Otherwise it's `base` with `patch` merged over it and the fields in `remove` deleted. When `ok` is true, the sanitiser returns a copy equal to `output` (default: the record itself), with unknown fields dropped. When `ok` is false it returns `reason`. Fields are checked in this order:
-  - notes: `id`, `author`, `created`, `rev`, `editor`, `color`, `deleted`, then the text reasons, then `tombstone_text`;
+  - notes: `id`, `author`, `created`, `rev`, `editor`, `color`, `deleted`, `kind` (absent, or `"gear"` for a gear-feed entry; kept in the output only when present), then the text reasons, then `tombstone_text`;
   - members: `name`, `role`, `rev`, `editor`, `removed`;
   - meta (the board's name record): `name`, `rev`, `editor`.
 
@@ -41,6 +41,8 @@ Expected FNV-1a and digest values were computed with a short Python reference im
 4. At the end, the board must equal `expect`: its `clock` and its records, with nothing extra. Only valid records move the clock.
 
 The final board must be the same for every order of `apply`, and when `apply` runs twice.
+
+On an exact `(rev, editor)` tie between notes, a tombstone wins, then the greater `kind` (a missing kind counts as the empty string), `text`, `color`, `author` and `created`.
 
 Meta records win on `(rev, editor)` like the others. On an exact tie the greater `name`, compared byte-wise, wins.
 

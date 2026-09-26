@@ -65,6 +65,29 @@ def test_merge_rules_hold_on_the_server(api, board):
     assert sync(api, {"notes": [note(1, rev=T0 + 6, text="tie")]}).json()["cursor"] == everything["cursor"]
 
 
+def test_gear_entries_keep_their_kind(api, board):
+    gear = note(1) | {"kind": "gear"}
+    assert sync(api, {"notes": [gear, note(2)]}).json()["rejected"] == []
+    pulled = sync(api, {"cursor": 0}).json()["notes"]
+    assert pulled[0] == gear and "kind" not in pulled[1]
+    # Exact (rev, editor) tie: the copy with a kind wins, as in the addon.
+    assert sync(api, {"cursor": 2, "notes": [note(2) | {"kind": "gear"}]}).json()["notes"][0]["kind"] == "gear"
+    assert sync(api, {"notes": [note(3) | {"kind": "poll"}]}).json()["rejected"][0]["reason"] == "kind"
+
+
+def test_a_database_from_before_note_kinds_is_upgraded(make_client, tmp_path):
+    old = sqlite3.connect(tmp_path / "cork.db")
+    old.executescript("""
+        CREATE TABLE notes (board_id TEXT NOT NULL, note_id TEXT NOT NULL, author TEXT NOT NULL,
+            created INTEGER NOT NULL, rev INTEGER NOT NULL, editor TEXT NOT NULL, text TEXT NOT NULL,
+            color INTEGER NOT NULL, deleted INTEGER NOT NULL, seq INTEGER NOT NULL, PRIMARY KEY (board_id, note_id));
+    """)
+    old.close()
+    api = make_client()
+    assert api.post("/v1/boards", json={"id": BOARD, "secret": SECRET}).status_code == 201
+    assert sync(api, {"notes": [note(1) | {"kind": "gear"}]}).json()["notes"][0]["kind"] == "gear"
+
+
 def test_rejects_what_the_sanitiser_rejects(api, board):
     bad = note(3, text="|TInterface\\Icons\\x:0|t")
     r = sync(api, {"notes": [bad, {"id": "nope"}, 5], "members": [{"name": "x"}], "meta": {"name": ""}}).json()

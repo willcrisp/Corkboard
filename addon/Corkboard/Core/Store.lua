@@ -116,6 +116,7 @@ local function newBoard(id, secret, owner, now)
 		sync = {},
 		cloud = true,
 		guild = false,
+		gear = true,
 	}
 end
 
@@ -219,11 +220,12 @@ end
 
 -- Notes ------------------------------------------------------------------------
 
--- Live notes, oldest first (by created, then id).
+-- Live notes, oldest first (by created, then id). Gear-feed entries (§9.1)
+-- are listed by Store.gear instead.
 function Store.notes(board)
 	local list = {}
 	for _, note in pairs(board.notes or {}) do
-		if not note.deleted then
+		if not note.deleted and note.kind == nil then
 			list[#list + 1] = note
 		end
 	end
@@ -285,6 +287,65 @@ function Store:deleteNote(boardId, noteId)
 		return nil, editor
 	end
 	return self:noted(board, Merge.deleteNote(board, noteId, editor, self.env.now()))
+end
+
+-- Gear feed (§9.1) --------------------------------------------------------------
+
+Store.GEAR_QUALITY = 3 -- Enum.ItemQuality.Rare: blue and better are posted
+Store.GEAR_SHOWN = 50 -- entries on the Gear tab
+
+-- Live gear entries, newest first (by created, then id).
+function Store.gear(board)
+	local list = {}
+	for _, note in pairs(board.notes or {}) do
+		if not note.deleted and note.kind == "gear" then
+			list[#list + 1] = note
+		end
+	end
+	sort(list, function(a, b)
+		if a.created ~= b.created then
+			return a.created > b.created
+		end
+		return Util.less(b.id, a.id)
+	end)
+	return list
+end
+
+-- The player equipped an item. The first time this character equips a given
+-- item, and only if it's rare or better, its link goes to the gear feed of
+-- every board with gear posts on (board.gear, local, on by default) that
+-- hasn't removed the player. `seed` marks the item seen without posting: the
+-- addon seeds what's already equipped at login. Returns how many boards got
+-- an entry, or nil and a reason.
+function Store:equipped(itemId, link, quality, seed)
+	local author, reason = me(self)
+	if not author then
+		return nil, reason
+	end
+	local seen = self.db.char.gearSeen
+	if not seen then
+		seen = {}
+		self.db.char.gearSeen = seen
+	end
+	if seen[itemId] then
+		return 0
+	end
+	seen[itemId] = true
+	if seed or (quality or 0) < Store.GEAR_QUALITY then
+		return 0
+	end
+	local posted = 0
+	for _, board in pairs(self:all()) do
+		local mine = board.members and board.members[author]
+		if board.gear ~= false and not (mine and mine.removed) then
+			local id = Store.nextNoteId(board, self.env.prefix)
+			if id and self:noted(board, Merge.createNote(board, { id = id, author = author, text = link, kind = "gear" },
+				self.env.now())) then
+				posted = posted + 1
+			end
+		end
+	end
+	return posted
 end
 
 -- Sharing and members (§4.1, §9, §10) -------------------------------------------
@@ -425,13 +486,15 @@ function Store.members(board)
 	return list
 end
 
--- Cloud sync and the GUILD transport, per board (§4.1).
+-- Cloud sync, the GUILD transport and gear posts, per board (§4.1).
+local OPTIONS = { cloud = true, guild = true, gear = true }
+
 function Store:setOption(boardId, option, value)
 	local board, reason = self:board(boardId)
 	if not board then
 		return nil, reason
 	end
-	if option ~= "cloud" and option ~= "guild" then
+	if not OPTIONS[option] then
 		return nil, "option"
 	end
 	board[option] = value and true or false

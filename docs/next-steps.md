@@ -2,7 +2,7 @@
 
 The handoff between sessions. Read this after `CLAUDE.md`. Before you finish, update it: move what you finished into "Where things stand" and rewrite "Next steps".
 
-Last updated: 2026-09-26 (fifth session that day: open questions closed out; Arcane project and deploy script prepared, not yet run).
+Last updated: 2026-09-26 (sixth session that day: Arcane project and deploy script prepared, not yet run; note editor click area and gear feed on main).
 
 ## Where things stand
 
@@ -25,7 +25,7 @@ On 2026-09-26 Will asked for the remaining work to be built on best assumptions,
 | Phase 6: packaging | `tools/package_addon.py`, `.pkgmeta`, `.github/workflows/release.yml`, `companion/corkboard-companion.spec`, `companion/corkboard_companion/gui.py` | Zip builder tested; the GUI, PyInstaller build and store uploads are untested. |
 | CI | `.github/workflows/ci.yml`, `api-image.yml` | Green on the branch: luacheck, busted, coverage gate (≥ 95%), spike smoke tests, pytest for corkcore, API, companion and packaging, and a check that the fuzz corpus is current. |
 
-Tests: `busted` runs 556 (Core coverage 98.7%, merge core 100%; the coverage run skips `#slow` specs); pytest runs 140 (corkcore), 18 (API), 32 (companion) and 1 (packaging).
+Tests: `busted` runs 584 (Core coverage 98.7%, merge core 100%; the coverage run skips `#slow` specs); pytest runs 140 (corkcore), 20 (API), 32 (companion) and 1 (packaging).
 
 ### First in-game run (fourth session)
 
@@ -38,6 +38,12 @@ Will installed the addon and CorkSpike in the 1.60.1 beta (build 70009) and ran 
 - **Fixed: Forever names have surnames.** `UnitFullName("player")` returns `"Aprune", "Proudshield"` (the surname where the realm goes), so the addon called itself `Aprune-Proudshield` while CHAT_MSG_ADDON names it `Aprune Proudshield-ClassicBetaPvP2`. Its own echo showed as "Synced with Aprune Proudshield-…" and a phantom member. `identity()` now uses `GetPlayerInfoByGUID` (whole name, empty realm for our own) plus `GetNormalizedRealmName()`; the fake client mimics Forever's names and `net_spec` covers it. Boards made before the fix have the old name as owner and author: recreate them.
 - **Cloud sync works locally:** API on `127.0.0.1:8000`, companion `setup` then `watch`; first sync pushed 4 and pulled 3, and the addon showed "Cloud 1m ago". Next is deploying the API so a second player can reach it.
 - `addon_spec` now reads TOCs with CRLF normalised, so `busted` passes on a Windows checkout. Lua tests run in WSL Ubuntu here (`apt install lua5.1 lua-busted lua-check lua-dkjson`).
+
+### Sixth session: QOL and the gear feed
+
+- **Note editor:** clicking anywhere in the text box now focuses it with the cursor at the end (`UI/Editor.lua`). Before, only the line holding text took the click.
+- **Probes Will ran in game (1.60.1):** `CombatLogGetCurrentEventInfo` is nil and registering `COMBAT_LOG_EVENT_UNFILTERED` is blocked ("only available to the Blizzard UI"), so a crit leaderboard can't be built; dropped. `PLAYER_EQUIPMENT_CHANGED` plus `GetInventoryItemLink` give a plain link and quality. Both are new §2 rows. A screenshot-pasting idea was also dropped (addons can't read the clipboard or show new images).
+- **Gear feed (design.md §9.1):** a rare-or-better item a character equips for the first time is posted to the **Gear** tab of every board with the option on (local, on by default, checkbox on the Gear tab). An entry is a Note with `kind = "gear"`, so it syncs over every existing path. The merge core learned `kind` in Lua and Python (sanitiser reason `kind`, tie-break after `deleted`), with new shared vectors and `kind` in both property-test generators. The API has a `kind` column and upgrades older databases in place. Tests: `addon/spec/gear_spec.lua` (store rules, two fake clients, the tab, `/reload`), `api/tests/test_api.py`, and the companion's addon-loads-Data.lua test.
 
 ### Spec changes (earlier sessions)
 
@@ -95,7 +101,12 @@ Do these in order unless Will says otherwise.
    4. Edit the second note, delete the third, search `fire`, then clear the search. Try saving `|T`: Save stays greyed with a yellow message.
    5. Make a second board, rename it, select the first again. `/reload`, `/cork`: everything is still there.
    6. Escape closes the editor, then the window; the window drags; the addon compartment lists Corkboard.
-2. **Will: the Phase 2–4 check.** Needs two clients: two accounts, or a friend.
+2. **Will: the gear feed check.** One character is enough; a second on the same board also checks that entries sync:
+   1. Equip a blue or purple item you haven't worn on that character since installing: the **Gear** tab on both clients shows "Name equipped [item]" within a few seconds, and hovering the link shows its tooltip.
+   2. Swap it off and on again, and equip a green: nothing new appears.
+   3. Untick "Post my new rare and epic gear to this board", equip another new blue: it doesn't appear on that board. `/reload`: the tick state and the feed are unchanged.
+   4. Send any Lua errors. If nothing posts, run `/dump GetInventoryItemQuality("player", 1)` with a helmet on and send the output.
+3. **Will: the Phase 2–4 check.** Needs two clients: two accounts, or a friend.
    1. On A: open the **Members** tab, click the invite box, Ctrl+C, and send it to B out of game. On B: **Join**, paste. Within about 15 s B shows the board's name and A's notes, and once the catch-up finishes the status line reads "Synced with A …".
    2. On both: nothing in any chat tab mentions a `Cork…` channel, even after `/reload`.
    3. A edits a note: B shows it within 5 s. `/cork debug` on both: the gate is Open, and the log shows the PUT.
@@ -103,10 +114,10 @@ Do these in order unless Will says otherwise.
    5. B logs out. A makes 20 notes, edits 5 and deletes 3. B logs in: within 60 s both debug panels show the same digest, and B's log shows IDX for only some buckets.
    6. A removes B in the Members tab: B stops getting A's edits. A sends the new invite, B joins with it, and syncing resumes.
    7. Send Lua errors and screenshots of the window, the Members tab, the debug panel and the status line.
-3. **Apply the results.** Fix whatever the checks turn up and tick the §12 items that have their evidence. Since the spikes are dropped, `spikes/`, its CI smoke steps and `Corkboard.Sanitise` (kept only for CorkSpike2) can go in their own small change. If the 1.60 client has `C_EncodingUtil`, it could replace LibSerialize and LibDeflate.
-4. **Deploy the API:** on Will's box, `$env:ARCANE_API_KEY=…; python tools/arcane_deploy.py create --domain corkboard.<domain>` (`infra/README.md`, full steps in `docs/arcane-next-steps.md`). Then the Phase 5 checks: health over TLS from outside the tailnet, the dashboard unreachable, and a restore drill. Then install the companion (`pip install ./shared/python ./companion`, `corkboard-companion setup --api https://corkboard.<domain>`) and run the "B edits and logs out, A's companion syncs, A reloads" check for real.
-5. **LibDBIcon and the minimap button** once Will supplies a current LibDBIcon build: add it to the TOC after LibDataBroker and to `addon_spec`, and register `Corkboard.launcher` with its position in `CorkboardDB.global`.
-6. **Phase 6 for real:** CurseForge and Wago IDs and tokens, a signing certificate, and a Windows/macOS test of the companion's window and PyInstaller build.
+4. **Apply the results.** Fix whatever the checks turn up and tick the §12 items that have their evidence. Since the spikes are dropped, `spikes/`, its CI smoke steps and `Corkboard.Sanitise` (kept only for CorkSpike2) can go in their own small change. If the 1.60 client has `C_EncodingUtil`, it could replace LibSerialize and LibDeflate.
+5. **Deploy the API:** on Will's box, `$env:ARCANE_API_KEY=…; python tools/arcane_deploy.py create --domain corkboard.<domain>` (`infra/README.md`, full steps in `docs/arcane-next-steps.md`). Then the Phase 5 checks: health over TLS from outside the tailnet, the dashboard unreachable, and a restore drill. Then install the companion (`pip install ./shared/python ./companion`, `corkboard-companion setup --api https://corkboard.<domain>`) and run the "B edits and logs out, A's companion syncs, A reloads" check for real.
+6. **LibDBIcon and the minimap button** once Will supplies a current LibDBIcon build: add it to the TOC after LibDataBroker and to `addon_spec`, and register `Corkboard.launcher` with its position in `CorkboardDB.global`.
+7. **Phase 6 for real:** CurseForge and Wago IDs and tokens, a signing certificate, and a Windows/macOS test of the companion's window and PyInstaller build.
 
 ## Open issues
 

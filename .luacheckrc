@@ -14,6 +14,7 @@ files["addon/Corkboard/Corkboard.lua"] = {
 	read_globals = {
 		"C_Timer", "CreateFrame", "DEFAULT_CHAT_FRAME", "GetNormalizedRealmName", "GetServerTime", "GetTime", "LibStub",
 		"NORMAL_FONT_COLOR_CODE", "UnitClass", "GetPlayerInfoByGUID", "UnitGUID", "issecretvalue",
+		"C_Item", "GetInventoryItemLink", "GetInventoryItemQuality",
 	},
 }
 files["addon/Corkboard/Net.lua"] = {

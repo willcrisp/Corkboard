@@ -14,6 +14,8 @@ MAX_ID = 18
 COLOR_MAX = 8
 
 LINK_TYPES = frozenset({"item", "quest", "spell", "achievement", "currency", "mount", "battlepet", "journal"})
+# Note kinds (§4.2): no kind is an ordinary note, "gear" a gear-feed entry (§9.1).
+KINDS = frozenset({"gear"})
 
 _CONTROL = re.compile(r"[\x00-\x1f\x7f]")
 _TEXT_CONTROL = re.compile(r"[\x00-\x09\x0b-\x1f\x7f]")
@@ -121,12 +123,15 @@ def note(t: object) -> tuple[dict | None, str | None]:
         return None, "color"
     if not isinstance(t.get("deleted"), bool):
         return None, "deleted"
+    kind = t.get("kind")
+    if kind is not None and not (isinstance(kind, str) and kind in KINDS):
+        return None, "kind"
     ok, reason = text(t.get("text"))
     if not ok:
         return None, reason
     if t["deleted"] and t["text"] != "":
         return None, "tombstone_text"
-    return {
+    clean = {
         "id": t["id"],
         "author": t["author"],
         "created": _int(t["created"]),
@@ -135,7 +140,10 @@ def note(t: object) -> tuple[dict | None, str | None]:
         "text": t["text"],
         "color": _int(t["color"]),
         "deleted": t["deleted"],
-    }, None
+    }
+    if kind is not None:
+        clean["kind"] = kind
+    return clean, None
 
 
 def member(t: object) -> tuple[dict | None, str | None]:

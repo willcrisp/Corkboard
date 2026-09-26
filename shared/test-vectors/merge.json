@@ -225,6 +225,97 @@
       }
     },
     {
+      "name": "exact tie: a kind beats no kind",
+      "board": {
+        "clock": 1790000100,
+        "notes": [
+          { "id": "a1b2c3d4-0007", "author": "Will-Realm", "created": 1790000000, "rev": 1790000100, "editor": "Bob-Realm", "text": "note", "color": 1, "deleted": false }
+        ]
+      },
+      "apply": [
+        { "id": "a1b2c3d4-0007", "author": "Will-Realm", "created": 1790000000, "rev": 1790000100, "editor": "Bob-Realm", "text": "note", "color": 1, "deleted": false, "kind": "gear" }
+      ],
+      "results": ["stored"],
+      "expect": {
+        "clock": 1790000100,
+        "notes": [
+          { "id": "a1b2c3d4-0007", "author": "Will-Realm", "created": 1790000000, "rev": 1790000100, "editor": "Bob-Realm", "text": "note", "color": 1, "deleted": false, "kind": "gear" }
+        ]
+      }
+    },
+    {
+      "name": "exact tie: no kind loses to a kind",
+      "board": {
+        "clock": 1790000100,
+        "notes": [
+          { "id": "a1b2c3d4-0007", "author": "Will-Realm", "created": 1790000000, "rev": 1790000100, "editor": "Bob-Realm", "text": "note", "color": 1, "deleted": false, "kind": "gear" }
+        ]
+      },
+      "apply": [
+        { "id": "a1b2c3d4-0007", "author": "Will-Realm", "created": 1790000000, "rev": 1790000100, "editor": "Bob-Realm", "text": "note", "color": 1, "deleted": false }
+      ],
+      "results": ["stale"],
+      "expect": {
+        "clock": 1790000100,
+        "notes": [
+          { "id": "a1b2c3d4-0007", "author": "Will-Realm", "created": 1790000000, "rev": 1790000100, "editor": "Bob-Realm", "text": "note", "color": 1, "deleted": false, "kind": "gear" }
+        ]
+      }
+    },
+    {
+      "name": "exact tie: kind is compared before text",
+      "board": {
+        "clock": 1790000100,
+        "notes": [
+          { "id": "a1b2c3d4-0007", "author": "Will-Realm", "created": 1790000000, "rev": 1790000100, "editor": "Bob-Realm", "text": "zzz", "color": 1, "deleted": false }
+        ]
+      },
+      "apply": [
+        { "id": "a1b2c3d4-0007", "author": "Will-Realm", "created": 1790000000, "rev": 1790000100, "editor": "Bob-Realm", "text": "aaa", "color": 1, "deleted": false, "kind": "gear" }
+      ],
+      "results": ["stored"],
+      "expect": {
+        "clock": 1790000100,
+        "notes": [
+          { "id": "a1b2c3d4-0007", "author": "Will-Realm", "created": 1790000000, "rev": 1790000100, "editor": "Bob-Realm", "text": "aaa", "color": 1, "deleted": false, "kind": "gear" }
+        ]
+      }
+    },
+    {
+      "name": "a newer delete keeps the gear kind",
+      "board": {
+        "clock": 1790000100,
+        "notes": [
+          { "id": "a1b2c3d4-0007", "author": "Will-Realm", "created": 1790000000, "rev": 1790000100, "editor": "Bob-Realm", "text": "note", "color": 1, "deleted": false, "kind": "gear" }
+        ]
+      },
+      "apply": [
+        { "id": "a1b2c3d4-0007", "author": "Will-Realm", "created": 1790000000, "rev": 1790000200, "editor": "Bob-Realm", "text": "", "color": 1, "deleted": true, "kind": "gear" }
+      ],
+      "results": ["stored"],
+      "expect": {
+        "clock": 1790000200,
+        "notes": [
+          { "id": "a1b2c3d4-0007", "author": "Will-Realm", "created": 1790000000, "rev": 1790000200, "editor": "Bob-Realm", "text": "", "color": 1, "deleted": true, "kind": "gear" }
+        ]
+      }
+    },
+    {
+      "name": "an invalid kind is dropped",
+      "board": {
+        "clock": 0,
+        "notes": []
+      },
+      "apply": [
+        { "id": "a1b2c3d4-0007", "author": "Will-Realm", "created": 1790000000, "rev": 1790000100, "editor": "Bob-Realm", "text": "note", "color": 1, "deleted": false, "kind": "poll" }
+      ],
+      "results": ["kind"],
+      "expect": {
+        "clock": 0,
+        "notes": []
+      }
+    },
+    {
       "name": "exact tie: greater text wins",
       "board": {
         "clock": 1790000500,

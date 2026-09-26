@@ -313,5 +313,21 @@ function View.digestLabel(count, clock, digest)
 	return format("%d:%s:%08x", count or 0, Util.formatInt(clock or 0), digest or 0)
 end
 
+-- Rows for the Gear tab (§9.1): who, the item link and how long ago, newest
+-- first, at most Store.GEAR_SHOWN.
+function View.gearRows(entries, limit, now, myRealm)
+	local rows = {}
+	for i = 1, math.min(#entries, limit) do
+		local entry = entries[i]
+		rows[i] = {
+			index = i,
+			who = View.shortName(entry.author, myRealm),
+			link = entry.text,
+			age = View.shortAge(now - entry.created),
+		}
+	end
+	return rows
+end
+
 ns.View = View
 return View

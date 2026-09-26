@@ -29,6 +29,12 @@ Sanitise.LINK_TYPES = {
 	journal = true,
 }
 
+-- Note kinds (§4.2). A note without `kind` is an ordinary note; "gear" is an
+-- entry in the board's gear feed (§9.1).
+Sanitise.KINDS = {
+	gear = true,
+}
+
 local LINK_TYPES = Sanitise.LINK_TYPES
 local INT_MAX = Util.INT_MAX
 
@@ -156,6 +162,9 @@ function Sanitise.note(t)
 	if type(t.deleted) ~= "boolean" then
 		return nil, "deleted"
 	end
+	if t.kind ~= nil and not (type(t.kind) == "string" and Sanitise.KINDS[t.kind]) then
+		return nil, "kind"
+	end
 	local ok, reason = Sanitise.text(t.text)
 	if not ok then
 		return nil, reason
@@ -172,6 +181,7 @@ function Sanitise.note(t)
 		text = t.text,
 		color = t.color,
 		deleted = t.deleted,
+		kind = t.kind,
 	}
 end
 

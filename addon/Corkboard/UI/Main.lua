@@ -408,9 +408,9 @@ local function build()
 	ui.count = frame:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
 	ui.count:SetPoint("BOTTOMRIGHT", -16, 10)
 
-	-- Bottom tabs: Notes and Members (docs/ui-style.md).
+	-- Bottom tabs: Notes, Members and Gear (docs/ui-style.md).
 	ui.tabs = {}
-	for i, label in ipairs({ "Notes", "Members" }) do
+	for i, label in ipairs({ "Notes", "Members", "Gear" }) do
 		local ok, tab = pcall(CreateFrame, "Button", "CorkboardFrameTab" .. i, frame, "PanelTabButtonTemplate")
 		if not ok then
 			tab = CreateFrame("Button", "CorkboardFrameTab" .. i, frame, "CharacterFrameTabButtonTemplate")
@@ -434,6 +434,7 @@ local function build()
 		PanelTemplates_SetNumTabs(frame, #ui.tabs)
 	end
 	ui.members = ns.Members:Build(notes)
+	ui.gear = ns.Gear:Build(notes)
 	ui.tab = 1
 
 	frame:SetScript("OnShow", function()
@@ -489,6 +490,7 @@ function Main:Refresh()
 	ui.rename:SetEnabled(current ~= nil)
 	ui.delete:SetEnabled(current ~= nil)
 	ui.tabs[2]:SetEnabled(current ~= nil)
+	ui.tabs[3]:SetEnabled(current ~= nil)
 
 	local all = current and Store.notes(current) or {}
 	local shown = View.filter(all, ui.search:GetText())
@@ -514,12 +516,15 @@ function Main:Refresh()
 	end
 	if ui.tab == 2 then
 		ns.Members:Refresh(current)
+	elseif ui.tab == 3 then
+		ns.Gear:Refresh(current)
 	end
 end
 
--- Tab 1 is the notes; tab 2 the members, invite and sync options.
+-- Tab 1 is the notes; tab 2 the members, invite and sync options; tab 3 the
+-- gear feed.
 function Main:ShowTab(index)
-	if index == 2 and not store():current() then
+	if index ~= 1 and not store():current() then
 		index = 1
 	end
 	ui.tab = index
@@ -532,6 +537,7 @@ function Main:ShowTab(index)
 	ui.newNote:SetShown(index == 1)
 	ui.empty:SetShown(index == 1)
 	ui.members:SetShown(index == 2)
+	ui.gear:SetShown(index == 3)
 	if index ~= 1 then
 		ui.alert:Hide()
 	end
