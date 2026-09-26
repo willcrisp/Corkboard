@@ -1,6 +1,6 @@
 # Arcane: next steps for hosting the sync API
 
-Written 2026-09-26. The `corkboard` Arcane project doesn't exist yet. Everything needed to create it is on branch `claude/youthful-mendel-ys9hft` (commit `46bcff6`), not yet on `main`.
+Written 2026-09-26. The `corkboard` Arcane project doesn't exist yet. Everything needed to create it is on `main`.
 
 ## Why it has to run from Will's box
 
@@ -28,8 +28,8 @@ Arcane's API (`https://harry.alpine-ionian.ts.net/api`) is tailnet-only. Cloud s
 On Will's box, with the key in the environment only (never in a file or commit):
 
 ```powershell
+git checkout main
 git pull
-git checkout claude/youthful-mendel-ys9hft
 $env:ARCANE_API_KEY = "<key>"
 python tools/arcane_deploy.py files                          # lists what gets uploaded
 python tools/arcane_deploy.py create --domain corkboard.<yourdomain>
@@ -53,7 +53,6 @@ python tools/arcane_deploy.py health --domain corkboard.<yourdomain>
 2. **Phase 5 checks** (design.md §12, `infra/README.md`): health over TLS from outside the tailnet, the Arcane dashboard unreachable from the internet, and a restore drill.
 3. **The two-player test:** a second client on the same board edits and logs out, your companion syncs, and after your `/reload` their edits are there.
 4. **Rotate the Arcane API key.** It was pasted into a chat session on 2026-09-26.
-5. **Merge the branch to `main`** once the deploy works.
 
 ## Rules for later deploys
 
