@@ -25,6 +25,7 @@ Current status and the ordered next steps are in `docs/next-steps.md`. Read it a
 | `docs/design.md` | Spec v0.2: architecture, protocol, phases and acceptance criteria. |
 | `docs/ui-style.md` | In-game UI look (Blizzard templates, colours, fonts). |
 | `docs/mockups/` | Design-canvas sources for the UI mockups (reference only; they need the canvas runtime to render). |
+| `.claude/skills/` | Claude Code project skills. `ponytail*` is vendored unchanged from DietrichGebert/ponytail v4.10.0 (MIT); re-copy from upstream to update. |
 
 ## How we work
 
