@@ -98,17 +98,17 @@ def once(config: Config) -> int:
     return 0
 
 
-def watch(config: Config, stop_after: float | None = None) -> int:
+def watch_loop(config: Config, emit, stop=None, wake=None, stop_after: float | None = None) -> None:
+    """Syncs once, then whenever the client writes SavedVariables, and every
+    pull_minutes. `emit(line)` reports; `stop` and `wake` are optional
+    threading.Events (the GUI's close and "Sync now")."""
     install = find_install(config)
-    if install is None or not config.api_url:
-        say("Not set up yet: run corkboard-companion setup.")
-        return 1
     api = Api(config.api_url)
-    say(f"Watching {install.product}. Press Ctrl+C to stop.")
+    emit(f"Watching {install.product}.")
     seen: dict[Path, float] = {}
     last_run = None
     started = time.monotonic()
-    while stop_after is None or time.monotonic() - started < stop_after:
+    while (stop_after is None or time.monotonic() - started < stop_after) and not (stop and stop.is_set()):
         changed = False
         for path in install.saved_variables():
             try:
@@ -118,19 +118,33 @@ def watch(config: Config, stop_after: float | None = None) -> int:
             if path in seen and seen[path] != mtime:
                 changed = True  # the client wrote it: logout or /reload
             seen[path] = mtime
-        due = last_run is None or time.monotonic() - last_run >= config.pull_minutes * 60
+        asked = wake is not None and wake.is_set()
+        due = last_run is None or asked or time.monotonic() - last_run >= config.pull_minutes * 60
         if changed or due:
+            if wake is not None:
+                wake.clear()
             if changed:
                 time.sleep(SETTLE)
             try:
                 report = sync.run(api, install, State())
-                say(time.strftime("%H:%M ") + report.line())
-                if report.news and wow_running():
-                    say("  New notes are ready: /reload in game to see them.")
+                emit(time.strftime("%H:%M ") + report.line())
+                if report.news:
+                    emit("  New notes are ready" + (": /reload in game to see them." if wow_running() else "."))
             except (ApiError, OSError) as e:
-                say(time.strftime("%H:%M ") + f"sync failed: {e}")
+                emit(time.strftime("%H:%M ") + f"sync failed: {e}")
             last_run = time.monotonic()
-        time.sleep(POLL)
+        if wake is not None:
+            wake.wait(POLL)
+        else:
+            time.sleep(POLL)
+
+
+def watch(config: Config, stop_after: float | None = None) -> int:
+    if find_install(config) is None or not config.api_url:
+        say("Not set up yet: run corkboard-companion setup.")
+        return 1
+    say("Press Ctrl+C to stop.")
+    watch_loop(config, say, stop_after=stop_after)
     return 0
 
 

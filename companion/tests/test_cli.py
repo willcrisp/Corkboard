@@ -77,3 +77,16 @@ def test_main_dispatch(tmp_path, monkeypatch):
     assert cli.main(["status"]) == 1
     with pytest.raises(SystemExit):
         cli.main(["--version"])
+
+
+def test_gui_helpers(tmp_path, monkeypatch):
+    from corkboard_companion import gui
+
+    root = tmp_path / "wow"
+    make_install(root, {}, product="_classic_beta_")
+    found = gui.candidates(str(root))
+    assert [gui.label(i) for i in found] == ["_classic_beta_ (wow_classic_beta)"]
+    assert gui.check_api("ftp://nope").startswith("The address should")
+    assert gui.check_api("http://localhost:1").startswith("Couldn't reach it")
+    # --cli runs the command line; without tkinter the window falls back to it too.
+    assert gui.main(["--cli", "status"]) == 1

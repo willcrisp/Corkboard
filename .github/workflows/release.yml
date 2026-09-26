@@ -1,0 +1,68 @@
+# Releases (docs/design.md §12 Phase 6).
+#   v*           the addon zip (Corkboard + Corkboard_Cloud) on a GitHub release,
+#                and CurseForge / Wago once their tokens are set
+#   companion-v* the companion as a single executable for Windows and macOS
+name: Release
+
+on:
+  push:
+    tags: ["v*", "companion-v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  addon:
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-24.04
+    env:
+      CF_API_KEY: ${{ secrets.CF_API_KEY }}
+      WAGO_API_TOKEN: ${{ secrets.WAGO_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Build the zip
+        run: python3 tools/package_addon.py --version "${GITHUB_REF_NAME#v}" --out dist
+
+      - name: GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*.zip
+          generate_release_notes: true
+
+      - name: CurseForge and Wago
+        if: env.CF_API_KEY != '' || env.WAGO_API_TOKEN != ''
+        run: |
+          printf 'CorkboardCloudData = nil\n' > addon/Corkboard_Cloud/Data.lua
+          curl -fsSL https://raw.githubusercontent.com/BigWigsMods/packager/v2/release.sh | bash -s -- -g classic
+
+  companion:
+    if: startsWith(github.ref, 'refs/tags/companion-v')
+    strategy:
+      matrix:
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build
+        run: |
+          pip install ./shared/python ./companion pyinstaller
+          pyinstaller companion/corkboard-companion.spec --distpath dist
+
+      # Signing needs a certificate the project doesn't have yet (next-steps.md).
+      - name: Sign (Windows)
+        if: runner.os == 'Windows' && env.SIGN_CERT != ''
+        env:
+          SIGN_CERT: ${{ secrets.WINDOWS_SIGN_CERT }}
+        run: echo "Signing step goes here once a certificate exists."
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*

@@ -74,3 +74,6 @@ jobs:
 
       - name: Companion
         run: pytest companion
+
+      - name: Packaging
+        run: pytest tools/tests

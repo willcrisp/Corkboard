@@ -1,0 +1,28 @@
+# BigWigs packager config (docs/design.md §12 Phase 6). CurseForge and Wago
+# don't list the Forever flavour yet, so .github/workflows/release.yml only
+# runs the packager once CF_API_KEY / WAGO_API_TOKEN secrets exist and the TOCs
+# carry ## X-Curse-Project-ID / ## X-Wago-ID. Until then the release zip comes
+# from tools/package_addon.py.
+package-as: Corkboard
+
+enable-nolib-creation: no
+
+move-folders:
+  Corkboard/addon/Corkboard: Corkboard
+  Corkboard/addon/Corkboard_Cloud: Corkboard_Cloud
+
+ignore:
+  - .github
+  - api
+  - companion
+  - docs
+  - infra
+  - shared
+  - spikes
+  - tools
+  - addon/spec
+  - .busted
+  - .luacheckrc
+  - .luacov
+  - CLAUDE.md
+  - addon/Corkboard_Cloud/README.md

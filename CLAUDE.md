@@ -19,6 +19,7 @@ Current status and the ordered next steps are in `docs/next-steps.md`. Read it a
 | `api/` | Sync API (FastAPI + SQLite). |
 | `spikes/` | Throwaway Phase 0 spike addons (not shipped). They may break the hard rules below on purpose, for example by calling `SendAddonMessage` directly. |
 | `infra/` | Docker Compose + Caddy for Will's Arcane host, public DNS `corkboard.<domain>`. |
+| `tools/` | Release helpers: `package_addon.py` builds the addon zip. |
 | `shared/test-vectors/` | JSON fixtures run by both the Lua and Python test suites. |
 | `shared/python/` | `corkcore`, the Python port of the merge core, installed by both `api/` and `companion/`. |
 | `docs/design.md` | Spec v0.2: architecture, protocol, phases and acceptance criteria. |
@@ -66,4 +67,7 @@ Run these from the repo root. They need Lua 5.1 with busted, luacheck, dkjson an
 - **Lint:** `luacheck .`
 - **Python core:** `pip install -e shared/python && pytest shared/python` runs the shared vectors and the Hypothesis property tests.
 - **Fuzz corpus:** `python3 shared/test-vectors/tools/gen_sanitise_fuzz.py` regenerates `sanitise_fuzz.json` after a sanitiser change.
+- **Package the addon:** `python3 tools/package_addon.py --version X.Y.Z` writes `dist/Corkboard-X.Y.Z.zip` (Corkboard + Corkboard_Cloud with an empty `Data.lua`).
+- **Run the API locally:** `pip install -e shared/python -e api && CORK_DB=/tmp/cork.db python3 -m corkboard_api.app` (port 8000).
+- **Companion:** `pip install -e shared/python -e companion && corkboard-companion setup --api URL --wow PATH`, then `corkboard-companion watch`.
 - **Spike smoke tests:** `lua5.1 spikes/mock/smoke.lua spikes/CorkSpike/CorkSpike.lua` runs CorkSpike against a fake client, and `lua5.1 spikes/mock/smoke2.lua spikes/CorkSpike2/CorkSpike2.lua` does the same for CorkSpike2.
