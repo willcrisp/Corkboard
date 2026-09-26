@@ -17,7 +17,7 @@ Current status and the ordered next steps are in `docs/next-steps.md`. Read it a
 | `addon/Corkboard_Cloud/` | Tiny data-only addon. The companion writes its `Data.lua`. Never hand-edit it. |
 | `companion/` | Desktop companion (Python 3.12, PyInstaller). Reads SavedVariables and talks to the API. |
 | `api/` | Sync API (FastAPI + SQLite). |
-| `spikes/` | Throwaway Phase 0 spike addons (not shipped). They may break the hard rules below on purpose, for example by calling `SendAddonMessage` directly. |
+| `spikes/` | Phase 0 spike addons (not shipped; dropped on 2026-09-26 and due for removal). They may break the hard rules below on purpose, for example by calling `SendAddonMessage` directly. |
 | `infra/` | Docker Compose + Caddy for Will's Arcane host, public DNS `corkboard.<domain>`. |
 | `tools/` | Release helpers: `package_addon.py` builds the addon zip. |
 | `shared/test-vectors/` | JSON fixtures run by both the Lua and Python test suites. |
@@ -28,8 +28,8 @@ Current status and the ordered next steps are in `docs/next-steps.md`. Read it a
 
 ## How we work
 
-- **Spec-driven, phase-gated.** Work one phase at a time (§12). A phase is done when every acceptance criterion is ticked, with evidence (test output, a screenshot, or a written spike result).
-- **Phase 0 comes first.** Its spikes answer questions about the Forever client that the rest of the design depends on. Record answers in `docs/spikes/NN-topic.md`, and update `docs/design.md` if an answer changes the design.
+- **Spec-driven, phase-gated.** Work one phase at a time (§12). A phase is done when every acceptance criterion is ticked, with evidence (test output, a screenshot, or an in-game result written down).
+- **Phase 0 is dropped.** Will stopped the spikes on 2026-09-26; the main addon is tested in game directly. Record what the client shows in `docs/next-steps.md`, and update `docs/design.md` if it changes the design.
 - **Spec changes go in the spec.** If implementation shows the design is wrong, update `docs/design.md` in the same change and say why in the commit message.
 - Keep changes small and reviewable. One phase or sub-feature per branch or PR.
 

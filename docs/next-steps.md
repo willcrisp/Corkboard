@@ -2,18 +2,18 @@
 
 The handoff between sessions. Read this after `CLAUDE.md`. Before you finish, update it: move what you finished into "Where things stand" and rewrite "Next steps".
 
-Last updated: 2026-09-26 (fourth session that day: the first in-game run).
+Last updated: 2026-09-26 (fifth session that day: open questions closed out, merged to main).
 
 ## Where things stand
 
-On 2026-09-26 Will asked for the remaining work to be built on best assumptions, with a big validation pass later. So this session broke the phase gate on purpose: Phases 2–6 were built before Phase 0 and Phase 1 were checked in game. **Nothing in design.md §12 is ticked.** Every criterion still needs its evidence from the Forever client or the live host. What passes outside the game is noted under each phase in §12, and every guess the code rests on is listed under "Assumptions to check" below.
+On 2026-09-26 Will asked for the remaining work to be built on best assumptions, with a big validation pass later. So this session broke the phase gate on purpose: Phases 2–6 were built before Phase 0 and Phase 1 were checked in game. **Nothing in design.md §12 is ticked.** Every criterion still needs its evidence from the Forever client or the live host. What passes outside the game is noted under each phase in §12.
 
 ### What exists
 
 | Part | Where | State |
 |---|---|---|
-| Spike tooling 01–02 | `spikes/CorkSpike/` | Ready; never run in game. |
-| Spike tooling 03–06 | `spikes/CorkSpike2/`, `spikes/install_probe.py` | Ready; smoke-tested against `spikes/mock/`. Templates in `docs/spikes/03-06`. |
+| Spike tooling 01–02 | `spikes/CorkSpike/` | Dropped by Will; kept until removed (next step 3). |
+| Spike tooling 03–06 | `spikes/CorkSpike2/`, `spikes/install_probe.py` | Dropped by Will; kept until removed (next step 3). |
 | Phase 1: local boards | `addon/Corkboard/` | Built last session; not run in game. |
 | Phase 2: invites, channels, live PUTs | `Core/Invite.lua`, `Core/Wire.lua`, `Net.lua`, `UI/Members.lua` | Built; passes between fake clients running the real addon. |
 | Phase 3: anti-entropy, debug panel | `Core/Sync.lua`, `UI/Debug.lua` | Built; passes in the simulator (`addon/spec/helpers/sim.lua`). |
@@ -29,7 +29,7 @@ Tests: `busted` runs 556 (Core coverage 98.7%, merge core 100%; the coverage run
 
 ### First in-game run (fourth session)
 
-Will installed the addon and CorkSpike in the 1.60.1 beta (build 70009) and ran part of spike 01/02 before deciding **not to do the spike testing**: from here we patch and test the main addon directly. Nothing from the spikes is a prerequisite any more; the assumption tables stay as a list of what the in-game tests may expose.
+Will installed the addon and CorkSpike in the 1.60.1 beta (build 70009) and ran part of spike 01/02 before deciding **not to do the spike testing**: from here we patch and test the main addon directly. Nothing from the spikes is a prerequisite any more.
 
 - **Fixed: every send failed.** The client's Lua raises "Division by zero" (stock Lua returns inf), and LibSerialize v1.2.2 checks for negative zero with `1 / num`, so any envelope holding a `0` threw. Patched in `Libs/LibSerialize` (listed in `Libs/README.md`); `wire_spec` fails if a re-vendor brings it back. New §2 row in design.md.
 - **Fixed: "Error loading Corkboard_Cloud/Data.lua".** The folder was copied from the repo, where `Data.lua` is gitignored. `python tools/package_addon.py --install "<beta>/Interface/AddOns"` now builds the zip and unzips it there (keeping a companion-written `Data.lua`); use it for every re-install.
@@ -59,82 +59,43 @@ A pass for over-engineering (the `ponytail-audit` checklist), applied in full:
 - **§9:** the Phase 1 store commands (`/cork create`, `add`, `list`, `edit`, …) and `Store.findBoard`, `noteRef` and `findNote` are gone. Specs use `Client:createBoard`, `addNote`, `editNote`, `deleteNote` and `noteTexts` in `helpers/client.lua`.
 - Smaller cuts: one `Main.Button` for the UI, one `newBoard` in the store, one `Sync:scheduleOnce`, one `plural` and age formatter in `Commands`, `Invite.encode` in place of `Store.invite`, and unread state removed (`Net.Channels`, `Sync.nonces`, `Outbox.lastResult`, `Reassembler.dropped`, the send result code). The API reads only `CORK_DB` and `CORK_TRUSTED_PROXY` from the environment.
 
-## Assumptions to check
+## Settled and accepted
 
-Grouped by what settles them. Each names where it lives in code, so a wrong guess is a small change.
+On 2026-09-26, after the first in-game smoke test, Will said he's happy with where everything is, so the open items were closed out rather than left as unknowns.
 
-### Settled by the spikes (Phase 0)
+- **Settled in game (1.60.1, build 70009):** the gate check is `C_ChatInfo.InChatMessagingLockdown` only (`Gate.CHECKS`); `Enum.SendAddonMessageResult` has `AddonMessageThrottle=3`, `ChannelThrottle=8`, `AddOnMessageLockdown=11` (`Gate:classify`); WHISPER bursts of 40, and ~56/s sustained, all returned Success, so the outbox's 8 tokens at 0.9/s is conservative (`Outbox.BURST/RATE`); Forever names carry surnames (`identity()` in `Corkboard.lua`); cloud sync works end to end against a local API.
+- **Design accepted as built:** every former design question is now a decision in design.md §14. In short: rotation moves the board to a new channel and the owner re-shares by hand; nothing whispers; guild boards are invite-only and use GUILD instead of a channel; channel slots go to the current board, then the most recently selected; a member counts as online for 13 minutes after any message; any member edits or deletes any note, and only the owner removes members or rotates (UI and `/cork` only); removed members are ignored until they rejoin with a fresh invite; "cloud-enabled" means the companion synced the board in the last 7 days; the bulk rule estimates 150 bytes a note, and a partial catch-up sends the newest 20; one shared `corkcore` package; the cloud and guild options live on the Members tab; the API rate-limits per board before checking the secret.
+- **Out of scope for v1:** the BNet transport, closing a board for everyone, tombstone collection, and whispering new invites after a rotation.
 
-| # | Assumption | Where | Spike |
-|---|---|---|---|
-| S1 | **Settled (1.60.1):** `C_ChatInfo.InChatMessagingLockdown()`; `AreOutgoingAddonChatMessagesRestricted()` reads true while idle and is never used. Still unseen: its value during an encounter or death. | `Core/Gate.lua` `Gate.CHECKS` | 01 |
-| S2 | **Settled (1.60.1):** `Enum.SendAddonMessageResult` has `AddonMessageThrottle=3`, `ChannelThrottle=8`, `AddOnMessageLockdown=11`, which `Gate:classify` matches by name. | `Gate:classify` | 01 |
-| S3 | The throttle is about 1 message/s with a burst near 10. Spike 02 (partial) saw no client-side rejection for WHISPER: 40 of 40 in a burst and 2,514 at ~56/s all returned Success, and 2,462 arrived. CHANNEL wasn't measured. The outbox's 8 and 0.9/s is conservative; leave it unless sync feels slow. | `Outbox.BURST/RATE`, `helpers/sim.lua`, `helpers/client.lua` | 02 |
-| S4 | `JoinTemporaryChannel(name, secret)` takes the 24-character secret as the password, and a 12-character `Cork…` name. | `Net:Refresh`, `Store.channelName` | 03 |
-| S5 | Three board channels per character fit alongside the player's own channels. | `Net.MAX_CHANNELS` | 03 |
-| S6 | Password channels reach connected realms (and maybe beyond). | §5.1 | 03 |
-| S7 | `ChatFrame_RemoveChannel` (or `ChatFrameUtil.RemoveChannel`) plus message filters on the channel notice, text, join and leave events keep the channel out of every chat frame. Waiting 8 s after login keeps General and Trade on their usual numbers. | `Net.lua` `hide`, `filter`, `JOIN_DELAY` | 03, Phase 2 check |
-| S8 | A wrong password arrives as `CHAT_MSG_CHANNEL_NOTICE_USER` with notice `WRONG_PASSWORD` and the channel's base name in arg 9. | `Net:OnChannelNotice` | 03 |
-| S9 | `CHAT_MSG_ADDON` on a channel carries the channel name in arg 8 (or 5) and its number in arg 7; a same-realm sender may lack `-Realm`. The code tries all three. | `Net:OnAddonMessage` | 03 |
-| S10 | Item links may use `|cnIQ4:` named colours, and every link a player makes passes the sanitiser and survives the round trip. | `Core/Sanitise.lua`, §6 | 04 |
-| S11 | The shift-click inserter is `ChatFrameUtil.InsertLink` or `ChatEdit_InsertLink`. | `UI/Links.lua` | 04 |
-| S12 | BNet: not built. If spike 05 shows a better throttle, it becomes the bulk P2P route. | §5.1 | 05 |
-| S13 | Forever's flavour string and product folder: the companion guesses `wow_forever`, `wow_classic_forever`, `wow_classic_beta`, `wow_classic_ptr` and the matching folders, and lets the player pick. | `companion/.../discover.py` | 06 |
-| S14 | `GetServerTime()` is close to Unix time: the companion's `syncedAt` and the addon's 7-day "cloud-enabled" window compare them. | `Sync:cloudActive` | 06 |
+### What the in-game checks exercise
 
-### Settled by playing it (Phases 1–4 in game)
+Not open questions, just code paths the checklists below run in the client for the first time. If one misbehaves, the fix lives where it says.
 
-| # | Assumption | Where |
-|---|---|---|
-| G1 | The Phase 1 UI calls from last session (ScrollBox, `PortraitFrameTemplate`, the StaticPopup edit box, text measurement). | `UI/Main.lua`, `UI/Popups.lua` |
-| G2 | The new templates and helpers exist: `PanelTabButtonTemplate` (else `CharacterFrameTabButtonTemplate`), `PanelTemplates_*`, `UICheckButtonTemplate`, `InputBoxTemplate`, `C_ClassColor` or `RAID_CLASS_COLORS`, `C_Timer.NewTimer`, `date()`, `ReloadUI()`. | `UI/Main.lua`, `UI/Members.lua`, `UI/Debug.lua` |
-| G3 | ChatThrottleLib (from Ace3 r1403) works on 16001, and its callback passes `(arg, didSend, result)`. | `Net:Send` |
-| G4 | The class token from `UnitClass("player")` isn't a secret value. | `Corkboard.lua` |
-| G5 | Redrawing the window at most every 0.2 s during a catch-up is cheap enough. | `Corkboard:ChangedSoon` |
-| G6 | The Channels list in the Social pane will still show the board's channel; only chat frames are covered by "never shows". Decide whether that's acceptable. | §12 Phase 2 |
+- Window, templates and popups: `UI/Main.lua`, `UI/Popups.lua`, `UI/Members.lua`, `UI/Debug.lua`.
+- Hidden password channels (join, hiding from chat frames, the wrong-password notice, sender names): `Net.lua`.
+- Link insertion and link round trips: `UI/Links.lua`, `Core/Sanitise.lua`.
+- The live client's folder name at launch: `companion/corkboard_companion/discover.py` lets the player pick if it guesses wrong.
+- The Social pane's Channels list may still show a board's channel; "never shows" covers chat frames only.
 
-### Design choices for Will to confirm
+### Still to do before release
 
-| # | Choice | Where |
-|---|---|---|
-| D1 | Rotation moves the board to a new channel. A member who missed it sits alone in the old channel ("Nobody online") until they get the new invite; the "invite out of date" popup only fires if someone else holds that channel name. See §14 Q6. | §5.1 |
-| D2 | No whispers at all; every reply is broadcast on the board transport. | §5.1 |
-| D3 | Guild boards use GUILD *instead of* a channel (the v0.2 comment said "also"). §14 Q4 is still open. | `Net.wanted`, `route` in `Net.lua` |
-| D4 | The three channel slots go to the current board, then the most recently selected. Other boards sync only through the cloud and show "Not connected". | `Net.wanted` |
-| D5 | Presence: a member counts as online for 13 minutes after any message; a periodic HELLO is skipped at most once in a row, so everyone speaks at least every ~12 minutes. | `Sync.PRESENCE`, `scheduleHello` |
-| D6 | Permissions: any member edits or deletes any note; only the owner removes members or rotates, enforced in the UI and `/cork` only (§14 Q3). The API lets any holder of the old secret rotate. | `Store:removeMember`, `api/.../app.py` |
-| D7 | Removing a member marks them removed and rotates; their later messages are ignored. Rejoining with a fresh invite un-removes them. | `Sync:receive`, `Store:joinBoard` |
-| D8 | "Cloud-enabled" for the bulk rule means the companion synced this board in the last 7 days, not just `board.cloud`. | `Sync.CLOUD_FRESH` |
-| D9 | The 150 bytes/note estimate for the 8 KB bulk rule, and the partial catch-up of the responder's newest 20. | `Sync.NOTE_BYTES`, `Sync.PARTIAL` |
-| D10 | One shared Python package (`shared/python/corkcore`) instead of copies in `api/` and `companion/`. `CLAUDE.md` now says so. | `shared/python` |
-| D11 | The Members tab holds the cloud and guild options; there's no Settings tab yet. | `docs/ui-style.md` Phase 2 notes |
-| D12 | The API counts rate limits per board before checking the secret, so failed guesses count too. | `api/.../app.py` |
-
-### Infrastructure and packaging
-
-| # | Item |
-|---|---|
-| I1 | The API image has never been built: no Docker daemon here. `api-image.yml` builds and smoke-tests it on pull requests and `api-v*` tags. |
-| I2 | `infra/compose.yaml` needs `OWNER` and `TAG`, and the Caddyfile needs the real domain. The backup service installs sqlite with `apk` at start, so it needs network access. |
-| I3 | The companion's window (tkinter) and the PyInstaller spec have never run: this container has no tkinter or Windows. |
-| I4 | No code-signing certificate; the release workflow's signing step is a placeholder. |
-| I5 | CurseForge and Wago need project IDs in the TOCs and tokens as secrets, and must list Forever. Until then releases are GitHub-only. |
-| I6 | LibDBIcon-1.0 is still missing (WowAce SVN is blocked here), so there's no minimap button yet. |
-| I7 | LibDataBroker-1.1's licence is still unchecked. |
+- **Deploy:** `api-image.yml` builds the API image on pull requests and `api-v*` tags. `infra/compose.yaml` needs `OWNER` and `TAG`, and the Caddyfile the real domain. The backup service installs sqlite with `apk` at start, so it needs network access.
+- **Companion:** the tkinter window and the PyInstaller build need a run on Windows and macOS; there's no code-signing certificate yet.
+- **Stores:** CurseForge and Wago need project IDs in the TOCs, tokens as secrets, and a Forever listing. Until then releases are GitHub-only.
+- **Libraries:** LibDBIcon-1.0 for the minimap button, and a licence check on LibDataBroker-1.1 before publishing.
 
 ## Next steps
 
 Do these in order unless Will says otherwise.
 
-1. ~~Spikes~~: dropped by Will on 2026-09-26. Will's running beta client is `C:\wow\World of Warcraft\_classic_beta_` (no spikes installed there). A second, unused beta install under `C:\Program Files (x86)\World of Warcraft` holds stale copies; ignore it.
-2. **Will: the Phase 1 check** (settles G1). Install with `python tools/package_addon.py --install "C:/wow/World of Warcraft/_classic_beta_/Interface/AddOns"`. Then:
+1. **Will: the Phase 1 check.** Install with `python tools/package_addon.py --install "C:/wow/World of Warcraft/_classic_beta_/Interface/AddOns"`. Then:
    1. `/console scriptErrors 1`, then `/cork`. Click **New**, name the board `Molten Core prep`.
    2. **New Note**: type `Need 4x `, shift-click an item in your bags, pick the blue tag, Save. Add `Bring fire resistance` and a note long enough to wrap.
    3. Hover the item link (tooltip), click it (item pops up), hover a card (Edit and Delete replace the age).
    4. Edit the second note, delete the third, search `fire`, then clear the search. Try saving `|T`: Save stays greyed with a yellow message.
    5. Make a second board, rename it, select the first again. `/reload`, `/cork`: everything is still there.
    6. Escape closes the editor, then the window; the window drags; the addon compartment lists Corkboard.
-3. **Will: the Phase 2–4 check** (settles G2–G6, D1–D5). Needs two clients: two accounts, or a friend.
+2. **Will: the Phase 2–4 check.** Needs two clients: two accounts, or a friend.
    1. On A: open the **Members** tab, click the invite box, Ctrl+C, and send it to B out of game. On B: **Join**, paste. Within about 15 s B shows the board's name and A's notes, and once the catch-up finishes the status line reads "Synced with A …".
    2. On both: nothing in any chat tab mentions a `Cork…` channel, even after `/reload`.
    3. A edits a note: B shows it within 5 s. `/cork debug` on both: the gate is Open, and the log shows the PUT.
@@ -142,20 +103,18 @@ Do these in order unless Will says otherwise.
    5. B logs out. A makes 20 notes, edits 5 and deletes 3. B logs in: within 60 s both debug panels show the same digest, and B's log shows IDX for only some buckets.
    6. A removes B in the Members tab: B stops getting A's edits. A sends the new invite, B joins with it, and syncing resumes.
    7. Send Lua errors and screenshots of the window, the Members tab, the debug panel and the status line.
-4. **Apply the results.** Update the code named in the assumption tables, then `docs/design.md`, and tick §12 items that have their evidence. Re-run `lua5.1 spikes/mock/smoke.lua …` if a spike needed fixing. Then make the cuts the audit left for this point: keep only the restriction check spike 01 finds (`Gate.CHECKS`), and only the chat-frame and link-insert functions spike 03 and 04 find (`hide` and `addFilter` in `Net.lua`, `Links.HookInsert`); drop `Corkboard.Sanitise` once spike 04 is recorded; and once every Phase 0 report is in, delete `spikes/` and the CI smoke steps. If the 1.60 client has `C_EncodingUtil`, a spike could decide whether it replaces LibSerialize and LibDeflate.
-5. **Deploy the API** following `infra/README.md`, then the Phase 5 checks: health over TLS from outside the tailnet, the dashboard unreachable, and a restore drill. Then install the companion (`pip install ./shared/python ./companion`, `corkboard-companion setup --api https://corkboard.<domain>`) and run the "B edits and logs out, A's companion syncs, A reloads" check for real.
-6. **LibDBIcon and the minimap button** once Will supplies a current LibDBIcon build (I6): add it to the TOC after LibDataBroker and to `addon_spec`, and register `Corkboard.launcher` with its position in `CorkboardDB.global`.
-7. **Answer the open questions** in design.md §14 (1–7), and D1–D12 above.
-8. **Phase 6 for real:** CurseForge and Wago IDs and tokens, a signing certificate, and a Windows/macOS test of the companion's window and PyInstaller build.
+3. **Apply the results.** Fix whatever the checks turn up and tick the §12 items that have their evidence. Since the spikes are dropped, `spikes/`, its CI smoke steps and `Corkboard.Sanitise` (kept only for CorkSpike2) can go in their own small change. If the 1.60 client has `C_EncodingUtil`, it could replace LibSerialize and LibDeflate.
+4. **Deploy the API** following `infra/README.md`, then the Phase 5 checks: health over TLS from outside the tailnet, the dashboard unreachable, and a restore drill. Then install the companion (`pip install ./shared/python ./companion`, `corkboard-companion setup --api https://corkboard.<domain>`) and run the "B edits and logs out, A's companion syncs, A reloads" check for real.
+5. **LibDBIcon and the minimap button** once Will supplies a current LibDBIcon build: add it to the TOC after LibDataBroker and to `addon_spec`, and register `Corkboard.launcher` with its position in `CorkboardDB.global`.
+6. **Phase 6 for real:** CurseForge and Wago IDs and tokens, a signing certificate, and a Windows/macOS test of the companion's window and PyInstaller build.
 
 ## Open issues
 
 - **Note-id collision** is fixed for the common case (§4.2). Two installs of one character that both create notes before either has seen the other's can still produce the same id, and LWW keeps one. Accepted for v1.
-- **Board deletion is local-only.** Closing a board for everyone is §14 question 5.
+- **Board deletion is local-only.** Closing a board for everyone is out of scope for v1 (§14.5).
 - **Digest blind spot:** the digest can't see a same-`(rev, editor)` tie with different content (§4.3). Those ties resolve through live `PUT`s or the cloud. Accepted for v1.
-- **Tombstones are never collected**, and the API caps a board at 1,000 rows including them (§14 Q7).
+- **Tombstones are never collected**, and the API caps a board at 1,000 rows including them. Accepted for v1 (§14.7).
 - **LibDataBroker-1.1 licence.** Its repository states none. Check before publishing.
-- **Hosting questions.** §14 questions 1–4 are still open (reverse proxy, tunnel, delete permissions, guild boards).
 
 ## Environment notes (cloud sessions)
 

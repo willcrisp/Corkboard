@@ -4,8 +4,8 @@ The stack is `compose.yaml`: the API container from GHCR, Caddy for TLS on the p
 
 ## Once
 
-1. **DNS:** an A (or CNAME) record for `corkboard.<domain>` pointing at the host's public IP. If the host is behind CGNAT, use a Cloudflare Tunnel instead of Caddy's public ports (§8; still an open question, §14 Q2).
-2. **Caddyfile:** replace `corkboard.example.com` with the real name. If the host already runs a reverse proxy on 80/443 (§14 Q1), drop the `caddy` service and route the name to `api:8000` there instead.
+1. **DNS:** an A (or CNAME) record for `corkboard.<domain>` pointing at the host's public IP. If the host is behind CGNAT, use a Cloudflare Tunnel instead of Caddy's public ports (§8, §14.2).
+2. **Caddyfile:** replace `corkboard.example.com` with the real name. If the host already runs a reverse proxy on 80/443 (§14.1), drop the `caddy` service and route the name to `api:8000` there instead.
 3. **Image:** tag a release (`git tag api-v0.1.0 && git push --tags`). `.github/workflows/api-image.yml` builds `ghcr.io/<owner>/corkboard-api` and pushes `:<version>` and `:latest`. Make the package public, or give the host a GHCR pull token.
 4. **Arcane:** create a project from this folder with `OWNER=<GitHub owner>` and `TAG=<version>` in its environment, and deploy it.
 

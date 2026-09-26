@@ -98,7 +98,7 @@ CorkboardDB.global.boards[boardId] = {
 - **Storage.** `CorkboardDB` is an AceDB database. Boards live in its account-wide `global` section, so every character on the account sees the same boards. The selected board is per character (`CorkboardDB.char["Name - Realm"].current`). AceDB also writes its own `profileKeys`. The companion reads boards from `CorkboardDB.global.boards`.
 - **Every change goes through the merge core.** Creating a board names it with `Merge.setMeta` and adds the creator as owner with `Merge.setMember`. Renaming is `Merge.setMeta`. Note changes are `Merge.createNote`, `editNote` and `deleteNote`.
 - **Local-only fields.** `sync`, `seen` and `oldSecrets` never replicate. `sync.lastUsed` orders boards for the channel cap (§5.1), and `sync.expired` marks a board whose channel refused our password.
-- **Deleting a board is local.** It removes the board from this account and isn't replicated. Other members keep their copies, and without the secret this client never hears the board again unless someone re-invites it. Closing a board for everyone is an open question (§14).
+- **Deleting a board is local.** It removes the board from this account and isn't replicated. Other members keep their copies, and without the secret this client never hears the board again unless someone re-invites it. Closing a board for everyone is out of scope for v1 (§14.5).
 
 ### 4.2 Note
 
@@ -157,10 +157,10 @@ The 32 bucket hashes are 128 bytes raw, about one addon message after compressio
 
 | Transport | Use | Notes |
 |---|---|---|
-| **Board channel** | Primary broadcast | Hidden custom channel `Cork` + `%08x` of FNV1a32(`boardId .. "\|" .. secret`), joined with `JoinTemporaryChannel(name, secret)`, removed from every chat frame, and with its notices and text filtered out by a chat message filter. Cap of 3 active channel-backed boards per character: the current board, then the most recently used. Forever's reach across realms is verified in Phase 0. |
+| **Board channel** | Primary broadcast | Hidden custom channel `Cork` + `%08x` of FNV1a32(`boardId .. "\|" .. secret`), joined with `JoinTemporaryChannel(name, secret)`, removed from every chat frame, and with its notices and text filtered out by a chat message filter. Cap of 3 active channel-backed boards per character: the current board, then the most recently used. Reach across connected realms is checked in the Phase 2 two-client test. |
 | **GUILD** | Guild boards (`board.guild = true`) | Used instead of a channel, so it doesn't take a slot. |
 | **WHISPER** | Not used in v1 | Targeted replies (IDX, NEED) ride the board's own transport with a `to` field instead (§5.3). |
-| **BNet** (`BNSendGameData` / `BN_CHAT_MSG_ADDON`) | Members who are BNet friends | Not built yet: waits for spike 05. If its throttle is better, it becomes the preferred route for bulk P2P. |
+| **BNet** (`BNSendGameData` / `BN_CHAT_MSG_ADDON`) | Members who are BNet friends | Not in v1. Worth a look after launch if bulk P2P proves slow. |
 
 **Why the channel name includes the secret** (changed from `Cork<first 10 of boardId>`): a rotation (§10) must move the board to a channel the removed member can't reach. With an id-only name, a removed member who stays in the channel keeps it alive under the old password, and every member rejoining with the new secret is refused. A secret-derived name gives each secret its own channel. The cost: a member who missed a rotation sits alone in the old channel and sees "Nobody online" until they get the new invite; the "wrong password" notice (and the out-of-date invite popup) only fires if someone else is using the name.
 
@@ -204,7 +204,7 @@ Members digest: FNV1a32 of the sorted `name=rev;editor\n` lines of every MemberR
 
 - Before every send, check the client's outgoing-addon-message restriction, and also treat a "restricted" `SendAddonMessage` result as lockdown. The check is `C_ChatInfo.InChatMessagingLockdown()` (spike 01, 1.60.1: false while idle). `C_ChatInfo.AreOutgoingAddonChatMessagesRestricted()` exists too but reads true while idle and sends succeed, so the gate never uses it. A check that raises an error counts as open; the send result still catches a real restriction.
 - While restricted, messages wait in the outbox (`Core/Outbox.lua`). Queued items coalesce by key: live `PUT`s for a board merge their note ids, and are built at send time from the board as it is then, so repeated edits to a note send once, with the newest text. The outbox is pumped every 0.5 s; a refused send holds it for 2 s. Once the gate opens it flushes, and every board sends a fresh `HELLO`.
-- The outbox also models the throttle (§5.6) as a token bucket in addon messages: 8 tokens, refilled at 0.9 per second, a little under the §2 estimate until spike 02 measures it. A message needs one token to start and spends one per chunk, possibly going into debt.
+- The outbox also models the throttle (§5.6) as a token bucket in addon messages: 8 tokens, refilled at 0.9 per second, a little under the §2 estimate. A partial spike 02 on 1.60.1 saw no client-side rejection for WHISPER bursts, so this is conservative; raise it only if sync feels slow. A message needs one token to start and spends one per chunk, possibly going into debt.
 - The gate is not driven by encounter start/end flags, so it can't get stuck closed. Local editing is never blocked.
 
 ### 5.6 Throttle budget and the bulk rule
@@ -232,7 +232,7 @@ At about 255 bytes/sec per prefix, and with other traffic sharing that budget, P
 
   The sanitiser is a yes/no check, never a rewrite. A client that repaired a note would store different bytes under the same `(rev, editor)`, and the digest can't see that. The escape grammar is a whitelist:
   - `||`;
-  - `|cAARRGGBB`, `|cnNAME:` (named colours such as `|cnIQ4:`, which modern item links may use; confirm in spike 04) and `|r`;
+  - `|cAARRGGBB`, `|cnNAME:` (named colours such as `|cnIQ4:`, which modern item links may use) and `|r`;
   - `|H<type>:<data>|h<text>|h`, where `<type>` is an allowed type and neither part contains `|`.
 
   Any other `|` escape fails, including `|T`, `|A`, `|K` and `|n`. Text must also be strict UTF-8, with no control characters other than `\n`.
@@ -376,7 +376,7 @@ corkboard.<domain> {
 - **Membership = holding the secret.** Revoking someone means rotating the secret (new channel password and cloud credential), then re-sharing it with the remaining members.
 - **Transport identity is server-verified; relayed authorship is not.** A malicious member could forge `author`. This is accepted for v1.
 - **Public API surface:** auth on every board route, strict size and rate limits, the same sanitiser as the addon, and no admin endpoints.
-- **Platform risk:** Forever is pre-launch. API names, restrictions, the throttle and the install layout can all change before and after 2026-11-04. Phase 0 re-runs at launch.
+- **Platform risk:** Forever is pre-launch. API names, restrictions, the throttle and the install layout can all change before and after 2026-11-04. Re-run the Phase 1–4 in-game checks at launch.
 
 ---
 
@@ -392,7 +392,10 @@ corkboard.<domain> {
 
 ## 12. Phases and acceptance criteria
 
-**Phase 0: Forever spikes (gate: every item answered in writing on the 1.60 beta, and re-checked at launch)**
+**Phase 0: Forever spikes (dropped on 2026-09-26)**
+
+Will dropped the spikes after a first in-game run on the 1.60.1 beta: the main addon is tested directly instead. What that run found (the gate check, the result codes, Forever's surnamed player names, the client's division-by-zero error) is in §2, §5.5 and `docs/next-steps.md`. The items below stay as a record of what the spikes were meant to answer.
+
 - [ ] Exact outgoing-restriction API on 16001, when it's true (encounters, death, anything else), and the `SendAddonMessage` result codes.
 - [ ] Measured per-prefix throttle (burst, sustained rate), and whether whisper, channel, guild and BNet share one budget.
 - [ ] Password-protected custom channel reach on Forever realms (same realm, connected realms, cross-realm), and the per-character channel limit.
@@ -454,12 +457,14 @@ corkboard.<domain> {
 - **Companion/API:** Python 3.12, FastAPI, SQLite, a Lua-table data parser, Hypothesis, PyInstaller.
 - **Infra:** Arcane, Caddy 2, GHCR, GitHub Actions.
 
-## 14. Open questions
+## 14. Decisions (formerly open questions)
 
-1. Does the Arcane host already run a reverse proxy on 80/443? If so, drop the `caddy` service and add a route there instead.
-2. Public IP with port forwarding, or a Cloudflare Tunnel (CGNAT, or to avoid opening ports)?
-3. Delete permissions: can any member delete any note, or only the author and the owner? This is enforceable at the API and UI level only.
-4. Guild boards: auto-join for the whole guild, or invite-only?
-5. Board deletion is local-only (§4.1). Should the owner be able to close a board for everyone? That would need a replicated flag in BoardMeta, plus an answer to question 3 about who may do it.
-6. After a rotation, members who were offline sit alone in the old channel until someone re-shares the invite (§5.1). Should the owner's client whisper the new invite to each remaining member it sees online, so only offline members need a manual re-share? (A whisper is point to point, so the removed member can't read it.)
-7. Tombstones are never collected (§4.3), and the API caps a board at 1,000 rows including them. Is a board that busy likely, and if so what's the collection rule?
+Settled on 2026-09-26: Will accepted the v1 behaviour as built. Each can be revisited after launch without a format change.
+
+1. **Reverse proxy:** the stack ships its own Caddy. If the host already runs a proxy on 80/443, drop the `caddy` service at deploy time and route the name to `api:8000` there (`infra/README.md`).
+2. **Reachability:** a public IP with ports 80 and 443 forwarded is the default. Behind CGNAT, swap Caddy's public ports for a Cloudflare Tunnel sidecar (§8). Either is a deploy-time choice; the API doesn't change.
+3. **Delete permissions:** any member may edit or delete any note. Only the owner removes members or rotates, and that's enforced in the UI and `/cork` only; the API lets any holder of the current secret rotate.
+4. **Guild boards:** invite-only. Ticking the guild option moves the board's traffic onto GUILD instead of a channel (§5.1); guildmates still need the invite and its secret.
+5. **Closing a board for everyone:** not in v1. Deleting a board stays local (§4.1).
+6. **Re-sharing after a rotation:** manual. Nothing whispers (§5.1); the owner sends the new invite out of band, and members who missed it sit alone on the old channel until they get it.
+7. **Tombstone collection:** none in v1. The API's 1,000-row cap includes tombstones; revisit only if a real board nears it.
