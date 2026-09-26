@@ -82,6 +82,23 @@ describe("Corkboard.toc", function()
 	end)
 end)
 
+describe("Corkboard_Cloud.toc", function()
+	it("is data only, loads after Corkboard, and targets Forever", function()
+		local f = assert(io.open("addon/Corkboard_Cloud/Corkboard_Cloud.toc", "rb"))
+		local toc = f:read("*a")
+		f:close()
+		assert.is_truthy(toc:find("## Interface: 16001\n", 1, true))
+		assert.is_truthy(toc:find("## Dependencies: Corkboard\n", 1, true))
+		local files = {}
+		for line in toc:gmatch("[^\n]+") do
+			if not line:find("^#") then
+				files[#files + 1] = line
+			end
+		end
+		assert.are.same({ "Data.lua" }, files)
+	end)
+end)
+
 describe("Corkboard in a fake client", function()
 	it("loads, registers its libraries and logs in without errors", function()
 		local client = Client.new():login()

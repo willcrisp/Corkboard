@@ -385,6 +385,7 @@ function Client.new(options)
 		now = options.now or 1790000000,
 		time = options.time or 1000,
 		saved = options.saved,
+		cloud = options.cloud,
 		name = options.name or "Will",
 		realm = options.realm or "Mirage Raceway",
 		guid = options.guid or "Player-4372-0ABCDEF0",
@@ -877,6 +878,14 @@ function Client:login()
 		chunk()
 	end
 	self.fire("ADDON_LOADED", "Corkboard")
+	-- Corkboard_Cloud depends on Corkboard, so its Data.lua runs next,
+	-- still before PLAYER_LOGIN.
+	if self.cloud then
+		local chunk = assert(loadstring(self.cloud, "Corkboard_Cloud/Data.lua"))
+		setfenv(chunk, self.env)
+		chunk()
+		self.fire("ADDON_LOADED", "Corkboard_Cloud")
+	end
 	self.loggedIn = true
 	self.fire("PLAYER_LOGIN")
 	self.fire("PLAYER_ENTERING_WORLD", true, false)

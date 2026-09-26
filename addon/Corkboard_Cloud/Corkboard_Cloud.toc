@@ -1,0 +1,8 @@
+## Interface: 16001
+## Title: Corkboard Cloud
+## Notes: Notes the Corkboard companion fetched from the cloud. The companion rewrites Data.lua; don't edit it.
+## Author: Will
+## Version: 0.1.0-dev
+## Dependencies: Corkboard
+
+Data.lua
