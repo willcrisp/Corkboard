@@ -56,6 +56,7 @@ describe("Corkboard.toc", function()
 			"Core/Merge.lua",
 			"Core/Digest.lua",
 			"Core/Invite.lua",
+			"Core/Recipes.lua",
 			"Core/Store.lua",
 			"Core/Commands.lua",
 			"Core/View.lua",

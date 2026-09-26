@@ -57,9 +57,10 @@ What the first in-game build does differently from the mockups, and why:
 
 ## Phase 2 build notes
 
-- **Three bottom tabs, Notes, Members and Gear.** The mockup's Settings tab isn't built: the only settings so far are the cloud and guild checkboxes, which the Members mockup already shows. The tab template is `PanelTabButtonTemplate`, falling back to `CharacterFrameTabButtonTemplate` on clients without it.
+- **Four bottom tabs, Notes, Members, Gear and Professions.** The mockup's Settings tab isn't built: the only settings so far are the cloud and guild checkboxes, which the Members mockup already shows. The tab template is `PanelTabButtonTemplate`, falling back to `CharacterFrameTabButtonTemplate` on clients without it.
 - **Board list footer:** two rows, New and Join, then Rename and Delete.
 - **Gear tab** (design.md §9.1): like the Members tab it replaces the note grid in the inset. A `UICheckButtonTemplate` option ("Post my new rare and epic gear to this board") sits above a striped list of "Name equipped [item]" rows, each with its age on the right in `GameFontDisableSmall`. The item links are live (tooltip on hover, click-through), as on note cards. No mockup; it reuses the Members tab's list styling.
+- **Professions tab** (design.md §9.2): the same layout as the Gear tab, with a `SearchBoxTemplate` at the top right beside the "Share my recipes on this board" checkbox. Rows show "Leatherworking 47/75 · 8 recipes" (or, while searching, a live recipe link) on the left and who in `GameFontDisableSmall` on the right. When a search is cut at 200 rows, a `GameFontDisableSmall` note left of the search box says so.
 - **Members tab:** it replaces the note grid in the right-hand inset, so the board list stays visible. The invite box is a read-only `InputBoxTemplate` (typing puts the invite back) that selects itself on focus for Ctrl+C. Rotate Secret shows for the owner only, and so do the remove buttons in the roster.
 - **Status line:** the dot is hollow (a 4×4 frame-coloured square over the 6×6 dot) for "Syncing", "Connecting" and "Nobody online". The label is white and its detail grey; idle states grey both.
 - **Alert strip:** yellow text on a dark strip along the bottom of the notes inset, for "N notes behind" (with a Reload button) and for paused sends with messages queued.

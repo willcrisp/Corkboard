@@ -28,8 +28,8 @@ def notes(draw):
         "color": draw(st.integers(1, 2)),
         "deleted": deleted,
     }
-    if draw(st.booleans()):  # ties between a gear entry and a plain note come up
-        note["kind"] = "gear"
+    if draw(st.booleans()):  # ties between kinds, and between a kind and a plain note, come up
+        note["kind"] = draw(st.sampled_from(["gear", "recipes"]))
     return note
 
 

@@ -13,6 +13,7 @@ ns = type(ns) == "table" and ns or {}
 local Util = ns.Util or require("Core.Util")
 local Merge = ns.Merge or require("Core.Merge")
 local Invite = ns.Invite or require("Core.Invite")
+local Recipes = ns.Recipes or require("Core.Recipes")
 
 local format, lower, match, sub = string.format, string.lower, string.match, string.sub
 local sort = table.sort
@@ -117,6 +118,7 @@ local function newBoard(id, secret, owner, now)
 		cloud = true,
 		guild = false,
 		gear = true,
+		recipes = true,
 	}
 end
 
@@ -348,6 +350,117 @@ function Store:equipped(itemId, link, quality, seed)
 	return posted
 end
 
+-- Recipes (§9.2) ------------------------------------------------------------------
+
+-- Whether this character shares recipes to the board: the option is on, the
+-- board hasn't removed them, and a board joined from an invite has synced
+-- once. Until then this client can't see notes it made there before (a
+-- rejoin), and a new note could take one of their ids (§4.2).
+local function sharesRecipes(board, author)
+	local mine = board.members and board.members[author]
+	local sync = board.sync or {}
+	local waiting = sync.joined and not sync.lastPeerAt and not sync.lastCloudAt
+	return board.recipes ~= false and not (mine and mine.removed) and not waiting
+end
+
+-- Makes this character's entry for one profession on the board hold `text`:
+-- edits the newest (only if it differs) or creates one, and deletes any
+-- other copies. Returns how many notes changed.
+local function shareProfession(self, board, author, professionId, text)
+	local mine = Recipes.mine(board, author, professionId)
+	local changed = 0
+	for i = 2, #mine do
+		if self:noted(board, Merge.deleteNote(board, mine[i].id, author, self.env.now())) then
+			changed = changed + 1
+		end
+	end
+	local note
+	if mine[1] then
+		if mine[1].text == text then
+			return changed
+		end
+		note = Merge.editNote(board, mine[1].id, { text = text }, author, self.env.now())
+	else
+		local id = Store.nextNoteId(board, self.env.prefix)
+		note = id and Merge.createNote(board, { id = id, author = author, text = text, kind = Recipes.KIND },
+			self.env.now())
+	end
+	if self:noted(board, note) then
+		changed = changed + 1
+	end
+	return changed
+end
+
+-- Shares this character's kept scans to one board, or to every board when
+-- boardId is nil. Returns how many notes changed, or nil and a reason.
+function Store:shareRecipes(boardId)
+	local author, reason = me(self)
+	if not author then
+		return nil, reason
+	end
+	local kept = self.db.char.professions
+	if not kept then
+		return 0
+	end
+	local ids = {}
+	for professionId in pairs(kept) do
+		ids[#ids + 1] = professionId
+	end
+	sort(ids) -- a fixed order, so new notes get the same ids on every run
+	local changed = 0
+	for _, board in pairs(self:all()) do
+		if (boardId == nil or board.id == boardId) and sharesRecipes(board, author) then
+			for _, professionId in ipairs(ids) do
+				changed = changed + shareProfession(self, board, author, professionId, kept[professionId])
+			end
+		end
+	end
+	return changed
+end
+
+-- A scan of an open profession window: profession = { id, name, skill, max }
+-- and the learned recipe ids. Keeps it for this character, then shares it.
+-- Returns how many notes changed, or nil and a reason.
+function Store:learned(profession, ids)
+	local author, reason = me(self)
+	if not author then
+		return nil, reason
+	end
+	local text
+	text, reason = Recipes.encode(profession, ids)
+	if not text then
+		return nil, reason
+	end
+	local kept = self.db.char.professions
+	if not kept then
+		kept = {}
+		self.db.char.professions = kept
+	end
+	kept[profession.id] = text
+	return self:shareRecipes()
+end
+
+-- The Professions tab's checkbox. Turning sharing off deletes this
+-- character's recipe lists on the board; turning it on shares the kept
+-- scans again. Returns the board, or nil and a reason.
+function Store:setRecipeSharing(boardId, on)
+	local board, reason = self:setOption(boardId, "recipes", on)
+	if not board then
+		return nil, reason
+	end
+	local author = self.env.me
+	if on then
+		self:shareRecipes(boardId)
+	elseif author then
+		for _, note in pairs(board.notes or {}) do
+			if not note.deleted and note.kind == Recipes.KIND and note.author == author then
+				self:noted(board, Merge.deleteNote(board, note.id, author, self.env.now()))
+			end
+		end
+	end
+	return board
+end
+
 -- Sharing and members (§4.1, §9, §10) -------------------------------------------
 
 -- The board's hidden channel (§5.1): "Cork" and 8 hex digits of FNV-1a over
@@ -379,6 +492,7 @@ function Store:joinBoard(text)
 	if not board then
 		new = true
 		board = newBoard(invite.id, invite.secret, invite.owner, now)
+		board.sync.joined = true -- recipe lists wait for the first sync (§9.2)
 		boards[invite.id] = board
 	elseif board.secret ~= invite.secret then
 		Store.retire(board, board.secret)
@@ -486,8 +600,8 @@ function Store.members(board)
 	return list
 end
 
--- Cloud sync, the GUILD transport and gear posts, per board (§4.1).
-local OPTIONS = { cloud = true, guild = true, gear = true }
+-- Cloud sync, the GUILD transport, gear posts and recipe sharing, per board (§4.1).
+local OPTIONS = { cloud = true, guild = true, gear = true, recipes = true }
 
 function Store:setOption(boardId, option, value)
 	local board, reason = self:board(boardId)

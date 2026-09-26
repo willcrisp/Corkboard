@@ -62,7 +62,7 @@ describe("Sanitise", function()
 		end
 		table.sort(types)
 		assert.are.same(
-			{ "achievement", "battlepet", "currency", "item", "journal", "mount", "quest", "spell" },
+			{ "achievement", "battlepet", "currency", "enchant", "item", "journal", "mount", "quest", "spell", "trade" },
 			types
 		)
 	end)

@@ -8,6 +8,7 @@
 --   env.random()         a number in [0, 1)
 --   env.class            the player's class token ("MAGE"), for roster colours
 --   env.changed(boardId) optional: called when a board's sync state changes
+--   env.synced(boardId)  optional: called when a board matches a peer's copy
 --
 -- The store's env supplies the player's name (env.me) and server time.
 --
@@ -110,14 +111,21 @@ end
 -- Digests -----------------------------------------------------------------------------
 
 local function emptySummary()
-	local buckets, counts = {}, {}
+	local buckets, counts, bytes = {}, {}, {}
 	for i = 1, Digest.BUCKETS do
-		buckets[i], counts[i] = 0, 0
+		buckets[i], counts[i], bytes[i] = 0, 0, 0
 	end
-	return { buckets = buckets, counts = counts, count = 0, bucketOf = {}, dirty = true }
+	return { buckets = buckets, counts = counts, bytes = bytes, count = 0, bucketOf = {}, dirty = true }
 end
 
--- The board's digest, bucket hashes and per-bucket note counts, cached.
+-- A note's rough cost in a catch-up (§5.6): NOTE_BYTES, or its text length
+-- when that's larger, so long notes and recipe lists (§9.2) aren't priced
+-- like short ones.
+function Sync.noteBytes(note)
+	return math.max(Sync.NOTE_BYTES, #(note.text or ""))
+end
+
+-- The board's digest, bucket hashes, per-bucket note counts and bytes, cached.
 -- Changes mark only their own buckets dirty, so a live edit rehashes one
 -- bucket rather than the board (the Phase 3 digest-cost note).
 function Sync:summary(board)
@@ -130,10 +138,10 @@ function Sync:summary(board)
 		return s
 	end
 	local all = s.dirty == true
-	local lines, counts = {}, {}
+	local lines, counts, bytes = {}, {}, {}
 	for i = 1, Digest.BUCKETS do
 		if all or s.dirty[i - 1] then
-			lines[i], counts[i] = {}, 0
+			lines[i], counts[i], bytes[i] = {}, 0, 0
 		end
 	end
 	local total = 0
@@ -147,6 +155,7 @@ function Sync:summary(board)
 		if bucket then
 			bucket[#bucket + 1] = Digest.line(note)
 			counts[b + 1] = counts[b + 1] + 1
+			bytes[b + 1] = bytes[b + 1] + Sync.noteBytes(note)
 		end
 		total = total + 1
 	end
@@ -155,6 +164,7 @@ function Sync:summary(board)
 			sort(lines[i], Util.less)
 			s.buckets[i] = Util.fnv1a32(concat(lines[i]))
 			s.counts[i] = counts[i]
+			s.bytes[i] = bytes[i]
 		end
 	end
 	s.count = total
@@ -529,14 +539,14 @@ function Sync:pushIdx(boardId, requester, hello)
 	if #buckets == 0 then
 		return
 	end
-	local differ, theirsBehind, oursBehind = 0, 0, 0
+	local size, theirsBehind, oursBehind = 0, 0, 0
 	for _, b in ipairs(buckets) do
 		local ours, theirs = mine.counts[b + 1], hello.kc[b + 1]
-		differ = differ + math.max(ours, theirs)
+		size = size + math.max(mine.bytes[b + 1], theirs * Sync.NOTE_BYTES)
 		theirsBehind = theirsBehind + math.max(0, ours - theirs)
 		oursBehind = oursBehind + math.max(0, theirs - ours)
 	end
-	local bulk = differ * Sync.NOTE_BYTES > Sync.BULK_BYTES
+	local bulk = size > Sync.BULK_BYTES
 	local partial = bulk and hello.cl ~= false and hello.cl ~= nil
 	if bulk and oursBehind > theirsBehind then
 		-- We're the stale one: ask for our own catch-up, under our own
@@ -674,6 +684,9 @@ function Sync:syncedWith(board, name)
 	board.sync = board.sync or {}
 	board.sync.lastPeer, board.sync.lastPeerAt = name, self.store.env.now()
 	self.behind[board.id] = nil
+	if self.env.synced then
+		self.env.synced(board.id)
+	end
 end
 
 -- Receiving ------------------------------------------------------------------------------------

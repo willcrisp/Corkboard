@@ -221,8 +221,8 @@ describe("the board window", function()
 		client:addNote("Repair before you zone in")
 		local search
 		for _, frame in ipairs(client.frames) do
-			if frame.template == "SearchBoxTemplate" then
-				search = frame
+			if frame.template == "SearchBoxTemplate" and not search then
+				search = frame -- the window's own; the Professions tab has the other
 			end
 		end
 		search:SetText("fiery")

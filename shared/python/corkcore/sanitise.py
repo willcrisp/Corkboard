@@ -13,9 +13,13 @@ MAX_BOARD_NAME = 64
 MAX_ID = 18
 COLOR_MAX = 8
 
-LINK_TYPES = frozenset({"item", "quest", "spell", "achievement", "currency", "mount", "battlepet", "journal"})
-# Note kinds (§4.2): no kind is an ordinary note, "gear" a gear-feed entry (§9.1).
-KINDS = frozenset({"gear"})
+LINK_TYPES = frozenset({
+    "item", "quest", "spell", "achievement", "currency", "mount", "battlepet", "journal",
+    "enchant", "trade",  # a profession recipe and a whole profession (§9.2)
+})
+# Note kinds (§4.2): no kind is an ordinary note, "gear" a gear-feed entry (§9.1),
+# "recipes" a character's recipe list for one profession (§9.2).
+KINDS = frozenset({"gear", "recipes"})
 
 _CONTROL = re.compile(r"[\x00-\x1f\x7f]")
 _TEXT_CONTROL = re.compile(r"[\x00-\x09\x0b-\x1f\x7f]")

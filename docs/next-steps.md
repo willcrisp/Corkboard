@@ -2,7 +2,7 @@
 
 The handoff between sessions. Read this after `CLAUDE.md`. Before you finish, update it: move what you finished into "Where things stand" and rewrite "Next steps".
 
-Last updated: 2026-09-26 (eighth session that day: profession API probes for a possible Professions tab).
+Last updated: 2026-09-26 (eighth session that day: profession API probes, then the Professions tab).
 
 ## Where things stand
 
@@ -22,10 +22,11 @@ On 2026-09-26 Will asked for the remaining work to be built on best assumptions,
 | Phase 5: sync API | `api/` | Passes pytest; the real server answered curl here. Image not built here (no Docker daemon); CI builds it. |
 | Phase 5: companion | `companion/`, `addon/Corkboard_Cloud/` | Passes pytest, including the real addon loading the `Data.lua` it writes. |
 | Phase 5: hosting | `infra/` | Compose, Caddyfile and `infra/README.md`; not deployed. |
+| Professions tab (§9.2) | `Core/Recipes.lua`, `Store:learned`/`shareRecipes`, `UI/Professions.lua`, the scan in `Corkboard.lua` | Built; passes between fake clients. Not run in game. |
 | Phase 6: packaging | `tools/package_addon.py`, `.pkgmeta`, `.github/workflows/release.yml`, `companion/corkboard-companion.spec`, `companion/corkboard_companion/gui.py` | Zip builder tested; the GUI, PyInstaller build and store uploads are untested. |
 | CI | `.github/workflows/ci.yml`, `api-image.yml` | Green on the branch: luacheck, busted, coverage gate (≥ 95%), spike smoke tests, pytest for corkcore, API, companion and packaging, and a check that the fuzz corpus is current. |
 
-Tests: `busted` runs 585 (Core coverage 98.7%, merge core 100%; the coverage run skips `#slow` specs); pytest runs 140 (corkcore), 20 (API), 32 (companion) and 1 (packaging).
+Tests: `busted` runs 620 (Core coverage 98.8%, merge core 100%; the coverage run skips `#slow` specs); pytest runs 142 (corkcore), 20 (API), 32 (companion) and 1 (packaging).
 
 ### First in-game run (fourth session)
 
@@ -50,14 +51,24 @@ Will installed the addon and CorkSpike in the 1.60.1 beta (build 70009) and ran 
 - **LibDBIcon-1.0 minor 55** is vendored in `Libs/LibDBIcon-1.0/`, copied unmodified from Details! Damage Meter's repo because the WowAce SVN is blocked here (source in `Libs/README.md`). The TOC loads it after LibDataBroker.
 - `Corkboard.lua` registers the launcher as a minimap button; its angle and hidden state live in `CorkboardDB.global.minimap`. `/cork minimap` hides or shows it. `ui_spec` covers the rim position, the click, hiding and a dragged angle across `/reload`; the fake client gained `Minimap`, `SetPoint` recording and animation groups.
 
-### Eighth session: profession probes
+### Eighth session: profession probes and the Professions tab
 
-Will asked whether a Professions tab could share the recipes each member knows. Nothing is built; three rounds of `/dump` on a Leatherworking character (1.60.1) found the following, now two §2 rows:
+Will asked whether a Professions tab could share the recipes each member knows. Four rounds of `/dump` on a Leatherworking character (1.60.1) found the following, now two §2 rows:
 
 - **The retail API, window open only.** `C_TradeSkillUI.GetAllRecipeIDs()` gave 592 ids (the whole catalogue), 8 of them `learned` at skill 47/75; the first was `1263079` ("Sewing Machine", item 279945). `GetBaseProfessionInfo()` gave Leatherworking, `professionID` 165, 47/75. With the window closed every call is empty or zero and `IsTradeSkillReady()` is false. `GetNumTradeSkills` and `GetNumCrafts` are nil, so Enchanting has no separate craft API. The window is `ProfessionsFrame`.
 - **Profession links exist.** `GetTradeSkillListLink()` returned `|cffffd000|Htrade:Player-4613-00CD2154:2108:165|h[Leatherworking]|h|r` and `2108`. The sanitiser rejects `trade` links.
 - **Recipe links aren't secret.** `GetRecipeLink(1263079)` returned a plain 65-byte string (`issecretvalue` false). An earlier `gsub("|","||")` on it counted 0 pipes, most likely because the chat box escapes a typed `|` before `/run` sees it: in-game probes should use `string.char(124)` or a pattern without `|`. The type is Classic's `enchant` (confirmed with `:match("H(%a+):")`): `|cffffd000|Henchant:1263079|h[Leatherworking: Sewing Machine]|h|r`, 65 bytes. The sanitiser rejects it, so a shift-clicked recipe can't go in a note today.
 - **Sizes for the design:** 7-digit ids cost 8 bytes each in a comma list, so a 2,000-byte note holds about 245; base-36 (4 characters) holds about 400.
+
+Will then said to build the searchable version (design.md §9.2):
+
+- **Links:** the sanitiser accepts `enchant` and `trade` links (Lua, Python, shared vectors; the fuzz corpus is unchanged), so a shift-clicked recipe or profession can go in any note.
+- **Records:** a Note with `kind = "recipes"` per character and profession, text `R1;<id>;<skill>;<max>;<learned>;<name>` plus the learned recipe ids ascending as base-36 gaps (`Core/Recipes.lua`). New sanitise and merge vectors, and `recipes` in both property-test generators.
+- **Scanning** (`Corkboard.lua`): a scan is wanted on `TRADE_SKILL_SHOW`, `TRADE_SKILL_DATA_SOURCE_CHANGED` and `NEW_RECIPE_LEARNED`, and runs once `IsTradeSkillReady()`; crafting alone never resends. Linked, guild and NPC views are skipped.
+- **Sharing** (`Store`): the last scan per profession is kept in `CorkboardDB.char.professions` and shared to every board with `recipes ~= false`, at login, after a scan, and when a board is created or has the option ticked. A board joined from an invite waits until it has synced once (`sync.joined` with no `lastPeerAt` or `lastCloudAt` yet; Sync calls `env.synced` when it matches a peer), so a rejoin can't reuse an old note id. Unticking deletes this character's lists on that board.
+- **Tab:** fourth tab, **Professions**: per-member professions with skill and count, or with a search, matching recipes as `enchant` links named by `C_Spell.GetSpellName` (fallback `GetSpellInfo`) with who knows each.
+- **Bulk rule:** `Sync.noteBytes` prices a note at 150 bytes or its text length, whichever is larger, and the responder sums its own bytes per mismatched bucket (§5.6).
+- **Tests:** `addon/spec/recipes_spec.lua` (encoding, rows, store rules, the bulk rule in the simulator, and two fake clients with a fake profession window); `ui_spec` now picks the window's own search box.
 
 ### Spec changes (earlier sessions)
 
@@ -133,9 +144,13 @@ Do these in order unless Will says otherwise.
 5. **Deploy the API:** on Will's box, `$env:ARCANE_API_KEY=…; python tools/arcane_deploy.py create --domain corkboard.<domain>` (`infra/README.md`, full steps in `docs/arcane-next-steps.md`). Then the Phase 5 checks: health over TLS from outside the tailnet, the dashboard unreachable, and a restore drill. Then install the companion (`pip install ./shared/python ./companion`, `corkboard-companion setup --api https://corkboard.<domain>`) and run the "B edits and logs out, A's companion syncs, A reloads" check for real.
 6. **Phase 6 for real:** CurseForge and Wago IDs and tokens, a signing certificate, and a Windows/macOS test of the companion's window and PyInstaller build.
 
-7. **Professions tab (proposed, not decided).** Two shapes, both needing a Will decision first:
-   - **Profession links only:** allow `trade` in the sanitiser (Lua, Python, vectors), so a member can put their `[Leatherworking]` link on a board. First check in game: send the link to a second character, click it, and see whether the recipe list opens, both with the owner online and offline.
-   - **Searchable recipe lists:** a Note with `kind = "recipes"` per character and profession (like the gear feed, §9.1), holding the profession, skill and the learned recipe ids, written when the window opens or `NEW_RECIPE_LEARNED` fires. Needs the new kind in both sanitisers, vectors and property generators, and a size-aware bulk estimate (`Sync.NOTE_BYTES` assumes 150-byte notes).
+7. **Will: the Professions tab check** (can go with step 2; a second character on the board also checks syncing):
+   1. Open a profession window, then the **Professions** tab: a row like "Leatherworking 47/75 · 8 recipes" with your name. The count should match the recipes you know.
+   2. Search `sewing` (or any recipe you know): the recipe shows as a gold link with your name. Hover it (recipe tooltip) and click it. If the name reads "Recipe 1263079", `C_Spell.GetSpellName` doesn't name recipes: send `/dump C_Spell.GetSpellName(1263079), GetSpellInfo(1263079)`.
+   3. Craft something that skills up: nothing resends (`/cork debug` shows no PUT). Close and reopen the window: the skill updates.
+   4. Untick "Share my recipes on this board": the row goes on the other client. Tick it again: it's back without reopening the window. `/reload` keeps it.
+   5. Shift-click a recipe and your `[Leatherworking]` link (the link button in the profession window) into a note: Save is allowed, and the other client shows both. Click the `[Leatherworking]` link on the other client, with you online and then logged out, and note what opens.
+   6. Send Lua errors. Pruning a dropped profession waits on `/dump GetProfessions()` and `/dump GetProfessionInfo(<each index>)` output from a character with two professions and Cooking.
 
 ## Open issues
 

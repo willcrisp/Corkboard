@@ -41,7 +41,7 @@ local REASONS = {
 	escape = "Notes can hold links and colours, but not textures, icons or other escape codes.",
 	link = "That link is malformed.",
 	link_type = "That kind of link can't go on a board. Items, quests, spells, achievements, currencies, "
-		.. "mounts, battle pets and journal links can.",
+		.. "mounts, battle pets, journal, recipe and profession links can.",
 	id_space = "You've run out of note ids on this board.",
 	deleted = "That note has been deleted.",
 	missing = "That board or note no longer exists.",

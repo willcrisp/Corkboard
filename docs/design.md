@@ -44,7 +44,7 @@ Forever has vanilla-era content but a **modern (Mainline-style) addon API**, and
 | **Addons can't read the combat log.** `CombatLogGetCurrentEventInfo` is nil, and registering `COMBAT_LOG_EVENT_UNFILTERED` is blocked as "only available to the Blizzard UI". `C_CombatLog` and `C_DamageMeter` exist. Seen in game on 2026-09-26. | No feature can use individual hits, so a "biggest crit" leaderboard was dropped. |
 | `PLAYER_EQUIPMENT_CHANGED` fires with the slot, and `GetInventoryItemLink("player", slot)` returns a plain (not secret) link with a quality from `C_Item.GetItemQualityByID`. Unequipping gives a nil link. Seen in game on 2026-09-26. | The gear feed (§9.1) is built on these. |
 | With a profession window open, `C_TradeSkillUI` works as on retail: `GetAllRecipeIDs()` returns the profession's whole catalogue (592 for Leatherworking), and `GetRecipeInfo(id).learned` marks the known ones (8 at skill 47/75). Recipe IDs are 7 digits (`1263079`), and the record's `hyperlink` is the crafted item's link. `GetBaseProfessionInfo()` gives `professionName`, `professionID` (165), `skillLevel` and `maxSkillLevel`. With no window open everything is empty or zero and `IsTradeSkillReady()` is false. `GetNumTradeSkills` and `GetNumCrafts` are nil, and the window is `ProfessionsFrame`. Seen in game on 2026-09-26. | Anything that shares recipes can read a profession only while its window is open, and must filter on `learned`. One code path covers every profession, Enchanting included. |
-| `C_TradeSkillUI.GetTradeSkillListLink()` (window open) returns a `trade` link and the skill line: `\|cffffd000\|Htrade:Player-4613-00CD2154:2108:165\|h[Leatherworking]\|h\|r`, `2108`. Seen in game on 2026-09-26. `GetRecipeLink(id)` returns a plain (not secret) `enchant` link, `\|cffffd000\|Henchant:1263079\|h[Leatherworking: Sewing Machine]\|h\|r`. Not yet known: what another player sees on clicking the `trade` link, online or offline. | The sanitiser rejects both `trade` and `enchant` links today (§6), so a shift-clicked recipe or profession can't go on a board. |
+| `C_TradeSkillUI.GetTradeSkillListLink()` (window open) returns a `trade` link and the skill line: `\|cffffd000\|Htrade:Player-4613-00CD2154:2108:165\|h[Leatherworking]\|h\|r`, `2108`. Seen in game on 2026-09-26. `GetRecipeLink(id)` returns a plain (not secret) `enchant` link, `\|cffffd000\|Henchant:1263079\|h[Leatherworking: Sewing Machine]\|h\|r`. Not yet known: what another player sees on clicking the `trade` link, online or offline. | The sanitiser accepts both link types (§6), and the Professions tab (§9.2) builds `enchant` links from recipe ids. |
 | Outgoing addon messages are restricted during encounters, and briefly around death and resurrection too. | The lockdown gate polls the client's restriction check instead of tracking `ENCOUNTER_START`/`END` flags, which can get stuck (§5.5). |
 | Addon messages have a **per-prefix throttle across all chat types**: roughly 1 message per second, with a small burst allowance. `SendAddonMessage` returns a result code. | About 255 bytes/sec sustained per prefix. P2P is for live edits and small deltas. Bulk sync goes through the cloud (§5.6). |
 | The client's Lua raises "Division by zero" on `x / 0` (and `0/0`), where stock Lua 5.1 returns inf or nan. Seen in game on 2026-09-26. | Tests outside the game can't catch it. No code, vendored libraries included, may divide by a value that can be zero; `Libs/README.md` lists the patches this needed. |
@@ -95,6 +95,7 @@ CorkboardDB.global.boards[boardId] = {
   cloud    = true,                 -- companion sync on by default now the API exists
   guild    = false,                -- sync over GUILD instead of a channel (§5.1)
   gear     = true,                 -- post this account's new rare+ gear here (§9.1); local, false opts out
+  recipes  = true,                 -- share this character's recipes here (§9.2); local, false opts out
   oldSecrets = { … },              -- up to 5 retired secrets, newest first (§7.3 rotate)
   seen     = { ["Name-Realm"] = { at, class } },  -- local roster bookkeeping, never replicated
 }
@@ -117,7 +118,8 @@ Note = {
   text    = "Need 4x |cff…|Hitem:…|h[…]|h|r for …",
   color   = 1,
   deleted = false,             -- tombstone; text cleared when true
-  kind    = nil,               -- nil for an ordinary note, "gear" for a gear-feed entry (§9.1)
+  kind    = nil,               -- nil for an ordinary note, "gear" for a gear-feed entry (§9.1),
+                               -- "recipes" for a character's recipe list (§9.2)
 }
 ```
 
@@ -217,7 +219,7 @@ Members digest: FNV1a32 of the sorted `name=rev;editor\n` lines of every MemberR
 
 At about 255 bytes/sec per prefix, and with other traffic sharing that budget, P2P catch-up only suits small deltas.
 
-- **Estimate first.** The responder estimates the transfer from the bucket diff: for each mismatched bucket, the larger of its own note count and the requester's (HELLO `kc`), times about 150 bytes per note. (The v0.2 plan had the requester estimate, but only the responder sees both sides' counts before any IDX is sent.) A responder that finds itself the more out of date also sends its own HELLO, so it catches up under its own cloud setting.
+- **Estimate first.** The responder estimates the transfer from the bucket diff: for each mismatched bucket, the larger of the bytes of its own notes there and the requester's note count (HELLO `kc`) times about 150 bytes. A note counts as about 150 bytes or its text length, whichever is larger, so a bucket holding 2 KB recipe lists (§9.2) isn't priced like short notes. (The v0.2 plan had the requester estimate, but only the responder sees both sides' counts before any IDX is sent.) A responder that finds itself the more out of date also sends its own HELLO, so it catches up under its own cloud setting.
 - **Small deltas go P2P.** If the estimate is ≤ 8 KB (about 30 s of budget), sync peer-to-peer.
 - **Large deltas go to the cloud.** If the estimate is larger and the requester is cloud-enabled, the responder sends a partial IDX with only its newest 20 notes in the differing buckets, and the requester pulls those. It then shows a banner: "N notes behind. The companion will fetch the rest, then /reload." The companion handles the rest. **Cloud-enabled** means the companion has actually synced this board in the last 7 days (`sync.lastCloudAt`), not just that `board.cloud` is on: a new member without the companion would otherwise never catch up.
 - **No cloud available.** If the client isn't cloud-enabled, full P2P sync still runs, at `"BULK"` priority (IDX, NEED and PUT alike), spread over time.
@@ -230,7 +232,7 @@ At about 255 bytes/sec per prefix, and with other traffic sharing that budget, P
 - Shift-click inserts a link into the focused note editor by post-hooking link insertion with `hooksecurefunc` (never pre-hooks or overrides).
 - Notes render in a hyperlink-enabled frame: `OnHyperlinkEnter` shows `GameTooltip:SetHyperlink`, and `OnHyperlinkClick` calls `SetItemRef`.
 - **Sanitise on receipt, identically in Lua and Python:**
-  - Allowed hyperlink types: `item, quest, spell, achievement, currency, mount, battlepet, journal`.
+  - Allowed hyperlink types: `item, quest, spell, achievement, currency, mount, battlepet, journal, enchant, trade`. `enchant` is a recipe and `trade` a whole profession (§2); both were added on 2026-09-26 with the Professions tab (§9.2).
   - Reject `|T`/`|A` textures and `|K` tokens.
   - Allow `|c…|r` colours.
   - Maximum 2,000 bytes per note.
@@ -243,7 +245,7 @@ At about 255 bytes/sec per prefix, and with other traffic sharing that budget, P
 
   Any other `|` escape fails, including `|T`, `|A`, `|K` and `|n`. Text must also be strict UTF-8, with no control characters other than `\n`.
 
-  Records are checked as well. Note ids must be `<8 lower-case hex>-<digits>`, 18 bytes at most. Names must look like `Name-Realm`, 64 bytes at most, with no `|` or control characters. Board names (BoardMeta) must be 1–64 bytes of strict UTF-8 with at least one non-space character, and no `|` or control characters at all. `color` must be 1–8 (the UI uses 1–5), `deleted` must be a boolean, `kind` must be absent or `"gear"` (reason `kind`, checked after `deleted`), and a tombstone's text must be empty. Unknown fields are ignored, so notes from a newer client still load.
+  Records are checked as well. Note ids must be `<8 lower-case hex>-<digits>`, 18 bytes at most. Names must look like `Name-Realm`, 64 bytes at most, with no `|` or control characters. Board names (BoardMeta) must be 1–64 bytes of strict UTF-8 with at least one non-space character, and no `|` or control characters at all. `color` must be 1–8 (the UI uses 1–5), `deleted` must be a boolean, `kind` must be absent, `"gear"` or `"recipes"` (reason `kind`, checked after `deleted`), and a tombstone's text must be empty. Unknown fields are ignored, so notes from a newer client still load.
 
   `shared/test-vectors/sanitise.json` fixes the rules and the reason codes.
 - Item and quest IDs are the ones valid on Forever. Links are built by the client, so no ID tables are needed.
@@ -300,7 +302,7 @@ CorkboardCloudData = {
 boards  (id TEXT PK, secret_hash BLOB, created_at INT, seq INT NOT NULL DEFAULT 0,
          name TEXT, name_rev INT, name_editor TEXT, name_seq INT);   -- BoardMeta
 notes   (board_id TEXT, note_id TEXT, author TEXT, created INT, rev INT, editor TEXT,
-         text TEXT, color INT, deleted INT, seq INT, kind TEXT,  -- kind: NULL or "gear" (§9.1)
+         text TEXT, color INT, deleted INT, seq INT, kind TEXT,  -- kind: NULL, "gear" (§9.1) or "recipes" (§9.2)
          PRIMARY KEY (board_id, note_id));
 members (board_id TEXT, name TEXT, role TEXT, rev INT, editor TEXT, removed INT, seq INT,
          PRIMARY KEY (board_id, name));
@@ -369,6 +371,7 @@ corkboard.<domain> {
 ## 9. UI
 
 - **Board list:** name, members, who's online (from recent HELLOs), and a sync badge such as "P2P: Bob 3m ago · Cloud: 2h ago", "Queued (restricted)", or "N behind: /reload after cloud sync".
+- **Tabs:** Notes, Members, Gear (§9.1) and Professions (§9.2) along the bottom of the window.
 - **Board view:** sticky-card grid (colour, author, relative time, live links).
 - **Editor:** multiline EditBox, shift-click links, character counter, colour picker. The counter counts bytes, since the sanitiser's 2,000 limit is in bytes. Save stays disabled while `Sanitise.text` would reject the text, and the editor says why. An unchanged save writes nothing, so it doesn't bump the rev and resend the note.
 - **Share:** "Copy invite" produces `CORK1:<base64(boardId|secret|ownerName)>`. "Join" takes a pasted string.
@@ -387,6 +390,26 @@ Added on 2026-09-26 at Will's request. When a member equips a rare (blue) or bet
 - **Which boards.** Every board on the account with `gear ~= false`, skipping boards that removed the player. The option is local and on by default; the Gear tab has a checkbox for it. Boards whose channel isn't active get the entry through anti-entropy or the cloud later.
 - **Volume.** Blue and better only, once per item per character: tens of entries per character over a levelling run, well under the API's 1,000-row cap. Entries count towards that cap like notes.
 - **Older clients** ignore `kind` (unknown fields are dropped), so they show gear entries as ordinary notes. Only dev builds exist before launch, so this is accepted. On an exact `(rev, editor)` tie the copy with a kind wins, so a newer client never loses it to a relayed copy without one.
+
+### 9.2 Professions tab
+
+Added on 2026-09-26 at Will's request, after the in-game probes in §2. Each member's learned recipes are shared with their boards, and the **Professions** tab (the fourth) answers "who can make this?".
+
+- **Records.** One Note per character and profession, with `kind = "recipes"`, so like the gear feed it rides every existing path unchanged. Its text is plain, with no escapes, so it needs no sanitiser special case:
+
+  ```
+  R1;<professionID>;<skill>;<max skill>;<learned>;<profession name>
+  <recipe ids, ascending, in base 36, each after the first written as the gap from the one before>
+  ```
+
+  For example `R1;165;47;75;8;Leatherworking` then `r2lj,1,4,…`. Recipe ids are 7 digits on Forever (§2), and the gaps between one profession's ids are mostly one to three base-36 digits, so a 2,000-byte note holds several hundred recipes. `learned` is the full count: if the list ever doesn't fit, the ids that fit are kept and the tab says how many are shown. Profession names hold no `;`, `|` or line breaks and are at most 64 bytes. A note whose text doesn't parse is ignored by the tab (it still syncs, like any note).
+- **Reading.** The profession API only answers while that profession's window is open (§2). The addon marks a scan as wanted on `TRADE_SKILL_SHOW`, `TRADE_SKILL_DATA_SOURCE_CHANGED` and `NEW_RECIPE_LEARNED`, then scans once `C_TradeSkillUI.IsTradeSkillReady()` is true (usually on the next `TRADE_SKILL_LIST_UPDATE`): `GetBaseProfessionInfo()` for the profession, and `GetAllRecipeIDs()` filtered on `GetRecipeInfo(id).learned`, leaving out dummy, recraft, salvage and gathering entries. It doesn't scan on every `TRADE_SKILL_LIST_UPDATE`, which fires on each craft: re-sending a 2 KB list per skill-up would hog the throttle (§5.6), so the skill shown refreshes next time the window opens. A linked, guild or NPC profession view is skipped, so nobody posts someone else's recipes as their own. Secret values are skipped.
+- **Writing.** The last scan of each profession is kept per character in `CorkboardDB.char.professions` (profession id → encoded text), and shared to every board with `recipes ~= false` that hasn't removed the player: the character's existing entry for that profession is edited (only if the text changed), or one is created. Extra copies of the same character and profession (two installs) are deleted. Sharing runs after each scan, at login, and when a board is created, joined or has the option turned on, so a new board gets the recipes without reopening every profession.
+- **Opting out.** The option is local and on by default, with a checkbox on the tab. Turning it off deletes this character's recipe entries on that board; turning it back on shares the kept scans again.
+- **Showing.** With an empty search the tab lists each member's professions ("Leatherworking 47/75 · 8 recipes"). A search lists matching recipes, each with the members who know it; every word must appear in the recipe's name, its profession or a knower's name, so searching a member's name lists their recipes. Recipes show as `enchant` links built locally: `|cffffd000|Henchant:<id>|h[<name>]|h|r`, named by `C_Spell.GetSpellName` (the recipe id is the craft's spell id), falling back to `GetSpellInfo` and then "Recipe <id>". At most 200 rows show.
+- **Mixed versions.** A client from before this change drops recipe lists (sanitiser reason `kind`) and notes holding `enchant` or `trade` links (`link_type`), so its digest never matches a newer member's and anti-entropy keeps offering it those notes. The API needs the same update before the companion can push them. Only dev builds exist before launch, so members update together.
+- A profession with no learned recipes (Fishing, say) still posts its header, so the tab shows its skill.
+- **Not handled in v1:** a profession the character drops keeps its entry (and its kept scan). `GetProfessions` could prune these at login, but it hasn't been checked in game, and pruning on a wrong answer would delete real entries.
 
 ---
 
