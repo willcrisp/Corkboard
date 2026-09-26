@@ -6,6 +6,8 @@ Boards sync peer-to-peer in game over addon messages. A companion app and a self
 
 The full spec is in `docs/design.md`. Read it before changing behaviour. Section numbers below (§) refer to it.
 
+Current status and the ordered next steps are in `docs/next-steps.md`. Read it at the start of a session and update it before you finish.
+
 ## Repo layout
 
 | Path | What lives here |
@@ -61,3 +63,4 @@ Run these from the repo root. They need Lua 5.1 with busted, luacheck, dkjson an
 - **Test:** `busted` runs every spec, including the property tests.
 - **Coverage:** `busted --run=coverage && luacov` writes `luacov.report.out`. This run leaves out the property tests, which are too slow under the coverage hook.
 - **Lint:** `luacheck .`
+- **Spike smoke test:** `lua5.1 spikes/mock/smoke.lua spikes/CorkSpike/CorkSpike.lua` runs CorkSpike against a fake client.
