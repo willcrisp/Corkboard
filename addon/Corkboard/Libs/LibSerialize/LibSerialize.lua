@@ -1003,7 +1003,7 @@ local function StringToFloat(str)
         if mant == 0 then
             n = sign * math_huge
         else
-            n = 0.0/0.0
+            n = math_huge - math_huge -- Corkboard patch: NaN without 0/0 (see _WriterTable.number)
         end
     elseif expo == 0 then
         -- Subnormal (denormal): no implicit leading one, fixed exponent.
@@ -1559,7 +1559,9 @@ LibSerializeInt._WriterTable = {
         -- deserializers. A literal "-0.0" is used rather than tostring(num),
         -- whose output for negative zero varies by runtime ("-0" vs "-0.0") and
         -- would not round-trip across runtimes.
-        if num == 0 and 1 / num < 0 then
+        -- Corkboard patch: the WoW client raises "Division by zero" on 1 / 0,
+        -- so detect negative zero from its sign in tostring instead.
+        if num == 0 and tostring(num):sub(1, 1) == "-" then
             local negativeZero = "-0.0"
             self:_WriteByte(readerIndexShift * self._ReaderIndex.NUM_FLOATSTR)
             self:_WriteByte(#negativeZero, 1)

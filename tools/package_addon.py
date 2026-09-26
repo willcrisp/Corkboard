@@ -1,18 +1,23 @@
 #!/usr/bin/env python3
 """Builds the addon zip players install (docs/design.md §12 Phase 6).
 
-    python3 tools/package_addon.py [--version 0.1.0] [--out dist]
+    python3 tools/package_addon.py [--version 0.1.0] [--out dist] [--install ADDONS_DIR]
 
 The zip holds two folders, Corkboard and Corkboard_Cloud, ready to unzip into
 Interface/AddOns. Corkboard_Cloud gets an empty Data.lua so the client doesn't
 log a missing file before the companion's first sync; the companion replaces
 it. The version goes into both TOCs in place of "0.1.0-dev".
+
+--install unzips it into a client's Interface/AddOns for in-game testing, as a
+copy (a symlinked addon never reads its SavedVariables back). It replaces both
+folders but keeps a Data.lua the companion already wrote there.
 """
 
 from __future__ import annotations
 
 import argparse
 import re
+import shutil
 import sys
 import zipfile
 from pathlib import Path
@@ -49,15 +54,33 @@ def build(version: str | None, out: Path) -> Path:
     return path
 
 
+def install(path: Path, addons_dir: Path) -> None:
+    data = addons_dir / "Corkboard_Cloud" / "Data.lua"
+    kept = data.read_bytes() if data.is_file() else None
+    for addon in ADDONS:
+        shutil.rmtree(addons_dir / addon, ignore_errors=True)
+    with zipfile.ZipFile(path) as z:
+        z.extractall(addons_dir)
+    if kept is not None:
+        data.write_bytes(kept)
+
+
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--version")
     parser.add_argument("--out", default=str(ROOT / "dist"))
+    parser.add_argument("--install", metavar="ADDONS_DIR", help="also unzip into this Interface/AddOns folder")
     args = parser.parse_args(argv)
     path = build(args.version, Path(args.out))
     with zipfile.ZipFile(path) as z:
         names = z.namelist()
     print(f"{path} ({len(names)} files)")
+    if args.install:
+        addons_dir = Path(args.install)
+        if not addons_dir.is_dir():
+            parser.error(f"{addons_dir} is not a folder")
+        install(path, addons_dir)
+        print(f"Installed into {addons_dir}")
     return 0
 
 

@@ -23,3 +23,20 @@ def test_zip_has_both_addons_and_nothing_else(tmp_path):
         for line in toc.splitlines():
             if line and not line.startswith("#"):
                 assert "Corkboard/" + line.replace("\\", "/") in names, line
+
+
+def test_install_replaces_both_addons_but_keeps_the_companions_data(tmp_path):
+    addons = tmp_path / "AddOns"
+    (addons / "Corkboard").mkdir(parents=True)
+    (addons / "Corkboard" / "Stale.lua").write_text("-- from an older build")
+    path = package_addon.build("1.2.3", tmp_path / "dist")
+
+    package_addon.install(path, addons)
+    assert not (addons / "Corkboard" / "Stale.lua").exists()
+    assert (addons / "Corkboard" / "Corkboard.toc").is_file()
+    assert (addons / "Corkboard_Cloud" / "Data.lua").read_bytes() == package_addon.EMPTY_DATA
+
+    synced = b"CorkboardCloudData = { v = 1 }\n"
+    (addons / "Corkboard_Cloud" / "Data.lua").write_bytes(synced)
+    package_addon.install(path, addons)
+    assert (addons / "Corkboard_Cloud" / "Data.lua").read_bytes() == synced

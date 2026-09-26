@@ -1,10 +1,11 @@
 -- The lockdown gate and send results (docs/design.md §5.5). Pure Lua 5.1: the
 -- client's globals come in through `get(name)`, so busted can play any client.
 --
--- Spike 01 hasn't named the client's outgoing addon-message restriction check
--- on 16001 yet, so the gate uses the first of Gate.CHECKS that exists.
--- Whichever it finds, a send whose result code means "restricted" also
--- closes the gate (Outbox:result).
+-- The gate polls C_ChatInfo.InChatMessagingLockdown (spike 01 on 1.60.1:
+-- false while idle). C_ChatInfo.AreOutgoingAddonChatMessagesRestricted also
+-- exists but reads true while idle and sends succeed, so it must never be
+-- used: the gate would never open. A send whose result code means
+-- "restricted" also closes the gate (Outbox:result).
 
 local _, ns = ...
 ns = type(ns) == "table" and ns or {}
@@ -19,8 +20,6 @@ Gate.__index = Gate
 -- restricted.
 Gate.CHECKS = {
 	{ "C_ChatInfo", "InChatMessagingLockdown" },
-	{ "C_ChatInfo", "AreOutgoingAddonChatMessagesRestricted" },
-	{ nil, "AreOutgoingAddonChatMessagesRestricted" },
 }
 
 -- Finds the restriction check. Returns the function and its name, or nil.

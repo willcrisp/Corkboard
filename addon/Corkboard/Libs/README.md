@@ -1,6 +1,12 @@
 # Vendored libraries
 
-The libraries from docs/design.md §13, copied unmodified from each project's latest release tag. `luacheck` skips this folder. To update one, replace its files from a newer release and update this table.
+The libraries from docs/design.md §13, copied from each project's latest release tag. `luacheck` skips this folder. To update one, replace its files from a newer release, re-apply the local patches below, and update this table.
+
+## Local patches
+
+The WoW client raises "Division by zero" where plain Lua gives inf or nan, so these never show outside the game. `wire_spec.lua` fails if a re-vendor brings them back.
+
+- **LibSerialize** `_WriterTable.number`: v1.2.2 detects negative zero with `1 / num < 0`, which threw on every envelope holding a `0` (found in game on 2026-09-26). Patched to test `tostring(num)`'s sign. Its float reader's `0.0/0.0` (NaN) is patched to `math_huge - math_huge`. Worth reporting upstream.
 
 | Library | Source | Release | Commit |
 |---|---|---|---|

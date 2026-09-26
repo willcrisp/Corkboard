@@ -720,11 +720,21 @@ function Client:makeEnv()
 	env.GetNormalizedRealmName = function()
 		return (client.realm:gsub("[%s%-]", ""))
 	end
+	-- Like Forever 1.60.1: a name can carry a surname ("Aprune Proudshield"),
+	-- which UnitName and UnitFullName return where the realm usually goes.
+	-- GetPlayerInfoByGUID has the whole name and an empty realm for our own.
+	local first, surname = client.name:match("^(%S+)%s*(.*)$")
+	surname = surname ~= "" and surname or nil
 	env.UnitName = function()
-		return client.name
+		return first, surname
 	end
 	env.UnitFullName = function()
-		return client.name, env.GetNormalizedRealmName()
+		return first, surname or env.GetNormalizedRealmName()
+	end
+	env.GetPlayerInfoByGUID = function(guid)
+		if guid == client.guid then
+			return "Mage", client.class, "Human", "Human", 2, client.name, ""
+		end
 	end
 	env.UnitGUID = function()
 		return client.guid

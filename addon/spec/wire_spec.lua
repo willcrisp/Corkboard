@@ -41,6 +41,25 @@ describe("Wire", function()
 		assert.are.equal("envelope", select(2, wire:decode(wrap({ v = 1, t = "PUT", b = "short" }))))
 	end)
 
+	-- The WoW client raises "Division by zero" where plain Lua gives inf or nan,
+	-- so no spec run outside the game can hit it. LibSerialize v1.2.2 found
+	-- negative zero with 1 / num and broke every envelope holding a 0; it's
+	-- patched in Libs/ (see Libs/README.md). This keeps a re-vendor honest.
+	it("round-trips zeros without dividing by zero", function()
+		local zero = 0
+		local negativeZero = -zero -- at run time: Lua 5.1 folds a literal -0 into the constant 0
+		local out = wire:decode(wire:encode({ v = 1, t = "HELLO", b = BOARD, c = { zero, negativeZero, 0.5 } }))
+		assert.are.same({ 0, 0, 0.5 }, out.c)
+		assert.are.equal("-0", tostring(out.c[2]):sub(1, 2))
+		for _, file in ipairs({ "LibSerialize/LibSerialize.lua", "LibDeflate/LibDeflate.lua" }) do
+			local f = assert(io.open("addon/Corkboard/Libs/" .. file, "rb"))
+			local source = f:read("*a"):gsub("%-%-[^\n]*", "")
+			f:close()
+			assert.is_nil(source:find("[^%w_.]1%s*/%s*[%a_]"), file .. " divides 1 by a variable")
+			assert.is_nil(source:find("[^%w_.]0%.?0*%s*/%s*0%.?0*[^%w_.]"), file .. " divides by a literal zero")
+		end
+	end)
+
 	it("reports a decoder that fails outright", function()
 		local broken = Wire.new({}, { DecodeForWoWAddonChannel = function() end })
 		assert.are.equal("decode", select(2, broken:decode("x")))

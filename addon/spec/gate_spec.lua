@@ -10,7 +10,7 @@ local function client(globals)
 end
 
 describe("Gate", function()
-	it("prefers C_ChatInfo.InChatMessagingLockdown", function()
+	it("polls C_ChatInfo.InChatMessagingLockdown", function()
 		local locked = false
 		local gate = Gate.new(client({
 			C_ChatInfo = {
@@ -28,18 +28,14 @@ describe("Gate", function()
 		assert.are.same({ true, 1 }, { gate:restricted() })
 	end)
 
-	it("falls back to the §5.5 name, in C_ChatInfo or global", function()
-		local gate = Gate.new(client({ C_ChatInfo = {
-			AreOutgoingAddonChatMessagesRestricted = function()
-				return true
-			end,
-		} }))
-		assert.are.equal("C_ChatInfo.AreOutgoingAddonChatMessagesRestricted", gate.name)
-		assert.is_true(gate:restricted())
-		gate = Gate.new(client({ AreOutgoingAddonChatMessagesRestricted = function()
-			return false
-		end }))
-		assert.are.equal("AreOutgoingAddonChatMessagesRestricted", gate.name)
+	-- On 1.60.1 it reads true while idle and sends succeed (spike 01).
+	it("never uses AreOutgoingAddonChatMessagesRestricted", function()
+		local always = function()
+			return true
+		end
+		local gate = Gate.new(client({ C_ChatInfo = { AreOutgoingAddonChatMessagesRestricted = always },
+			AreOutgoingAddonChatMessagesRestricted = always }))
+		assert.are.equal("none", gate.name)
 		assert.is_false(gate:restricted())
 	end)
 

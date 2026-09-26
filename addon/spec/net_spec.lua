@@ -98,6 +98,26 @@ describe("Corkboard between fake clients (Phase 2) #slow", function()
 		has(a:slash("/cork members"), "2 members")
 	end)
 
+	-- Forever 1.60.1: UnitFullName("player") gave the surname as the realm, so
+	-- the addon called itself "Aprune-Proudshield", saw its own echo as
+	-- another member and showed "Synced with Aprune Proudshield-…".
+	it("names a player with a surname the way other members see them", function()
+		local network, clients, id = shared({ { name = "Aprune Proudshield" }, { name = "Bob" } })
+		local a, b = clients[1], clients[2]
+		local me = "Aprune Proudshield-MirageRaceway"
+		assert.are.equal(me, store(a).env.me)
+		a:addNote("hello")
+		run(network, clients, 60)
+		assert.are.equal(me, boards(b)[id].notes[next(boards(b)[id].notes)].author)
+		assert.are.equal(me, boards(b)[id].owner)
+		local names = {}
+		for name in pairs(boards(a)[id].members) do
+			names[#names + 1] = name
+		end
+		table.sort(names)
+		assert.are.same({ me, "Bob-MirageRaceway" }, names)
+	end)
+
 	it("an edit appears on the other client within 5 s", function()
 		local network, clients, id = shared({ { name = "Will" }, { name = "Bob" } })
 		local a, b = clients[1], clients[2]

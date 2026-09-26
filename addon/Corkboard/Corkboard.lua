@@ -22,16 +22,25 @@ end
 -- The player's "Name-Realm" and note-id prefix, or nil while either is
 -- unknown or a secret value. The prefix is hashed from the GUID once, so it
 -- is plain data by the time any note carries it.
+--
+-- The name must match how CHAT_MSG_ADDON names us to others. Forever names
+-- have surnames: on 1.60.1 UnitFullName("player") gives "Aprune",
+-- "Proudshield" (the surname where the realm should be), while senders
+-- arrive as "Aprune Proudshield-ClassicBetaPvP2". GetPlayerInfoByGUID gives
+-- the whole "Aprune Proudshield" and an empty realm for our own.
 local function identity()
-	local name, realm = UnitFullName("player")
 	local guid = UnitGUID("player")
-	if secret(name) or secret(realm) or secret(guid) then
+	if not guid or secret(guid) then
+		return nil
+	end
+	local name, realm = select(6, GetPlayerInfoByGUID(guid))
+	if secret(name) or secret(realm) then
 		return nil
 	end
 	if not realm or realm == "" then
 		realm = GetNormalizedRealmName()
 	end
-	if not name or not realm or realm == "" or not guid then
+	if not name or name == "" or not realm or realm == "" then
 		return nil
 	end
 	return name .. "-" .. realm, ns.Store.notePrefix(guid)

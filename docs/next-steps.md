@@ -2,7 +2,7 @@
 
 The handoff between sessions. Read this after `CLAUDE.md`. Before you finish, update it: move what you finished into "Where things stand" and rewrite "Next steps".
 
-Last updated: 2026-09-26 (third session that day: the over-engineering audit).
+Last updated: 2026-09-26 (fourth session that day: the first in-game run).
 
 ## Where things stand
 
@@ -27,7 +27,19 @@ On 2026-09-26 Will asked for the remaining work to be built on best assumptions,
 
 Tests: `busted` runs 556 (Core coverage 98.7%, merge core 100%; the coverage run skips `#slow` specs); pytest runs 140 (corkcore), 18 (API), 32 (companion) and 1 (packaging).
 
-### Spec changes this session
+### First in-game run (fourth session)
+
+Will installed the addon and CorkSpike in the 1.60.1 beta (build 70009) and ran part of spike 01/02 before deciding **not to do the spike testing**: from here we patch and test the main addon directly. Nothing from the spikes is a prerequisite any more; the assumption tables stay as a list of what the in-game tests may expose.
+
+- **Fixed: every send failed.** The client's Lua raises "Division by zero" (stock Lua returns inf), and LibSerialize v1.2.2 checks for negative zero with `1 / num`, so any envelope holding a `0` threw. Patched in `Libs/LibSerialize` (listed in `Libs/README.md`); `wire_spec` fails if a re-vendor brings it back. New §2 row in design.md.
+- **Fixed: "Error loading Corkboard_Cloud/Data.lua".** The folder was copied from the repo, where `Data.lua` is gitignored. `python tools/package_addon.py --install "<beta>/Interface/AddOns"` now builds the zip and unzips it there (keeping a companion-written `Data.lua`); use it for every re-install.
+- **Gate:** spike 01 showed `C_ChatInfo.AreOutgoingAddonChatMessagesRestricted()` is **true while idle** with sends succeeding, and `InChatMessagingLockdown()` false. `Gate.CHECKS` is now `InChatMessagingLockdown` only.
+- **Own echoes:** CorkSpike failed to recognise its own whispers by exact `Name-Realm` (every arrival counted as "peer1"; the realm is "Classic Beta PvP 2"). Corkboard's echo check in `Net.lua` now ignores case and the realm's spaces, hyphens and apostrophes, and logs `? X shares our name (we are Y)` once to the debug panel if a same-named sender still gets through. If that line shows up, it's the echo: fix `nameKey` from what it prints.
+- **Fixed: Forever names have surnames.** `UnitFullName("player")` returns `"Aprune", "Proudshield"` (the surname where the realm goes), so the addon called itself `Aprune-Proudshield` while CHAT_MSG_ADDON names it `Aprune Proudshield-ClassicBetaPvP2`. Its own echo showed as "Synced with Aprune Proudshield-…" and a phantom member. `identity()` now uses `GetPlayerInfoByGUID` (whole name, empty realm for our own) plus `GetNormalizedRealmName()`; the fake client mimics Forever's names and `net_spec` covers it. Boards made before the fix have the old name as owner and author: recreate them.
+- **Cloud sync works locally:** API on `127.0.0.1:8000`, companion `setup` then `watch`; first sync pushed 4 and pulled 3, and the addon showed "Cloud 1m ago". Next is deploying the API so a second player can reach it.
+- `addon_spec` now reads TOCs with CRLF normalised, so `busted` passes on a Windows checkout. Lua tests run in WSL Ubuntu here (`apt install lua5.1 lua-busted lua-check lua-dkjson`).
+
+### Spec changes (earlier sessions)
 
 Each is written into `docs/design.md` with its reason:
 
@@ -55,9 +67,9 @@ Grouped by what settles them. Each names where it lives in code, so a wrong gues
 
 | # | Assumption | Where | Spike |
 |---|---|---|---|
-| S1 | The restriction check is `C_ChatInfo.InChatMessagingLockdown()`, else `AreOutgoingAddonChatMessagesRestricted()` (in `C_ChatInfo` or global). A check that errors counts as open. | `Core/Gate.lua` `Gate.CHECKS` | 01 |
-| S2 | `Enum.SendAddonMessageResult` exists; a result whose name has "Lockdown" or "Restrict" means restricted, "Throttle" means throttled. | `Gate:classify` | 01 |
-| S3 | The throttle is about 1 message/s with a burst near 10, per prefix, counting messages not bytes. The outbox assumes 8 and 0.9/s; the simulator and fake client use 10 and 1/s. | `Outbox.BURST/RATE`, `helpers/sim.lua`, `helpers/client.lua` | 02 |
+| S1 | **Settled (1.60.1):** `C_ChatInfo.InChatMessagingLockdown()`; `AreOutgoingAddonChatMessagesRestricted()` reads true while idle and is never used. Still unseen: its value during an encounter or death. | `Core/Gate.lua` `Gate.CHECKS` | 01 |
+| S2 | **Settled (1.60.1):** `Enum.SendAddonMessageResult` has `AddonMessageThrottle=3`, `ChannelThrottle=8`, `AddOnMessageLockdown=11`, which `Gate:classify` matches by name. | `Gate:classify` | 01 |
+| S3 | The throttle is about 1 message/s with a burst near 10. Spike 02 (partial) saw no client-side rejection for WHISPER: 40 of 40 in a burst and 2,514 at ~56/s all returned Success, and 2,462 arrived. CHANNEL wasn't measured. The outbox's 8 and 0.9/s is conservative; leave it unless sync feels slow. | `Outbox.BURST/RATE`, `helpers/sim.lua`, `helpers/client.lua` | 02 |
 | S4 | `JoinTemporaryChannel(name, secret)` takes the 24-character secret as the password, and a 12-character `Cork…` name. | `Net:Refresh`, `Store.channelName` | 03 |
 | S5 | Three board channels per character fit alongside the player's own channels. | `Net.MAX_CHANNELS` | 03 |
 | S6 | Password channels reach connected realms (and maybe beyond). | §5.1 | 03 |
@@ -114,8 +126,8 @@ Grouped by what settles them. Each names where it lives in code, so a wrong gues
 
 Do these in order unless Will says otherwise.
 
-1. **Will: install and run the spikes** (settles S1–S14). Copy `spikes/CorkSpike`, `spikes/CorkSpike2` and `addon/Corkboard` into `_classic_beta_/Interface/AddOns` (copy, don't symlink). Run `/cspike all` and the canary (see `spikes/CorkSpike/README.md`), then the CorkSpike2 runs in `docs/spikes/03-06`, and `python3 spikes/install_probe.py` on the desktop. Paste each report into its `docs/spikes/NN-*.md`.
-2. **Will: the Phase 1 check** (settles G1). Build the zip with `python3 tools/package_addon.py`, or copy `addon/Corkboard` and `addon/Corkboard_Cloud` (add an empty `Data.lua` to the latter: `CorkboardCloudData = nil`). Then:
+1. ~~Spikes~~: dropped by Will on 2026-09-26. Will's running beta client is `C:\wow\World of Warcraft\_classic_beta_` (no spikes installed there). A second, unused beta install under `C:\Program Files (x86)\World of Warcraft` holds stale copies; ignore it.
+2. **Will: the Phase 1 check** (settles G1). Install with `python tools/package_addon.py --install "C:/wow/World of Warcraft/_classic_beta_/Interface/AddOns"`. Then:
    1. `/console scriptErrors 1`, then `/cork`. Click **New**, name the board `Molten Core prep`.
    2. **New Note**: type `Need 4x `, shift-click an item in your bags, pick the blue tag, Save. Add `Bring fire resistance` and a note long enough to wrap.
    3. Hover the item link (tooltip), click it (item pops up), hover a card (Edit and Delete replace the age).

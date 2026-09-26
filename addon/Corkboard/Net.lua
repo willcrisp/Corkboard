@@ -245,6 +245,33 @@ local function fullName(sender)
 	return sender .. "-" .. (GetNormalizedRealmName() or "")
 end
 
+-- A "Name-Realm" compared without case or the realm's spaces, hyphens and
+-- apostrophes: CorkSpike on 1.60.1 failed to recognise its own whispers by
+-- exact name, so the realm's spelling in `sender` isn't trusted to match ours.
+local function nameKey(name)
+	local base, realm = name:match("^([^-]+)%-(.*)$")
+	if not base then
+		return name:lower()
+	end
+	return base:lower() .. "-" .. (realm:gsub("[%s%-']", "")):lower()
+end
+
+local warnedEcho
+local function isSelf(sender)
+	local me = addon:Identify()
+	if not me then
+		return false
+	end
+	if nameKey(sender) == nameKey(me) then
+		return true
+	end
+	if not warnedEcho and nameKey(sender):match("^[^-]+") == nameKey(me):match("^[^-]+") then
+		warnedEcho = true -- same name, other realm: a namesake, or an echo we can't recognise
+		addon.sync:note("? %s shares our name (we are %s)", sender, me)
+	end
+	return false
+end
+
 -- The board a CHANNEL message belongs to, from the event's channel details.
 local function channelBoard(target, localId, channelName)
 	for _, name in ipairs({ channelName, target }) do
@@ -279,7 +306,7 @@ function Net:OnAddonMessage(prefix, text, chatType, sender, target, _, localId, 
 		return
 	end
 	sender = fullName(sender)
-	if sender == store().env.me then
+	if isSelf(sender) then
 		return -- our own broadcast, echoed back
 	end
 	local whole = reassembler:add(sender .. "\0" .. chatType .. "\0" .. boardId, text, GetTime())

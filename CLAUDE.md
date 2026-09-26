@@ -51,6 +51,8 @@ Current status and the ordered next steps are in `docs/next-steps.md`. Read it a
 - **Python:** `pytest` in `api/` and `companion/`, with Hypothesis property tests for convergence (§11).
 - **In game:** test persistence with `/reload`. A beta bug means SavedVariables don't load on a fresh launch. Copy the addon into the client's `Interface/AddOns`; don't symlink it, or SavedVariables are never read back.
 - Dev installs live under the beta folder (`_classic_beta_`) until launch on 2026-11-04.
+- **Will's dev machine (Windows):** the beta client he runs is `C:\wow\World of Warcraft\_classic_beta_\WowB.exe`. Install with `python tools/package_addon.py --install "C:/wow/World of Warcraft/_classic_beta_/Interface/AddOns"`, then `/reload` in game (quit and relaunch if a newly added file such as `Data.lua` isn't picked up). A second, unused beta install under `C:\Program Files (x86)\World of Warcraft` holds stale copies: installing there does nothing in game. If unsure, check the running client's path with `Get-Process | ? Name -like '*wow*' | select Path`.
+- **Lua tests on Windows:** there's no native Lua; run them in WSL Ubuntu (which has `lua5.1`, `busted` and `luacheck` from apt): `MSYS_NO_PATHCONV=1 wsl -d Ubuntu -- bash -lc 'cd /mnt/c/projects/corkboard && busted && luacheck .'`.
 
 ## Deployment
 
@@ -67,7 +69,7 @@ Run these from the repo root. They need Lua 5.1 with busted, luacheck, dkjson an
 - **Lint:** `luacheck .`
 - **Python core:** `pip install -e shared/python && pytest shared/python` runs the shared vectors and the Hypothesis property tests.
 - **Fuzz corpus:** `python3 shared/test-vectors/tools/gen_sanitise_fuzz.py` regenerates `sanitise_fuzz.json` after a sanitiser change.
-- **Package the addon:** `python3 tools/package_addon.py --version X.Y.Z` writes `dist/Corkboard-X.Y.Z.zip` (Corkboard + Corkboard_Cloud with an empty `Data.lua`).
+- **Package the addon:** `python3 tools/package_addon.py --version X.Y.Z` writes `dist/Corkboard-X.Y.Z.zip` (Corkboard + Corkboard_Cloud with an empty `Data.lua`). Add `--install <client>/Interface/AddOns` to also unzip it into a client for in-game testing.
 - **Run the API locally:** `pip install -e shared/python -e api && CORK_DB=/tmp/cork.db python3 -m corkboard_api.app` (port 8000).
 - **Companion:** `pip install -e shared/python -e companion && corkboard-companion setup --api URL --wow PATH`, then `corkboard-companion watch`.
 - **Spike smoke tests:** `lua5.1 spikes/mock/smoke.lua spikes/CorkSpike/CorkSpike.lua` runs CorkSpike against a fake client, and `lua5.1 spikes/mock/smoke2.lua spikes/CorkSpike2/CorkSpike2.lua` does the same for CorkSpike2.

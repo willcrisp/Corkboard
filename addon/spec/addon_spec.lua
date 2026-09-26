@@ -23,7 +23,7 @@ describe("Corkboard.toc", function()
 	local toc
 	setup(function()
 		local f = assert(io.open("addon/Corkboard/Corkboard.toc", "rb"))
-		toc = f:read("*a")
+		toc = f:read("*a"):gsub("\r\n", "\n") -- a Windows checkout has CRLF
 		f:close()
 	end)
 
@@ -85,7 +85,7 @@ end)
 describe("Corkboard_Cloud.toc", function()
 	it("is data only, loads after Corkboard, and targets Forever", function()
 		local f = assert(io.open("addon/Corkboard_Cloud/Corkboard_Cloud.toc", "rb"))
-		local toc = f:read("*a")
+		local toc = f:read("*a"):gsub("\r\n", "\n")
 		f:close()
 		assert.is_truthy(toc:find("## Interface: 16001\n", 1, true))
 		assert.is_truthy(toc:find("## Dependencies: Corkboard\n", 1, true))
