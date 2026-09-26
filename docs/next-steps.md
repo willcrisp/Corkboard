@@ -2,7 +2,7 @@
 
 The handoff between sessions. Read this after `CLAUDE.md`. Before you finish, update it: move what you finished into "Where things stand" and rewrite "Next steps".
 
-Last updated: 2026-09-26 (seventh session that day: minimap button on main).
+Last updated: 2026-09-26 (eighth session that day: profession API probes for a possible Professions tab).
 
 ## Where things stand
 
@@ -49,6 +49,15 @@ Will installed the addon and CorkSpike in the 1.60.1 beta (build 70009) and ran 
 
 - **LibDBIcon-1.0 minor 55** is vendored in `Libs/LibDBIcon-1.0/`, copied unmodified from Details! Damage Meter's repo because the WowAce SVN is blocked here (source in `Libs/README.md`). The TOC loads it after LibDataBroker.
 - `Corkboard.lua` registers the launcher as a minimap button; its angle and hidden state live in `CorkboardDB.global.minimap`. `/cork minimap` hides or shows it. `ui_spec` covers the rim position, the click, hiding and a dragged angle across `/reload`; the fake client gained `Minimap`, `SetPoint` recording and animation groups.
+
+### Eighth session: profession probes
+
+Will asked whether a Professions tab could share the recipes each member knows. Nothing is built; three rounds of `/dump` on a Leatherworking character (1.60.1) found the following, now two §2 rows:
+
+- **The retail API, window open only.** `C_TradeSkillUI.GetAllRecipeIDs()` gave 592 ids (the whole catalogue), 8 of them `learned` at skill 47/75; the first was `1263079` ("Sewing Machine", item 279945). `GetBaseProfessionInfo()` gave Leatherworking, `professionID` 165, 47/75. With the window closed every call is empty or zero and `IsTradeSkillReady()` is false. `GetNumTradeSkills` and `GetNumCrafts` are nil, so Enchanting has no separate craft API. The window is `ProfessionsFrame`.
+- **Profession links exist.** `GetTradeSkillListLink()` returned `|cffffd000|Htrade:Player-4613-00CD2154:2108:165|h[Leatherworking]|h|r` and `2108`. The sanitiser rejects `trade` links.
+- **Unexplained:** `GetRecipeLink(1263079)` printed as a gold `[Leatherworking: Sewing Machine]` link, but `gsub("|","||")` on it replaced 0 pipes. Either the string holds no `|` (unlikely for a link) or it's a secret value (only the id was checked). Check `issecretvalue(C_TradeSkillUI.GetRecipeLink(id))` before anything sends one.
+- **Sizes for the design:** 7-digit ids cost 8 bytes each in a comma list, so a 2,000-byte note holds about 245; base-36 (4 characters) holds about 400.
 
 ### Spec changes (earlier sessions)
 
@@ -123,6 +132,10 @@ Do these in order unless Will says otherwise.
 4. **Apply the results.** Fix whatever the checks turn up and tick the §12 items that have their evidence. Since the spikes are dropped, `spikes/`, its CI smoke steps and `Corkboard.Sanitise` (kept only for CorkSpike2) can go in their own small change. If the 1.60 client has `C_EncodingUtil`, it could replace LibSerialize and LibDeflate.
 5. **Deploy the API:** on Will's box, `$env:ARCANE_API_KEY=…; python tools/arcane_deploy.py create --domain corkboard.<domain>` (`infra/README.md`, full steps in `docs/arcane-next-steps.md`). Then the Phase 5 checks: health over TLS from outside the tailnet, the dashboard unreachable, and a restore drill. Then install the companion (`pip install ./shared/python ./companion`, `corkboard-companion setup --api https://corkboard.<domain>`) and run the "B edits and logs out, A's companion syncs, A reloads" check for real.
 6. **Phase 6 for real:** CurseForge and Wago IDs and tokens, a signing certificate, and a Windows/macOS test of the companion's window and PyInstaller build.
+
+7. **Professions tab (proposed, not decided).** Two shapes, both needing a Will decision first:
+   - **Profession links only:** allow `trade` in the sanitiser (Lua, Python, vectors), so a member can put their `[Leatherworking]` link on a board. First check in game: send the link to a second character, click it, and see whether the recipe list opens, both with the owner online and offline.
+   - **Searchable recipe lists:** a Note with `kind = "recipes"` per character and profession (like the gear feed, §9.1), holding the profession, skill and the learned recipe ids, written when the window opens or `NEW_RECIPE_LEARNED` fires. Needs the new kind in both sanitisers, vectors and property generators, and a size-aware bulk estimate (`Sync.NOTE_BYTES` assumes 150-byte notes).
 
 ## Open issues
 
