@@ -672,6 +672,13 @@ function Sync:scheduleMeta(boardId)
 	end)
 end
 
+-- Records that this board now matches `name`'s copy, for the status line.
+function Sync:syncedWith(board, name)
+	board.sync = board.sync or {}
+	board.sync.lastPeer, board.sync.lastPeerAt = name, self.store.env.now()
+	self.behind[board.id] = nil
+end
+
 -- Receiving ------------------------------------------------------------------------------------
 
 local function isInt(n, min, max)
@@ -725,9 +732,7 @@ function handlers.HELLO(self, board, e, sender)
 	local mine = self:summary(board)
 	if e.d == mine.digest then
 		peer.state = "match"
-		board.sync = board.sync or {}
-		board.sync.lastPeer, board.sync.lastPeerAt = sender, self.store.env.now()
-		self.behind[board.id] = nil
+		self:syncedWith(board, sender)
 		self:note("< HELLO  %s  %d notes  matches", sender, e.n)
 		self:standDown(board.id, sender)
 	else
@@ -797,6 +802,9 @@ function handlers.IDX(self, board, e, sender)
 	if #push > 0 then
 		self:pushPut(board.id, push, bulk and "BULK" or "NORMAL")
 	end
+	if #need == 0 and #push == 0 and not e.p then
+		self:syncedWith(board, sender) -- nothing to exchange in the buckets that differed
+	end
 	self:changed(board.id)
 	return true
 end
@@ -840,6 +848,9 @@ function handlers.PUT(self, board, e, sender)
 		end
 		if syncing.left <= 0 then
 			self.syncing[board.id] = nil
+			if not self.behind[board.id] then
+				self:syncedWith(board, syncing.from) -- caught up with them
+			end
 		end
 	end
 	return true

@@ -405,10 +405,14 @@ corkboard.<domain> {
 - [ ] State survives `/reload` (and a full relog once the beta bug is fixed).
 - [ ] Merge-core coverage ≥ 95%. All shared test vectors pass in Lua.
 
+> **Status, 2026-09-26:** Phases 1–6 are built, but no box below is ticked: each needs its evidence from the Forever client (or the live host). What already passes outside the game is noted under each phase; `docs/next-steps.md` has the in-game checklists and the assumptions to check.
+
 **Phase 2: Live P2P**
 - [ ] Invites round-trip. The hidden channel never shows in any chat frame.
 - [ ] With 2 clients online, an edit appears on the other client within 5 s.
 - [ ] Non-member traffic is ignored, and secret payloads are dropped without errors.
+
+  *Outside the game:* all three pass between fake clients running the real addon (`addon/spec/net_spec.lua`) and in the simulator (`sync_spec.lua`).
 
 **Phase 3: Anti-entropy**
 - [ ] With A offline, B makes 20 creates, 5 edits and 3 deletes. After A logs in, the digests match within 60 s via P2P, and the debug panel shows only mismatched buckets were exchanged.
@@ -416,11 +420,15 @@ corkboard.<domain> {
 - [ ] Concurrent edits to the same note converge to the same winner on 3 clients.
 - [ ] With 5 members online, a HELLO triggers exactly one IDX in ≥ 90% of trials.
 
+  *Outside the game:* all four pass in the simulator (`sync_spec.lua`; 30 of 30 trials for the IDX count), plus a 25-seed churn property (`sync_property_spec.lua`). The debug panel exists but hasn't been seen in game.
+
 **Phase 4: Hardening**
 - [ ] Edits during an encounter (and while dead) are queued and delivered within 10 s of the gate opening, with no Lua errors or `ADDON_ACTION_FORBIDDEN`.
 - [ ] No message is ever lost to throttling (verified with result-code logging over a 500-note sync).
 - [ ] The bulk rule triggers above 8 KB, and the banner shows.
 - [ ] The sanitiser fuzz corpus is rejected identically in Lua and Python.
+
+  *Outside the game:* the queue-and-deliver, throttle and fuzz items pass (`sync_spec.lua`, `net_spec.lua`, `sanitise_fuzz_spec.lua` with `shared/test-vectors/sanitise_fuzz.json`). The 8 KB rule and the banner pass in the simulator. The result-code logging over a real 500-note sync needs the client.
 
 **Phase 5: Cloud + hosting**
 - [ ] The stack deploys from Arcane. `https://corkboard.<domain>/v1/health` returns 200 over valid TLS from outside the tailnet, and the Arcane dashboard is unreachable from the internet.
@@ -430,15 +438,19 @@ corkboard.<domain> {
 - [ ] The companion never writes SavedVariables, and `Data.lua` writes are atomic.
 - [ ] A backup restore drill: restore yesterday's snapshot into a fresh stack, and the digests match.
 
+  *Outside the game:* the API, the companion and the catch-up path pass in pytest, including the real addon (in the fake client) loading a `Data.lua` the companion wrote after syncing through the API. The deploy, TLS and drill items need the host (`infra/README.md`).
+
 **Phase 6: Distribution**
 - [ ] `Corkboard` + `Corkboard_Cloud` packages (interface 16001) on CurseForge and Wago, once they list the Forever flavour.
 - [ ] Signed companion installer with a first-run wizard (finds the Forever install, sets the API URL).
+
+  *So far:* `tools/package_addon.py`, `.pkgmeta` and `.github/workflows/release.yml` (GitHub release now; CurseForge and Wago once they list Forever and the tokens exist); a PyInstaller spec and a tkinter wizard, untested on Windows and macOS, and no signing certificate yet.
 
 ---
 
 ## 13. Dependencies
 
-- **Addon:** Ace3 (AceAddon, AceDB, AceEvent, AceComm, AceTimer, AceConsole, with ChatThrottleLib), LibSerialize, LibDeflate, LibDataBroker, LibDBIcon. All must be current builds that load on modern-API clients.
+- **Addon:** Ace3 (AceAddon, AceDB, AceEvent, AceComm, AceTimer, AceConsole, with ChatThrottleLib), LibSerialize, LibDeflate, LibDataBroker, LibDBIcon. All must be current builds that load on modern-API clients. AceComm is only carried for its ChatThrottleLib; Corkboard frames its own messages (§5.2).
 - **Companion/API:** Python 3.12, FastAPI, SQLite, a Lua-table data parser, Hypothesis, PyInstaller.
 - **Infra:** Arcane, Caddy 2, GHCR, GitHub Actions.
 
@@ -449,3 +461,5 @@ corkboard.<domain> {
 3. Delete permissions: can any member delete any note, or only the author and the owner? This is enforceable at the API and UI level only.
 4. Guild boards: auto-join for the whole guild, or invite-only?
 5. Board deletion is local-only (§4.1). Should the owner be able to close a board for everyone? That would need a replicated flag in BoardMeta, plus an answer to question 3 about who may do it.
+6. After a rotation, members who were offline sit alone in the old channel until someone re-shares the invite (§5.1). Should the owner's client whisper the new invite to each remaining member it sees online, so only offline members need a manual re-share? (A whisper is point to point, so the removed member can't read it.)
+7. Tombstones are never collected (§4.3), and the API caps a board at 1,000 rows including them. Is a board that busy likely, and if so what's the collection rule?
