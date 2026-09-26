@@ -103,6 +103,22 @@ function Store.name(board)
 	return board.meta and board.meta.name or board.id
 end
 
+-- A board as this account first holds it, before any meta or members.
+local function newBoard(id, secret, owner, now)
+	return {
+		id = id,
+		secret = secret,
+		owner = owner,
+		created = now,
+		clock = 0,
+		notes = {},
+		members = {},
+		sync = {},
+		cloud = true,
+		guild = false,
+	}
+end
+
 local function me(self)
 	local name = self.env.me
 	if not name or not self.env.prefix then
@@ -124,18 +140,7 @@ function Store:createBoard(name)
 	repeat
 		id = Store.randomString(rand, Store.ID_LENGTH)
 	until not boards[id]
-	local board = {
-		id = id,
-		secret = Store.randomString(rand, Store.SECRET_LENGTH),
-		owner = owner,
-		created = now,
-		clock = 0,
-		notes = {},
-		members = {},
-		sync = {},
-		cloud = true,
-		guild = false,
-	}
+	local board = newBoard(id, Store.randomString(rand, Store.SECRET_LENGTH), owner, now)
 	local ok
 	ok, reason = Merge.setMeta(board, name, owner, now)
 	if not ok then
@@ -212,33 +217,6 @@ function Store:select(id)
 	return board
 end
 
--- Finds a board by exact id, then by name (ASCII case folded), then by id
--- prefix. Returns the board, or nil and "missing" or "ambiguous".
-function Store:findBoard(query)
-	local boards = self:all()
-	if boards[query] then
-		return boards[query]
-	end
-	local byName, byPrefix = {}, {}
-	local wanted = lower(query)
-	for id, board in pairs(boards) do
-		if lower(Store.name(board)) == wanted then
-			byName[#byName + 1] = board
-		end
-		if query ~= "" and sub(id, 1, #query) == query then
-			byPrefix[#byPrefix + 1] = board
-		end
-	end
-	for _, found in ipairs({ byName, byPrefix }) do
-		if #found == 1 then
-			return found[1]
-		elseif #found > 1 then
-			return nil, "ambiguous"
-		end
-	end
-	return nil, "missing"
-end
-
 -- Notes ------------------------------------------------------------------------
 
 -- Live notes, oldest first (by created, then id).
@@ -256,46 +234,6 @@ function Store.notes(board)
 		return Util.less(a.id, b.id)
 	end)
 	return list
-end
-
--- A short way to name a live note: "#7" when no other live note on the board
--- has counter 7, otherwise its full id.
-function Store.noteRef(board, note)
-	local n = counter(note.id)
-	for _, other in pairs(board.notes or {}) do
-		if other ~= note and not other.deleted and counter(other.id) == n then
-			return note.id
-		end
-	end
-	return "#" .. n
-end
-
--- Finds a live note by full id, or by counter ("7" or "#7") when that's
--- unique among live notes. Returns the note, or nil and "missing",
--- "deleted" or "ambiguous".
-function Store.findNote(board, ref)
-	local notes = board.notes or {}
-	local exact = notes[ref]
-	if exact then
-		if exact.deleted then
-			return nil, "deleted"
-		end
-		return exact
-	end
-	local n = tonumber(match(ref, "^#?(%d+)$"))
-	local found
-	for _, note in pairs(notes) do
-		if n and not note.deleted and counter(note.id) == n then
-			if found then
-				return nil, "ambiguous"
-			end
-			found = note
-		end
-	end
-	if not found then
-		return nil, "missing"
-	end
-	return found
 end
 
 local function noteChange(self, boardId)
@@ -351,10 +289,6 @@ end
 
 -- Sharing and members (§4.1, §9, §10) -------------------------------------------
 
-function Store.invite(board)
-	return Invite.encode(board)
-end
-
 -- The board's hidden channel (§5.1): "Cork" and 8 hex digits of FNV-1a over
 -- the id and secret. The secret is the channel password too. Deriving the
 -- name from the secret as well as the id moves the board to a fresh channel
@@ -383,18 +317,7 @@ function Store:joinBoard(text)
 	local board, new = boards[invite.id], false
 	if not board then
 		new = true
-		board = {
-			id = invite.id,
-			secret = invite.secret,
-			owner = invite.owner,
-			created = now,
-			clock = 0,
-			notes = {},
-			members = {},
-			sync = {},
-			cloud = true,
-			guild = false,
-		}
+		board = newBoard(invite.id, invite.secret, invite.owner, now)
 		boards[invite.id] = board
 	elseif board.secret ~= invite.secret then
 		Store.retire(board, board.secret)

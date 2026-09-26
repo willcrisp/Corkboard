@@ -5,8 +5,9 @@
 
 local ADDON, ns = ...
 
-local Corkboard = LibStub("AceAddon-3.0"):NewAddon(ADDON, "AceConsole-3.0")
+local Corkboard = {}
 ns.Corkboard = Corkboard
+_G.Corkboard = Corkboard -- other addons reached it through AceAddon before
 Corkboard.Sanitise = ns.Sanitise -- read by spikes/CorkSpike2 (spike 04)
 
 local DEFAULTS = { global = { boards = {} } }
@@ -43,6 +44,7 @@ local function classToken()
 	end
 end
 
+-- ADDON_LOADED, once SavedVariables are in.
 function Corkboard:OnInitialize()
 	self.db = LibStub("AceDB-3.0"):New("CorkboardDB", DEFAULTS, true)
 	self.env = { now = GetServerTime, rand = math.random }
@@ -85,7 +87,10 @@ function Corkboard:OnInitialize()
 			ns.Net:Refresh()
 		end
 	end)
-	self:RegisterChatCommand("cork", "OnSlash")
+	SLASH_CORK1 = "/cork"
+	SlashCmdList.CORK = function(input)
+		self:OnSlash(input)
+	end
 end
 
 -- PLAYER_LOGIN
@@ -125,6 +130,17 @@ function Corkboard:OnEnable()
 		})
 	end
 end
+
+local loader = CreateFrame("Frame")
+loader:RegisterEvent("ADDON_LOADED")
+loader:RegisterEvent("PLAYER_LOGIN")
+loader:SetScript("OnEvent", function(_, event, name)
+	if event == "ADDON_LOADED" and name == ADDON then
+		Corkboard:OnInitialize()
+	elseif event == "PLAYER_LOGIN" then
+		Corkboard:OnEnable()
+	end
+end)
 
 -- The addon compartment by the minimap (## AddonCompartmentFunc in the TOC).
 function CorkboardCompartment_OnClick()

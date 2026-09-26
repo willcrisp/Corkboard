@@ -336,8 +336,7 @@ local function libs()
 end
 
 local function corkboard()
-	local ace = LibStub and LibStub("AceAddon-3.0", true)
-	return ace and ace:GetAddon("Corkboard", true)
+	return type(Corkboard) == "table" and Corkboard or nil
 end
 
 local function linkTypes(link)

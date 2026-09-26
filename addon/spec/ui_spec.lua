@@ -144,9 +144,9 @@ describe("the board window", function()
 
 	it("switches boards from the list", function()
 		local client = openWindow()
-		client:slash("/cork create MC")
-		client:slash("/cork add in MC")
-		client:slash("/cork create BWL")
+		client:createBoard("MC")
+		client:addNote("in MC")
+		client:createBoard("BWL")
 		assert.are.same({}, cardTexts(client))
 		local rows = boardRows(client)
 		assert.are.equal(2, #rows)
@@ -158,9 +158,9 @@ describe("the board window", function()
 
 	it("selects the first board when none is selected", function()
 		local client = Client.new():login()
-		client:slash("/cork create MC")
-		client:slash("/cork deleteboard MC")
-		client:slash("/cork create AQ")
+		client:createBoard("MC")
+		store(client):deleteBoard(store(client):current().id)
+		client:createBoard("AQ")
 		store(client).db.char.current = nil
 		client:slash("/cork")
 		assert.are.equal("AQ", store(client):current().meta.name)
@@ -168,10 +168,10 @@ describe("the board window", function()
 
 	it("lays notes out two to a row, sized to the taller card", function()
 		local client = openWindow()
-		client:slash("/cork create MC")
-		client:slash("/cork add short")
-		client:slash("/cork add " .. ("long "):rep(80))
-		client:slash("/cork add third")
+		client:createBoard("MC")
+		client:addNote("short")
+		client:addNote(("long "):rep(80))
+		client:addNote("third")
 		assert.are.equal(3, #cards(client))
 		local rows = {}
 		for _, frame in ipairs(client.frames) do
@@ -190,9 +190,9 @@ describe("the board window", function()
 
 	it("filters notes with the search box", function()
 		local client = openWindow()
-		client:slash("/cork create MC")
-		client:slash("/cork add Need 4x " .. LINK)
-		client:slash("/cork add Repair before you zone in")
+		client:createBoard("MC")
+		client:addNote("Need 4x " .. LINK)
+		client:addNote("Repair before you zone in")
 		local search
 		for _, frame in ipairs(client.frames) do
 			if frame.template == "SearchBoxTemplate" then
@@ -209,8 +209,8 @@ describe("the board window", function()
 
 	it("shows link tooltips and passes clicks to SetItemRef", function()
 		local client = openWindow()
-		client:slash("/cork create MC")
-		client:slash("/cork add Need 4x " .. LINK)
+		client:createBoard("MC")
+		client:addNote("Need 4x " .. LINK)
 		local card = cards(client)[1]
 		local link = "item:17010::::::::60:::::::::"
 		card:Run("OnHyperlinkEnter", link, "[Fiery Core]")
@@ -225,8 +225,8 @@ describe("the board window", function()
 
 	it("shows Edit and Delete on hover", function()
 		local client = openWindow()
-		client:slash("/cork create MC")
-		client:slash("/cork add x")
+		client:createBoard("MC")
+		client:addNote("x")
 		local card = cards(client)[1]
 		assert.is_false(card.edit:IsShown())
 		card:Run("OnEnter")
@@ -240,8 +240,8 @@ describe("the board window", function()
 
 	it("deletes a note after confirming", function()
 		local client = openWindow()
-		client:slash("/cork create MC")
-		client:slash("/cork add doomed")
+		client:createBoard("MC")
+		client:addNote("doomed")
 		local card = cards(client)[1]
 		card:Run("OnEnter")
 		card.delete:Click()
@@ -260,8 +260,8 @@ describe("the board window", function()
 			end
 		end
 		assert.is_table(ticker)
-		client:slash("/cork create MC")
-		client:slash("/cork add x")
+		client:createBoard("MC")
+		client:addNote("x")
 		assert.are.equal("now", cards(client)[1].age.text)
 		client:advance(660) -- the note's rev is a couple of seconds ahead: board creation used two
 		assert.are.equal("10m", cards(client)[1].age.text)
@@ -274,7 +274,7 @@ describe("the note editor", function()
 	local client
 	before_each(function()
 		client = openWindow()
-		client:slash("/cork create MC")
+		client:createBoard("MC")
 	end)
 
 	local function editor()
@@ -346,7 +346,7 @@ describe("the note editor", function()
 	end)
 
 	it("edits a note from its card, keeping an unchanged save free", function()
-		client:slash("/cork add first")
+		client:addNote("first")
 		local card = cards(client)[1]
 		local before = store(client):current().notes[card.noteId]
 		card:Run("OnEnter")
@@ -368,7 +368,7 @@ describe("the note editor", function()
 	end)
 
 	it("deletes the note it's editing", function()
-		client:slash("/cork add doomed")
+		client:addNote("doomed")
 		local card = cards(client)[1]
 		card:Run("OnEnter")
 		card.edit:Click()
@@ -385,11 +385,11 @@ describe("the note editor", function()
 	end)
 
 	it("says so when the note was deleted while it was open", function()
-		client:slash("/cork add doomed")
+		client:addNote("doomed")
 		local card = cards(client)[1]
 		card:Run("OnEnter")
 		card.edit:Click()
-		client:slash("/cork delete 1")
+		client:deleteNote(1)
 		editorText(client):SetText("too late")
 		buttonNamed(client, "Save"):Click()
 		assert.is_true(editor():IsShown())

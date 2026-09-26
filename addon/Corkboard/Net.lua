@@ -204,7 +204,7 @@ function Net:Ready(dest)
 end
 
 -- Sends one encoded message as chunks through ChatThrottleLib, and calls
--- done(outcome, code) once: "lockdown" if any chunk was refused as
+-- done(outcome) once: "lockdown" if any chunk was refused as
 -- restricted, "error" for any other failure, otherwise "ok".
 function Net:Send(dest, text, prio, done)
 	local chatType, target = route(dest.board)
@@ -213,23 +213,21 @@ function Net:Send(dest, text, prio, done)
 	end
 	local chunks = Wire.split(text)
 	if not chunks then
-		return done("error", "too long")
+		return done("error") -- too long
 	end
-	local left, worst, code = #chunks, "ok", nil
+	local left, worst = #chunks, "ok"
 	local function result(_, didSend, sendResult)
 		local outcome = addon.gate:classify(sendResult)
 		if outcome == "throttle" then
 			return -- ChatThrottleLib re-queues these itself
 		end
-		if outcome ~= "ok" or not didSend then
-			if worst ~= "lockdown" then
-				worst, code = outcome == "lockdown" and "lockdown" or "error", sendResult
-			end
+		if (outcome ~= "ok" or not didSend) and worst ~= "lockdown" then
+			worst = outcome == "lockdown" and "lockdown" or "error"
 		end
 		left = left - 1
 		if left == 0 then
 			Net.stats.sent = Net.stats.sent + #chunks
-			done(worst, code)
+			done(worst)
 		end
 	end
 	local CTL = ChatThrottleLib
@@ -351,13 +349,4 @@ end
 function Net:Start()
 	started = true
 	self:Refresh()
-end
-
--- The channel names in use, for tests and the debug panel.
-function Net.Channels()
-	local out = {}
-	for id, name in pairs(byBoard) do
-		out[id] = name
-	end
-	return out
 end

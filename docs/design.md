@@ -321,7 +321,6 @@ services:
     restart: unless-stopped
     environment:
       CORK_DB: /data/corkboard.db
-      CORK_MAX_BODY: "65536"
       CORK_TRUSTED_PROXY: caddy
     volumes: [corkboard-data:/data]
     healthcheck:
@@ -366,7 +365,7 @@ corkboard.<domain> {
 - **Share:** "Copy invite" produces `CORK1:<base64(boardId|secret|ownerName)>`. "Join" takes a pasted string.
 - **Slash commands:** `/cork`, `/cork join <invite>`, `/cork invite`, `/cork members`, `/cork remove <Name-Realm>`, `/cork rotate`, `/cork cloud on|off`, `/cork guild on|off`, `/cork sync` (HELLO on every board now) and `/cork debug`.
 - **Opening the window:** `/cork` with nothing after it, the addon compartment by the minimap (`## AddonCompartmentFunc`), or the LibDataBroker launcher in a broker display. The minimap button waits for LibDBIcon.
-- **Phase 1 store commands**, kept for testing and power users: `/cork boards`, `create <name>`, `use <board>`, `rename <name>`, `deleteboard <board>`, `list`, `add <text>`, `edit <note> <text>`, `color <note> <1-5>` and `delete <note>`. A board is named by its name or id (or an unambiguous id prefix). A note is named by its `#counter` when that's unique on the board, otherwise by its full id. Output goes to the default chat frame with a gold `Corkboard:` prefix.
+- Boards and notes are created, renamed, edited and deleted in the window only. (The Phase 1 store commands, `/cork create`, `add`, `list` and the rest, were removed once the window covered them; the specs drive the store directly instead.) Command output goes to the default chat frame with a gold `Corkboard:` prefix.
 - Works with Forever's modern and Classic visual presets (no reliance on retail-only art atlases; verify in Phase 1).
 
 ---
@@ -450,7 +449,7 @@ corkboard.<domain> {
 
 ## 13. Dependencies
 
-- **Addon:** Ace3 (AceAddon, AceDB, AceEvent, AceComm, AceTimer, AceConsole, with ChatThrottleLib), LibSerialize, LibDeflate, LibDataBroker, LibDBIcon. All must be current builds that load on modern-API clients. AceComm is only carried for its ChatThrottleLib; Corkboard frames its own messages (§5.2).
+- **Addon:** from Ace3, LibStub, CallbackHandler, AceDB and ChatThrottleLib; then LibSerialize, LibDeflate, LibDataBroker and LibDBIcon. All must be current builds that load on modern-API clients. Corkboard frames its own messages (§5.2), so AceComm isn't carried. A frame on `ADDON_LOADED`/`PLAYER_LOGIN`, `SlashCmdList` and `C_Timer` replace AceAddon, AceConsole, AceEvent and AceTimer, which were listed here but had one trivial use each or none.
 - **Companion/API:** Python 3.12, FastAPI, SQLite, a Lua-table data parser, Hypothesis, PyInstaller.
 - **Infra:** Arcane, Caddy 2, GHCR, GitHub Actions.
 

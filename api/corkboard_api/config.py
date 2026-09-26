@@ -1,4 +1,5 @@
-"""Settings from the environment (infra/compose.yaml sets them)."""
+"""Settings. The environment sets only the database path and the trusted proxy
+(infra/compose.yaml); tests pass the limits directly."""
 
 from __future__ import annotations
 
@@ -19,12 +20,4 @@ class Settings:
     @classmethod
     def from_env(cls) -> "Settings":
         env = os.environ
-        return cls(
-            db=env.get("CORK_DB", cls.db),
-            max_body=int(env.get("CORK_MAX_BODY", cls.max_body)),
-            max_notes=int(env.get("CORK_MAX_NOTES", cls.max_notes)),
-            board_rate=int(env.get("CORK_BOARD_RATE", cls.board_rate)),
-            register_rate=int(env.get("CORK_REGISTER_RATE", cls.register_rate)),
-            page=int(env.get("CORK_PAGE", cls.page)),
-            trusted_proxy=env.get("CORK_TRUSTED_PROXY") or None,
-        )
+        return cls(db=env.get("CORK_DB", cls.db), trusted_proxy=env.get("CORK_TRUSTED_PROXY") or None)

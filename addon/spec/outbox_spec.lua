@@ -19,7 +19,7 @@ local function setup(opts)
 			t.sent[#t.sent + 1] = { dest = dest, text = text, prio = prio }
 			local outcome = table.remove(t.results, 1) or "ok"
 			if outcome ~= "later" then
-				done(outcome, outcome == "lockdown" and 11 or 0)
+				done(outcome)
 			else
 				t.pending = done
 			end

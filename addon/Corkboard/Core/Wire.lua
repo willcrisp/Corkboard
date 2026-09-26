@@ -104,14 +104,13 @@ Reassembler.TIMEOUT = 60 -- seconds a partial message is kept
 Reassembler.MAX_PENDING = 64
 
 function Reassembler.new()
-	return setmetatable({ pending = {}, count = 0, dropped = 0 }, Reassembler)
+	return setmetatable({ pending = {}, count = 0 }, Reassembler)
 end
 
 function Reassembler:drop(key)
 	if self.pending[key] then
 		self.pending[key] = nil
 		self.count = self.count - 1
-		self.dropped = self.dropped + 1
 	end
 end
 

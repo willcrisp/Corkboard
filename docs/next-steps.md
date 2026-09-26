@@ -2,7 +2,7 @@
 
 The handoff between sessions. Read this after `CLAUDE.md`. Before you finish, update it: move what you finished into "Where things stand" and rewrite "Next steps".
 
-Last updated: 2026-09-26 (second session that day).
+Last updated: 2026-09-26 (third session that day: the over-engineering audit).
 
 ## Where things stand
 
@@ -25,7 +25,7 @@ On 2026-09-26 Will asked for the remaining work to be built on best assumptions,
 | Phase 6: packaging | `tools/package_addon.py`, `.pkgmeta`, `.github/workflows/release.yml`, `companion/corkboard-companion.spec`, `companion/corkboard_companion/gui.py` | Zip builder tested; the GUI, PyInstaller build and store uploads are untested. |
 | CI | `.github/workflows/ci.yml`, `api-image.yml` | Green on the branch: luacheck, busted, coverage gate (≥ 95%), spike smoke tests, pytest for corkcore, API, companion and packaging, and a check that the fuzz corpus is current. |
 
-Tests: `busted` runs 570 (Core coverage 98.8%, merge core 100%; the coverage run skips `#slow` specs); pytest runs 140 (corkcore), 18 (API), 32 (companion) and 1 (packaging).
+Tests: `busted` runs 556 (Core coverage 98.7%, merge core 100%; the coverage run skips `#slow` specs); pytest runs 140 (corkcore), 18 (API), 32 (companion) and 1 (packaging).
 
 ### Spec changes this session
 
@@ -38,6 +38,14 @@ Each is written into `docs/design.md` with its reason:
 - **§5.5, §5.6:** the gate's candidate checks, the outbox budget (8 tokens, 0.9/s), the responder estimates the bulk transfer, and "cloud-enabled" means the companion synced the board in the last 7 days.
 - **§7.1, §7.2:** the companion pushes whatever the server lacks (not `rev > lastPushedClock`), registers and rotates as needed, and `CorkboardCloudData`'s format.
 - **§14:** new questions 6 (re-sharing after a rotation) and 7 (tombstones against the 1,000-row cap).
+
+### Audit cuts (third session)
+
+A pass for over-engineering (the `ponytail-audit` checklist), applied in full:
+
+- **§13:** AceAddon, AceConsole, AceEvent, AceTimer and AceComm are gone. `Corkboard.lua` loads on its own frame (`ADDON_LOADED`, `PLAYER_LOGIN`) and registers `/cork` through `SlashCmdList`; ChatThrottleLib now sits in `Libs/ChatThrottleLib/`. The addon table is the global `Corkboard`, which is how CorkSpike2 finds the sanitiser now that `AceAddon:GetAddon` is gone.
+- **§9:** the Phase 1 store commands (`/cork create`, `add`, `list`, `edit`, …) and `Store.findBoard`, `noteRef` and `findNote` are gone. Specs use `Client:createBoard`, `addNote`, `editNote`, `deleteNote` and `noteTexts` in `helpers/client.lua`.
+- Smaller cuts: one `Main.Button` for the UI, one `newBoard` in the store, one `Sync:scheduleOnce`, one `plural` and age formatter in `Commands`, `Invite.encode` in place of `Store.invite`, and unread state removed (`Net.Channels`, `Sync.nonces`, `Outbox.lastResult`, `Reassembler.dropped`, the send result code). The API reads only `CORK_DB` and `CORK_TRUSTED_PROXY` from the environment.
 
 ## Assumptions to check
 
@@ -68,7 +76,7 @@ Grouped by what settles them. Each names where it lives in code, so a wrong gues
 |---|---|---|
 | G1 | The Phase 1 UI calls from last session (ScrollBox, `PortraitFrameTemplate`, the StaticPopup edit box, text measurement). | `UI/Main.lua`, `UI/Popups.lua` |
 | G2 | The new templates and helpers exist: `PanelTabButtonTemplate` (else `CharacterFrameTabButtonTemplate`), `PanelTemplates_*`, `UICheckButtonTemplate`, `InputBoxTemplate`, `C_ClassColor` or `RAID_CLASS_COLORS`, `C_Timer.NewTimer`, `date()`, `ReloadUI()`. | `UI/Main.lua`, `UI/Members.lua`, `UI/Debug.lua` |
-| G3 | ChatThrottleLib (inside AceComm r1403) works on 16001, and its callback passes `(arg, didSend, result)`. | `Net:Send` |
+| G3 | ChatThrottleLib (from Ace3 r1403) works on 16001, and its callback passes `(arg, didSend, result)`. | `Net:Send` |
 | G4 | The class token from `UnitClass("player")` isn't a secret value. | `Corkboard.lua` |
 | G5 | Redrawing the window at most every 0.2 s during a catch-up is cheap enough. | `Corkboard:ChangedSoon` |
 | G6 | The Channels list in the Social pane will still show the board's channel; only chat frames are covered by "never shows". Decide whether that's acceptable. | §12 Phase 2 |
@@ -122,7 +130,7 @@ Do these in order unless Will says otherwise.
    5. B logs out. A makes 20 notes, edits 5 and deletes 3. B logs in: within 60 s both debug panels show the same digest, and B's log shows IDX for only some buckets.
    6. A removes B in the Members tab: B stops getting A's edits. A sends the new invite, B joins with it, and syncing resumes.
    7. Send Lua errors and screenshots of the window, the Members tab, the debug panel and the status line.
-4. **Apply the results.** Update the code named in the assumption tables, then `docs/design.md`, and tick §12 items that have their evidence. Re-run `lua5.1 spikes/mock/smoke.lua …` if a spike needed fixing.
+4. **Apply the results.** Update the code named in the assumption tables, then `docs/design.md`, and tick §12 items that have their evidence. Re-run `lua5.1 spikes/mock/smoke.lua …` if a spike needed fixing. Then make the cuts the audit left for this point: keep only the restriction check spike 01 finds (`Gate.CHECKS`), and only the chat-frame and link-insert functions spike 03 and 04 find (`hide` and `addFilter` in `Net.lua`, `Links.HookInsert`); drop `Corkboard.Sanitise` once spike 04 is recorded; and once every Phase 0 report is in, delete `spikes/` and the CI smoke steps. If the 1.60 client has `C_EncodingUtil`, a spike could decide whether it replaces LibSerialize and LibDeflate.
 5. **Deploy the API** following `infra/README.md`, then the Phase 5 checks: health over TLS from outside the tailnet, the dashboard unreachable, and a restore drill. Then install the companion (`pip install ./shared/python ./companion`, `corkboard-companion setup --api https://corkboard.<domain>`) and run the "B edits and logs out, A's companion syncs, A reloads" check for real.
 6. **LibDBIcon and the minimap button** once Will supplies a current LibDBIcon build (I6): add it to the TOC after LibDataBroker and to `addon_spec`, and register `Corkboard.launcher` with its position in `CorkboardDB.global`.
 7. **Answer the open questions** in design.md §14 (1–7), and D1–D12 above.

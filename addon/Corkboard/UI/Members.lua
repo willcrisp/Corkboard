@@ -3,7 +3,8 @@
 -- the roster. It sits in the main window's note area while its tab is chosen.
 
 local _, ns = ...
-local View, Store = ns.View, ns.Store
+local button = ns.Main.Button
+local View, Store, Invite = ns.View, ns.Store, ns.Invite
 
 local Members = {}
 ns.Members = Members
@@ -23,13 +24,6 @@ end
 
 local function store()
 	return addon().store
-end
-
-local function button(parent, text, width)
-	local b = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
-	b:SetSize(width, 22)
-	b:SetText(text)
-	return b
 end
 
 local function classColor(class)
@@ -188,7 +182,7 @@ function Members:Refresh(board)
 	end
 	local s = store()
 	local me = s.env.me
-	ui.text = Store.invite(board)
+	ui.text = Invite.encode(board)
 	ui.invite:SetText(ui.text)
 	ui.invite:SetCursorPosition(0)
 	local owner = s:isOwner(board)

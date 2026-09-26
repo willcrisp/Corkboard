@@ -68,7 +68,6 @@ function Sync.new(store, outbox, env)
 		helloTimers = {}, -- boardId -> timer
 		lastHello = {}, -- boardId -> time a HELLO for it was last sent or seen
 		skipped = {}, -- boardId -> the last periodic HELLO was skipped
-		nonces = {}, -- boardId -> the nonce of our last HELLO
 		cache = {}, -- boardId -> digest summary
 		syncing = {}, -- boardId -> { from, want = set, left, at }
 		behind = {}, -- boardId -> { count, at }
@@ -352,7 +351,6 @@ function Sync:buildHello(item)
 	end
 	local s = self:summary(board)
 	local nonce = floor(self.env.random() * 2147483647)
-	self.nonces[board.id] = nonce
 	self.lastHello[board.id] = self:time()
 	local me = self:me()
 	self:note("> HELLO  %d notes", s.count)
@@ -648,28 +646,27 @@ function Sync:standDown(boardId, requester)
 	self.outbox:cancel("IDX:" .. boardId .. ":" .. requester)
 end
 
-function Sync:scheduleMembers(boardId)
-	if self.membersTimers[boardId] or self.outbox:queued("MEMBERS:" .. boardId) then
+-- Sends our member list or board name after a short random delay, unless
+-- another member sends theirs first (the MEMBERS and META handlers cancel it).
+function Sync:scheduleOnce(timers, key, push, boardId)
+	if timers[boardId] or self.outbox:queued(key .. boardId) then
 		return
 	end
 	local delay = Sync.MEMBERS_DELAY + self.env.random() * Sync.MEMBERS_SPREAD
-	self.membersTimers[boardId] = self.env.after(delay, function()
-		self.membersTimers[boardId] = nil
-		self:pushMembers(boardId)
+	timers[boardId] = self.env.after(delay, function()
+		timers[boardId] = nil
+		push(self, boardId)
 	end)
+end
+
+function Sync:scheduleMembers(boardId)
+	self:scheduleOnce(self.membersTimers, "MEMBERS:", Sync.pushMembers, boardId)
 end
 
 -- A HELLO showed an older board name, or none: send ours unless another
 -- member does first.
 function Sync:scheduleMeta(boardId)
-	if self.metaTimers[boardId] or self.outbox:queued("META:" .. boardId) then
-		return
-	end
-	local delay = Sync.MEMBERS_DELAY + self.env.random() * Sync.MEMBERS_SPREAD
-	self.metaTimers[boardId] = self.env.after(delay, function()
-		self.metaTimers[boardId] = nil
-		self:pushMeta(boardId)
-	end)
+	self:scheduleOnce(self.metaTimers, "META:", Sync.pushMeta, boardId)
 end
 
 -- Records that this board now matches `name`'s copy, for the status line.
@@ -981,7 +978,7 @@ function Sync:forget(boardId)
 	end
 	self.outbox:cancelBoard(boardId)
 	self.peers[boardId], self.cache[boardId], self.syncing[boardId], self.behind[boardId] = nil, nil, nil, nil
-	self.lastHello[boardId], self.nonces[boardId], self.skipped[boardId] = nil, nil, nil
+	self.lastHello[boardId], self.skipped[boardId] = nil, nil
 end
 
 -- The gate opened again (§5.5): the outbox flushes, and every board says HELLO.

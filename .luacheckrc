@@ -10,9 +10,9 @@ files["addon/spec/**"] = { std = "+busted" }
 -- (purity_spec enforces it).
 files["addon/Corkboard/Corkboard.lua"] = {
 	self = false, -- methods like Corkboard:Changed() needn't use self
-	globals = { "CorkboardCompartment_OnClick" },
+	globals = { "Corkboard", "CorkboardCompartment_OnClick", "SLASH_CORK1", "SlashCmdList" },
 	read_globals = {
-		"C_Timer", "DEFAULT_CHAT_FRAME", "GetNormalizedRealmName", "GetServerTime", "GetTime", "LibStub",
+		"C_Timer", "CreateFrame", "DEFAULT_CHAT_FRAME", "GetNormalizedRealmName", "GetServerTime", "GetTime", "LibStub",
 		"NORMAL_FONT_COLOR_CODE", "UnitClass", "UnitFullName", "UnitGUID", "issecretvalue",
 	},
 }
@@ -43,7 +43,7 @@ files["spikes/**"] = {
 	globals = { "CorkSpikeDB", "CorkSpike2DB", "SLASH_CORKSPIKE1", "SLASH_CORKSPIKETWO1", "SlashCmdList" },
 	read_globals = {
 		"BNET_CLIENT_WOW", "BNGetNumFriends", "BNSendGameData", "C_AddOns", "C_BattleNet", "C_ChatInfo", "C_Container",
-		"C_CurrencyInfo", "C_Item", "C_QuestLog", "C_Spell", "C_Timer", "ChatEdit_GetActiveWindow",
+		"C_CurrencyInfo", "C_Item", "C_QuestLog", "C_Spell", "C_Timer", "ChatEdit_GetActiveWindow", "Corkboard",
 		"ChatEdit_InsertLink", "ChatFontNormal", "ChatFrameUtil", "ChatFrame_RemoveChannel", "CreateFrame",
 		"DEFAULT_CHAT_FRAME", "Enum", "GameTooltip", "GetAchievementLink", "GetAddOnInfo", "GetBuildInfo", "GetCVar",
 		"GetChannelList", "GetChannelName", "GetChatWindowChannels", "GetCurrentRegionName", "GetItemInfo",

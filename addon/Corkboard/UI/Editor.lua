@@ -4,6 +4,7 @@
 -- something a peer's sanitiser would drop (§6).
 
 local _, ns = ...
+local button = ns.Main.Button
 local View, Store = ns.View, ns.Store
 
 local Editor = {}
@@ -20,13 +21,6 @@ local state = {} -- boardId, noteId (nil for a new note), color
 
 local function store()
 	return ns.Corkboard.store
-end
-
-local function button(parent, text, width)
-	local b = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
-	b:SetSize(width, 22)
-	b:SetText(text)
-	return b
 end
 
 -- The note being edited, or nil for a new one (or one deleted meanwhile).

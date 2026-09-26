@@ -72,8 +72,9 @@ describe("merge core purity", function()
 			prefix = ns.Store.notePrefix("Player-1-00000001"),
 		}
 		local store = ns.Store.new({ global = { boards = {} }, char = {} }, env)
-		assert(ns.Commands.run(store, "create MC")[1]:find("Created board MC", 1, true))
-		assert(ns.Commands.run(store, "add hello")[1]:find("Added #1", 1, true))
-		assert(ns.Commands.run(store, "list")[2]:find("#1 hello", 1, true))
+		local board = assert(store:createBoard("MC"))
+		assert(store:addNote(board.id, "hello"))
+		assert(ns.Commands.run(store, "invite")[1]:find("Invite for MC", 1, true))
+		assert(ns.Commands.run(store, "members")[1]:find("MC: 1 member", 1, true))
 	end)
 end)
