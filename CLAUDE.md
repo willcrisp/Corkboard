@@ -15,6 +15,7 @@ The full spec is in `docs/design.md`. Read it before changing behaviour. Section
 | `addon/Corkboard_Cloud/` | Tiny data-only addon. The companion writes its `Data.lua`. Never hand-edit it. |
 | `companion/` | Desktop companion (Python 3.12, PyInstaller). Reads SavedVariables and talks to the API. |
 | `api/` | Sync API (FastAPI + SQLite). |
+| `spikes/` | Throwaway Phase 0 spike addons (not shipped). They may break the hard rules below on purpose, for example by calling `SendAddonMessage` directly. |
 | `infra/` | Docker Compose + Caddy for Will's Arcane host, public DNS `corkboard.<domain>`. |
 | `shared/test-vectors/` | JSON fixtures run by both the Lua and Python test suites. |
 | `docs/design.md` | Spec v0.2: architecture, protocol, phases and acceptance criteria. |

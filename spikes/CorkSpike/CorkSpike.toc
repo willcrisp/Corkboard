@@ -1,0 +1,7 @@
+## Interface: 16001
+## Title: CorkSpike
+## Notes: Throwaway Corkboard Phase 0 spike: measures the addon-message throttle and logs SendAddonMessage result codes.
+## Version: 0.1
+## SavedVariables: CorkSpikeDB
+
+CorkSpike.lua
