@@ -7,6 +7,7 @@ local ADDON, ns = ...
 
 local Corkboard = LibStub("AceAddon-3.0"):NewAddon(ADDON, "AceConsole-3.0")
 ns.Corkboard = Corkboard
+Corkboard.Sanitise = ns.Sanitise -- read by spikes/CorkSpike2 (spike 04)
 
 local DEFAULTS = { global = { boards = {} } }
 local PREFIX = (NORMAL_FONT_COLOR_CODE or "|cffffd100") .. "Corkboard:|r " -- docs/ui-style.md

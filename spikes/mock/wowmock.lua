@@ -101,7 +101,8 @@ _G.C_ChatInfo = {
 		if chatType == "SAY" or chatType == "YELL" then error("SendAddonMessage: SAY is not allowed") end
 		if mock.locked then return R.AddOnMessageLockdown end
 		if not take(prefix) then return R.AddonMessageThrottle end
-		local back = (chatType == "WHISPER" and (target == ME or target == NAME)) or chatType == "CHANNEL"
+		local back = (chatType == "WHISPER" and (target == ME or target == NAME or target == NAME .. "-MockRealm"))
+			or chatType == "CHANNEL"
 			or chatType == "GUILD"
 		if back and registered[prefix] then
 			deliveries[#deliveries + 1] = { at = T + 0.05 + (#text / 10000), args = { prefix, text, chatType, ME } }
@@ -121,11 +122,56 @@ _G.InCombatLockdown = function() return mock.locked end
 _G.UnitIsDeadOrGhost = function() return false end
 _G.IsEncounterInProgress = function() return mock.locked end
 _G.issecretvalue = function() return false end
-_G.JoinTemporaryChannel = function(name) mock.channel = name end
-_G.GetChannelName = function(name) if mock.channel == name then return 5, name end return 0 end
-_G.LeaveChannelByName = function() mock.channel = nil end
+-- Up to mock.channelLimit custom channels, numbered from 5 (1-4 are the zone channels).
+mock.channels, mock.channelLimit = {}, 10
+_G.JoinTemporaryChannel = function(name)
+	if #mock.channels < mock.channelLimit then
+		mock.channels[#mock.channels + 1] = name
+		mock.channel = name
+	end
+end
+_G.GetChannelName = function(name)
+	for i, n in ipairs(mock.channels) do if n == name then return 4 + i, name end end
+	return 0
+end
+_G.LeaveChannelByName = function(name)
+	for i, n in ipairs(mock.channels) do if n == name then table.remove(mock.channels, i) break end end
+	if mock.channel == name then mock.channel = nil end
+end
+_G.GetChannelList = function()
+	local out = { 1, "General", false, 2, "Trade", false }
+	for i, n in ipairs(mock.channels) do out[#out + 1] = 4 + i; out[#out + 1] = n; out[#out + 1] = false end
+	return unpack(out)
+end
+_G.GetChatWindowChannels = function(i) if i == 1 then return "General", 1, "Trade", 2 end end
+_G.hooksecurefunc = function(target, name, hook)
+	if type(target) == "string" then target, name, hook = _G, target, name end
+	local original = target[name]
+	target[name] = function(...) local r = { original(...) } hook(...) return unpack(r) end
+end
+_G.ChatFrameUtil = { InsertLink = function() return false end }
+_G.C_Container = {
+	GetContainerNumSlots = function(bag) return bag == 0 and 2 or 0 end,
+	GetContainerItemLink = function(_, slot)
+		if slot == 1 then return "|cffffffff|Hitem:6948::::::::1:::::::::|h[Hearthstone]|h|r" end
+		return "|cnIQ4:|Hitem:19019::::::::60:::::::::|h[Thunderfury, Blessed Blade of the Windseeker]|h|r"
+	end,
+}
+_G.C_QuestLog = {
+	GetNumQuestLogEntries = function() return 1 end,
+	GetInfo = function() return { questID = 7, isHeader = false } end,
+}
+_G.GetQuestLink = function(id) return "|cffffff00|Hquest:" .. id .. ":5|h[Kobold Camp Cleanup]|h|r" end
+_G.C_Spell = { GetSpellLink = function(id) return "|cff71d5ff|Hspell:" .. id .. ":0|h[Spell " .. id .. "]|h|r" end }
+_G.GameTooltip = { SetOwner = function() end, NumLines = function() return 2 end, Hide = function() end,
+	SetHyperlink = function(_, link) assert(link:find("|H[iqs]"), "unknown link type") end }
+_G.UnitFactionGroup = function() return "Alliance" end
+_G.GetCurrentRegionName = function() return "EU" end
+_G.GetCVar = function() return "EU" end
+_G.GetLocale = function() return "enUS" end
 _G.ChatFrame_RemoveChannel = function() end
 _G.NUM_CHAT_WINDOWS = 10
+_G.ChatFrame1 = {}
 _G.BNGetNumFriends = function() return 0 end
 _G.C_BattleNet = {}
 _G.C_AddOns = { GetNumAddOns = function() return 2 end,
@@ -158,6 +204,6 @@ function mock.advance(seconds)
 	end
 end
 
-function mock.slash(text) _G.SlashCmdList.CORKSPIKE(text) end
+function mock.slash(text, id) _G.SlashCmdList[id or "CORKSPIKE"](text) end
 function mock.frames() return frames end
 return mock

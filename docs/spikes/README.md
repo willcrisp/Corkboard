@@ -2,7 +2,7 @@
 
 Each spike answers one question about the Forever client (docs/design.md §12, Phase 0). Write each answer as `NN-topic.md` with: the question, how it was tested (client build, realm, steps), the result, and any design change it forces. Re-check every answer after launch (2026-11-04).
 
-Spikes 01 and 02 use the throwaway `spikes/CorkSpike/` addon. Its README says how to run it and how to read its report.
+Spikes 01 and 02 use the throwaway `spikes/CorkSpike/` addon, and spikes 03 to 06 use `spikes/CorkSpike2/`. Spike 06 also has a desktop script, `spikes/install_probe.py`. Each README says how to run it and how to read its report.
 
 | # | Question | File |
 |---|---|---|

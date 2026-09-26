@@ -1,0 +1,8 @@
+## Interface: 16001
+## Title: CorkSpike2
+## Notes: Throwaway Corkboard Phase 0 spike: channels, link round trip, BNet payloads and SavedVariables.
+## Version: 0.1
+## SavedVariables: CorkSpike2DB
+## OptionalDeps: Corkboard
+
+CorkSpike2.lua

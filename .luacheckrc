@@ -30,13 +30,17 @@ files["addon/Corkboard/UI/**"] = {
 
 -- Phase 0 spike addons: WoW client globals.
 files["spikes/**"] = {
-	globals = { "CorkSpikeDB", "SLASH_CORKSPIKE1", "SlashCmdList" },
+	globals = { "CorkSpikeDB", "CorkSpike2DB", "SLASH_CORKSPIKE1", "SLASH_CORKSPIKETWO1", "SlashCmdList" },
 	read_globals = {
-		"BNET_CLIENT_WOW", "BNGetNumFriends", "BNSendGameData", "C_AddOns", "C_BattleNet", "C_ChatInfo", "C_Timer",
-		"ChatFontNormal", "ChatFrame_RemoveChannel", "CreateFrame", "DEFAULT_CHAT_FRAME", "Enum", "GetAddOnInfo",
-		"GetBuildInfo", "GetChannelName", "GetNormalizedRealmName", "GetNumAddOns", "GetRealmName", "GetTime",
-		"GetTimePreciseSec", "InCombatLockdown", "IsAddOnLoaded", "IsEncounterInProgress", "IsInGroup", "IsInGuild",
-		"IsInInstance", "JoinTemporaryChannel", "LeaveChannelByName", "NUM_CHAT_WINDOWS", "SendAddonMessage",
-		"UIParent", "UISpecialFrames", "UnitFullName", "UnitIsDeadOrGhost", "date", "issecretvalue",
+		"BNET_CLIENT_WOW", "BNGetNumFriends", "BNSendGameData", "C_AddOns", "C_BattleNet", "C_ChatInfo", "C_Container",
+		"C_CurrencyInfo", "C_Item", "C_QuestLog", "C_Spell", "C_Timer", "ChatEdit_GetActiveWindow",
+		"ChatEdit_InsertLink", "ChatFontNormal", "ChatFrameUtil", "ChatFrame_RemoveChannel", "CreateFrame",
+		"DEFAULT_CHAT_FRAME", "Enum", "GameTooltip", "GetAchievementLink", "GetAddOnInfo", "GetBuildInfo", "GetCVar",
+		"GetChannelList", "GetChannelName", "GetChatWindowChannels", "GetCurrentRegionName", "GetItemInfo",
+		"GetLocale", "GetNormalizedRealmName", "GetNumAddOns", "GetQuestLink", "GetRealmName", "GetSpellLink",
+		"GetTime", "GetTimePreciseSec", "InCombatLockdown", "IsAddOnLoaded", "IsEncounterInProgress", "IsInGroup",
+		"IsInGuild", "IsInInstance", "JoinTemporaryChannel", "LeaveChannelByName", "LibStub", "NUM_CHAT_WINDOWS",
+		"SendAddonMessage", "UIParent", "UISpecialFrames", "UnitFactionGroup", "UnitFullName", "UnitIsDeadOrGhost",
+		"date", "hooksecurefunc", "issecretvalue",
 	},
 }

@@ -63,4 +63,4 @@ Run these from the repo root. They need Lua 5.1 with busted, luacheck, dkjson an
 - **Test:** `busted` runs every spec, including the property tests.
 - **Coverage:** `busted --run=coverage && luacov` writes `luacov.report.out`. This run leaves out the property tests, which are too slow under the coverage hook.
 - **Lint:** `luacheck .`
-- **Spike smoke test:** `lua5.1 spikes/mock/smoke.lua spikes/CorkSpike/CorkSpike.lua` runs CorkSpike against a fake client.
+- **Spike smoke tests:** `lua5.1 spikes/mock/smoke.lua spikes/CorkSpike/CorkSpike.lua` runs CorkSpike against a fake client, and `lua5.1 spikes/mock/smoke2.lua spikes/CorkSpike2/CorkSpike2.lua` does the same for CorkSpike2.

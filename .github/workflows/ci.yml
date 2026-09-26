@@ -39,8 +39,10 @@ jobs:
             if (pct + 0 < 95) { print "coverage below 95%: " $0; bad = 1 }
           } END { exit bad }' luacov.report.out
 
-      - name: Spike smoke test
-        run: lua5.1 spikes/mock/smoke.lua spikes/CorkSpike/CorkSpike.lua
+      - name: Spike smoke tests
+        run: |
+          lua5.1 spikes/mock/smoke.lua spikes/CorkSpike/CorkSpike.lua
+          lua5.1 spikes/mock/smoke2.lua spikes/CorkSpike2/CorkSpike2.lua > /dev/null
 
       - uses: actions/upload-artifact@v4
         if: always()
