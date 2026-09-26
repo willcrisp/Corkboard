@@ -318,7 +318,8 @@ Arcane dashboard stays tailnet-only (harry.alpine-ionian.ts.net) — never expos
 ```yaml
 services:
   api:
-    image: ghcr.io/<you>/corkboard-api:${TAG:-latest}
+    build: { context: ., dockerfile: api/Dockerfile }   # built on the host from the uploaded workspace
+    image: corkboard-api:latest
     restart: unless-stopped
     environment:
       CORK_DB: /data/corkboard.db
@@ -352,7 +353,7 @@ corkboard.<domain> {
 
 - **DNS/TLS:** an A (or CNAME) record for `corkboard.<domain>` pointing to the host's public IP. Caddy gets a Let's Encrypt certificate automatically, which needs ports 80 and 443 reachable. If the host sits behind CGNAT or you'd rather not open ports, swap Caddy's public ports for a Cloudflare Tunnel sidecar pointing at `api:8000`. Nothing else changes.
 - **Exposure:** only this hostname and 443 (plus 80 for the ACME challenge). Arcane, SSH and other services stay tailnet-only.
-- **Images:** GitHub Actions builds and pushes to GHCR on tag, and Arcane pulls or redeploys the stack.
+- **Images:** Arcane builds the API image on the host from the project workspace, which `tools/arcane_deploy.py` uploads (like the `ballot` project), so no registry is involved. CI still builds and smoke-tests the image on pull requests.
 - **Backups:** 7 rolling daily SQLite snapshots in the volume. Optionally Litestream to S3 or MinIO later.
 - **Logging:** access logs never include the `Authorization` header. The app logs board id, route, status and latency only.
 

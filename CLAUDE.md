@@ -56,7 +56,7 @@ Current status and the ordered next steps are in `docs/next-steps.md`. Read it a
 
 ## Deployment
 
-The API ships as a container from GHCR and runs as an Arcane project on Will's host (`infra/`). Only `corkboard.<domain>` on port 443 (and 80 for ACME) is public. The Arcane dashboard stays tailnet-only.
+The API runs as the `corkboard` Arcane project on Will's host (`infra/`). Arcane builds its image from the uploaded workspace; `tools/arcane_deploy.py create --domain …` sets it up from a tailnet machine, with the key in `ARCANE_API_KEY` (never in files or commits). The data is on the `corkboard-data` volume: never recreate or delete it. Only `corkboard.<domain>` on port 443 (and 80 for ACME) is public. The Arcane dashboard stays tailnet-only.
 
 ## Commands
 
@@ -72,4 +72,5 @@ Run these from the repo root. They need Lua 5.1 with busted, luacheck, dkjson an
 - **Package the addon:** `python3 tools/package_addon.py --version X.Y.Z` writes `dist/Corkboard-X.Y.Z.zip` (Corkboard + Corkboard_Cloud with an empty `Data.lua`). Add `--install <client>/Interface/AddOns` to also unzip it into a client for in-game testing.
 - **Run the API locally:** `pip install -e shared/python -e api && CORK_DB=/tmp/cork.db python3 -m corkboard_api.app` (port 8000).
 - **Companion:** `pip install -e shared/python -e companion && corkboard-companion setup --api URL --wow PATH`, then `corkboard-companion watch`.
+- **Deploy the API to Arcane (first time):** `ARCANE_API_KEY=… python tools/arcane_deploy.py create --domain corkboard.<domain>`; `files` lists what it uploads and `health --domain …` rechecks it. See `infra/README.md`.
 - **Spike smoke tests:** `lua5.1 spikes/mock/smoke.lua spikes/CorkSpike/CorkSpike.lua` runs CorkSpike against a fake client, and `lua5.1 spikes/mock/smoke2.lua spikes/CorkSpike2/CorkSpike2.lua` does the same for CorkSpike2.

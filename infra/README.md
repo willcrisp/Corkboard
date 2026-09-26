@@ -4,10 +4,21 @@ The stack is `compose.yaml`: the API container from GHCR, Caddy for TLS on the p
 
 ## Once
 
-1. **DNS:** an A (or CNAME) record for `corkboard.<domain>` pointing at the host's public IP. If the host is behind CGNAT, use a Cloudflare Tunnel instead of Caddy's public ports (§8, §14.2).
-2. **Caddyfile:** replace `corkboard.example.com` with the real name. If the host already runs a reverse proxy on 80/443 (§14.1), drop the `caddy` service and route the name to `api:8000` there instead.
-3. **Image:** tag a release (`git tag api-v0.1.0 && git push --tags`). `.github/workflows/api-image.yml` builds `ghcr.io/<owner>/corkboard-api` and pushes `:<version>` and `:latest`. Make the package public, or give the host a GHCR pull token.
-4. **Arcane:** create a project from this folder with `OWNER=<GitHub owner>` and `TAG=<version>` in its environment, and deploy it.
+The `corkboard` project builds its image on the host from the uploaded source, like `ballot`: there's no GHCR package to publish or pull.
+
+1. **DNS:** an A (or CNAME) record for `corkboard.<domain>` pointing at the host's public IP, with ports 80 and 443 forwarded to it. If the host is behind CGNAT, use a Cloudflare Tunnel instead of Caddy's public ports (§8, §14.2).
+2. **Create and start it** from a machine on the tailnet (Will's Windows box), with the Arcane API key in the environment only:
+
+   ```powershell
+   $env:ARCANE_API_KEY = "<key>"
+   python tools/arcane_deploy.py files                          # what gets uploaded
+   python tools/arcane_deploy.py create --domain corkboard.<domain>
+   ```
+
+   `create` stops before changing anything if a `corkboard` project exists or another container already publishes 80 or 443. In that case, remove the `caddy` service from `compose.yaml` and route the name to `api:8000` in the existing proxy (§14.1). Otherwise it creates the project (compose, `.env` with `CORK_DOMAIN`, and the workspace: `Caddyfile`, `.dockerignore`, `api/`, `shared/python/`), builds `corkboard-api:latest`, brings the stack up, and waits for `https://corkboard.<domain>/v1/health`.
+3. **Point the companion at it:** `corkboard-companion setup --api https://corkboard.<domain>`, then `watch`.
+
+The data lives on the `corkboard-data` volume. Never bring the stack up with `recreateVolumes: true`, and never destroy the project or delete that volume. For a later code deploy, follow the `ballot` steps (back up the volume, check the workspace hasn't drifted, upload the changed files, build `api`, then `up` with `forceRecreate`).
 
 ## Checks (§12 Phase 5)
 

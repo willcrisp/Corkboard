@@ -2,7 +2,7 @@
 
 The handoff between sessions. Read this after `CLAUDE.md`. Before you finish, update it: move what you finished into "Where things stand" and rewrite "Next steps".
 
-Last updated: 2026-09-26 (fifth session that day: open questions closed out, merged to main).
+Last updated: 2026-09-26 (fifth session that day: open questions closed out; Arcane project and deploy script prepared, not yet run).
 
 ## Where things stand
 
@@ -79,7 +79,7 @@ Not open questions, just code paths the checklists below run in the client for t
 
 ### Still to do before release
 
-- **Deploy:** `api-image.yml` builds the API image on pull requests and `api-v*` tags. `infra/compose.yaml` needs `OWNER` and `TAG`, and the Caddyfile the real domain. The backup service installs sqlite with `apk` at start, so it needs network access.
+- **Deploy:** the `corkboard` Arcane project doesn't exist yet. `tools/arcane_deploy.py create --domain …` makes it from a tailnet machine; it needs the public hostname, DNS pointing at the host and ports 80/443 forwarded. The backup service installs sqlite with `apk` at start, so it needs network access.
 - **Companion:** the tkinter window and the PyInstaller build need a run on Windows and macOS; there's no code-signing certificate yet.
 - **Stores:** CurseForge and Wago need project IDs in the TOCs, tokens as secrets, and a Forever listing. Until then releases are GitHub-only.
 - **Libraries:** LibDBIcon-1.0 for the minimap button, and a licence check on LibDataBroker-1.1 before publishing.
@@ -104,7 +104,7 @@ Do these in order unless Will says otherwise.
    6. A removes B in the Members tab: B stops getting A's edits. A sends the new invite, B joins with it, and syncing resumes.
    7. Send Lua errors and screenshots of the window, the Members tab, the debug panel and the status line.
 3. **Apply the results.** Fix whatever the checks turn up and tick the §12 items that have their evidence. Since the spikes are dropped, `spikes/`, its CI smoke steps and `Corkboard.Sanitise` (kept only for CorkSpike2) can go in their own small change. If the 1.60 client has `C_EncodingUtil`, it could replace LibSerialize and LibDeflate.
-4. **Deploy the API** following `infra/README.md`, then the Phase 5 checks: health over TLS from outside the tailnet, the dashboard unreachable, and a restore drill. Then install the companion (`pip install ./shared/python ./companion`, `corkboard-companion setup --api https://corkboard.<domain>`) and run the "B edits and logs out, A's companion syncs, A reloads" check for real.
+4. **Deploy the API:** on Will's box, `$env:ARCANE_API_KEY=…; python tools/arcane_deploy.py create --domain corkboard.<domain>` (`infra/README.md`). Then the Phase 5 checks: health over TLS from outside the tailnet, the dashboard unreachable, and a restore drill. Then install the companion (`pip install ./shared/python ./companion`, `corkboard-companion setup --api https://corkboard.<domain>`) and run the "B edits and logs out, A's companion syncs, A reloads" check for real.
 5. **LibDBIcon and the minimap button** once Will supplies a current LibDBIcon build: add it to the TOC after LibDataBroker and to `addon_spec`, and register `Corkboard.launcher` with its position in `CorkboardDB.global`.
 6. **Phase 6 for real:** CurseForge and Wago IDs and tokens, a signing certificate, and a Windows/macOS test of the companion's window and PyInstaller build.
 

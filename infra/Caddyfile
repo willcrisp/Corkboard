@@ -1,6 +1,7 @@
-# Replace with your public hostname. Caddy fetches the TLS certificate automatically
-# (ports 80 and 443 must be reachable). See docs/design.md §8.
-corkboard.example.com {
+# The public hostname comes from CORK_DOMAIN in the Arcane project's .env.
+# Caddy fetches the TLS certificate automatically (ports 80 and 443 must be
+# reachable from the internet). See docs/design.md §8.
+{$CORK_DOMAIN} {
 	request_body {
 		max_size 64KB
 	}
