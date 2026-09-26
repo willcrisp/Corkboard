@@ -26,7 +26,7 @@ local function store()
 	return addon().store
 end
 
-local function classColor(class)
+function Members.ClassColor(class)
 	if not class then
 		return nil
 	end
@@ -63,6 +63,11 @@ local function initRow(row, data)
 		row.shade = row:CreateTexture(nil, "BACKGROUND")
 		row.shade:SetAllPoints()
 		row.shade:SetColorTexture(1, 1, 1, 0.03)
+		-- A click shows the member's quest log (§9.2).
+		row:SetHighlightTexture("Interface\\QuestFrame\\UI-QuestTitleHighlight", "ADD")
+		row:SetScript("OnClick", function(self)
+			ns.Quests:ShowMember(boardId, self.member)
+		end)
 		row.remove = CreateFrame("Button", nil, row)
 		row.remove:SetSize(16, 16)
 		row.remove:SetPoint("RIGHT", -4, 0)
@@ -87,7 +92,7 @@ local function initRow(row, data)
 		cell:SetText(values[i])
 		cell:SetTextColor(unpack(data.online and TEXT or DIM))
 	end
-	local color = data.online and classColor(data.class)
+	local color = data.online and Members.ClassColor(data.class)
 	if color then
 		row.cells[1]:SetTextColor(unpack(color))
 	end
@@ -163,7 +168,7 @@ function Members.Build(_, inset)
 	bar:SetPoint("TOPLEFT", ui.list, "TOPRIGHT", 4, 0)
 	bar:SetPoint("BOTTOMLEFT", ui.list, "BOTTOMRIGHT", 4, 0)
 	local view = CreateScrollBoxListLinearView()
-	view:SetElementInitializer("Frame", initRow)
+	view:SetElementInitializer("Button", initRow)
 	view:SetElementExtent(ROW)
 	ScrollUtil.InitScrollBoxListWithScrollBar(ui.list, bar, view)
 	if ScrollUtil.AddManagedScrollBarVisibilityBehavior then

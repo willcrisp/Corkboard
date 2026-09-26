@@ -7,6 +7,8 @@
 --   env.rand(n)  a random integer from 1 to n
 --   env.me       the player's "Name-Realm", or nil while it isn't known
 --   env.prefix   Store.notePrefix(UnitGUID("player")), or nil likewise
+--   env.questTitle(id)  a quest's title, or nil while the client doesn't know
+--                it (optional; /cork quests falls back to "Quest #id")
 
 local _, ns = ...
 ns = type(ns) == "table" and ns or {}
@@ -14,8 +16,9 @@ local Util = ns.Util or require("Core.Util")
 local Merge = ns.Merge or require("Core.Merge")
 local Invite = ns.Invite or require("Core.Invite")
 
-local format, lower, match, sub = string.format, string.lower, string.match, string.sub
-local sort = table.sort
+local format, gmatch, lower, match, sub = string.format, string.gmatch, string.lower, string.match, string.sub
+local floor = math.floor
+local concat, sort = table.concat, table.sort
 
 local Store = {}
 Store.__index = Store
@@ -117,6 +120,7 @@ local function newBoard(id, secret, owner, now)
 		cloud = true,
 		guild = false,
 		gear = true,
+		quests = true,
 	}
 end
 
@@ -151,6 +155,7 @@ function Store:createBoard(name)
 	boards[id] = board
 	self.db.char.current = id
 	self:notify(id, "board")
+	self:shareQuests(id)
 	return board
 end
 
@@ -348,6 +353,159 @@ function Store:equipped(itemId, link, quality, seed)
 	return posted
 end
 
+-- Quest logs (§9.2) ------------------------------------------------------------
+
+Store.QUESTS_MAX = 50 -- quests kept from one log; Forever's quest log holds 40
+local MAX_QUEST_ID = 999999999
+local MAX_QUEST_LEVEL = 999
+
+local function questNumber(value, low, high)
+	value = tonumber(value)
+	if value and value == floor(value) and value >= low and value <= high then
+		return value
+	end
+end
+
+-- A quest log as note text: "id:level" pairs joined by commas, by id, so the
+-- same log always gives the same text. Only ids and levels travel, which
+-- keeps a full log of 40 quests near 400 bytes; each client shows titles
+-- from its own quest data. Invalid and repeated ids are skipped.
+function Store.encodeQuests(quests)
+	local levels, ids = {}, {}
+	for _, quest in ipairs(quests) do
+		local id = questNumber(quest.id, 1, MAX_QUEST_ID)
+		if id and not levels[id] then
+			levels[id] = questNumber(quest.level, 0, MAX_QUEST_LEVEL) or 0
+			ids[#ids + 1] = id
+		end
+	end
+	sort(ids)
+	local parts = {}
+	for i = 1, math.min(#ids, Store.QUESTS_MAX) do
+		parts[i] = format("%d:%d", ids[i], levels[ids[i]])
+	end
+	return concat(parts, ",")
+end
+
+-- The quests in a log's text, as { id, level } in the order stored. Anything
+-- that isn't an "id:level" pair (a newer client's extra fields) is skipped.
+function Store.decodeQuests(text)
+	local quests = {}
+	for id, level in gmatch(text or "", "(%d+):(%d+)") do
+		id, level = questNumber(id, 1, MAX_QUEST_ID), questNumber(level, 0, MAX_QUEST_LEVEL)
+		if id and level then
+			quests[#quests + 1] = { id = id, level = level }
+			if #quests >= Store.QUESTS_MAX then
+				break
+			end
+		end
+	end
+	return quests
+end
+
+-- The id of a character's quest log on every board: its note-id prefix with
+-- counter 0. Store.nextNoteId starts ordinary notes at 1, so the log never
+-- takes the id of a real note, even on an install that hasn't synced the
+-- board yet. And every install of the character writes the same record, so
+-- last-writer-wins keeps exactly one log per character.
+function Store.questLogId(prefix)
+	return prefix .. "-0"
+end
+
+-- Each character's quest log on the board: author -> its quest-log note.
+-- Should two ever exist for one author, the newer (by rev, editor) counts.
+function Store.questLogs(board)
+	local logs = {}
+	for _, note in pairs(board.notes or {}) do
+		if not note.deleted and note.kind == "quests" then
+			local held = logs[note.author]
+			if not held or Merge.compareVersion(note, held) > 0 then
+				logs[note.author] = note
+			end
+		end
+	end
+	return logs
+end
+
+-- This character's own quests (id -> true), whether or not it shares them.
+function Store:myQuests()
+	local mine = {}
+	for _, quest in ipairs(Store.decodeQuests(self.db.char.quests)) do
+		mine[quest.id] = true
+	end
+	return mine
+end
+
+-- Brings this character's quest log on one board in line with the board's
+-- option (board.quests, local, on by default): the latest log while sharing
+-- is on and the board hasn't removed the player, a tombstone otherwise. An
+-- unchanged log writes nothing. Returns true when it changed the board.
+function Store:shareQuests(boardId)
+	local author = me(self)
+	local board = author and self:all()[boardId]
+	if not board then
+		return false
+	end
+	local id = Store.questLogId(self.env.prefix)
+	local note = board.notes and board.notes[id]
+	local text = self.db.char.quests
+	local mine = board.members and board.members[author]
+	local now = self.env.now()
+	if text == nil or board.quests == false or (mine and mine.removed) then
+		if note and not note.deleted then
+			return self:noted(board, Merge.deleteNote(board, id, author, now)) ~= nil
+		end
+		return false
+	end
+	if not note then
+		return self:noted(board, Merge.createNote(board, { id = id, author = author, text = text, kind = "quests" },
+			now)) ~= nil
+	elseif note.deleted then
+		-- Sharing again after turning it off. A newer live version beats the
+		-- tombstone under plain last-writer-wins (§4.3), here and on every peer.
+		local stored = Merge.applyNote(board, {
+			id = id,
+			author = author,
+			created = note.created,
+			rev = Merge.nextRev(board, now),
+			editor = author,
+			text = text,
+			color = note.color,
+			deleted = false,
+			kind = "quests",
+		})
+		if stored then
+			self:notify(board.id, "note", { id })
+		end
+		return stored
+	elseif note.text ~= text then
+		return self:noted(board, Merge.editNote(board, id, { text = text }, author, now)) ~= nil
+	end
+	return false
+end
+
+-- The player's quest log, read from the client: a list of { id, level }.
+-- It's kept for this character (so the Quests tab can mark the quests you
+-- share), then published to every board with sharing on. Returns how many
+-- boards changed and whether the log did, or nil and a reason while the
+-- player's name isn't known (the log is still kept).
+function Store:questLog(quests)
+	local text = Store.encodeQuests(quests)
+	local logChanged = self.db.char.quests ~= text
+	self.db.char.quests = text
+	local _, reason = me(self)
+	if reason then
+		return nil, reason
+	end
+	local changed = 0
+	for id in pairs(self:all()) do
+		if self:shareQuests(id) then
+			changed = changed + 1
+		end
+	end
+	return changed, logChanged
+end
+
 -- Sharing and members (§4.1, §9, §10) -------------------------------------------
 
 -- The board's hidden channel (§5.1): "Cork" and 8 hex digits of FNV-1a over
@@ -395,6 +553,7 @@ function Store:joinBoard(text)
 	end
 	self.db.char.current = board.id
 	self:notify(board.id, "board")
+	self:shareQuests(board.id)
 	return board, new
 end
 
@@ -486,8 +645,9 @@ function Store.members(board)
 	return list
 end
 
--- Cloud sync, the GUILD transport and gear posts, per board (§4.1).
-local OPTIONS = { cloud = true, guild = true, gear = true }
+-- Cloud sync, the GUILD transport, gear posts and quest-log sharing, per
+-- board (§4.1).
+local OPTIONS = { cloud = true, guild = true, gear = true, quests = true }
 
 function Store:setOption(boardId, option, value)
 	local board, reason = self:board(boardId)
@@ -499,6 +659,9 @@ function Store:setOption(boardId, option, value)
 	end
 	board[option] = value and true or false
 	self:notify(boardId, "board")
+	if option == "quests" then
+		self:shareQuests(boardId) -- publishes the log, or deletes it when turned off
+	end
 	return board
 end
 

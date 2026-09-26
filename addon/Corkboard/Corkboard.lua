@@ -71,6 +71,60 @@ local function equippedItem(slot)
 	return itemId, link, quality
 end
 
+-- The quest log (§9.2), as { id, level, title } for each quest, headers and
+-- hidden entries left out. Nil when the client has no quest log API or hands
+-- back a secret value, so nothing is published from it.
+local function readQuestLog()
+	local quests = {}
+	local function add(id, level, title)
+		if secret(id) or secret(level) or secret(title) then
+			return false
+		end
+		if type(id) == "number" and id > 0 then
+			quests[#quests + 1] = {
+				id = id,
+				level = type(level) == "number" and level or 0,
+				title = type(title) == "string" and title ~= "" and title or nil,
+			}
+		end
+		return true
+	end
+	if C_QuestLog and C_QuestLog.GetNumQuestLogEntries and C_QuestLog.GetInfo then
+		local count = C_QuestLog.GetNumQuestLogEntries()
+		if type(count) ~= "number" or secret(count) then
+			return nil
+		end
+		for i = 1, count do
+			local info = C_QuestLog.GetInfo(i)
+			if type(info) == "table" and not info.isHeader and not info.isHidden
+				and not add(info.questID, info.level, info.title) then
+				return nil
+			end
+		end
+	elseif GetNumQuestLogEntries and GetQuestLogTitle then
+		local count = GetNumQuestLogEntries()
+		if type(count) ~= "number" or secret(count) then
+			return nil
+		end
+		for i = 1, count do
+			local title, level, _, isHeader, _, _, _, id = GetQuestLogTitle(i)
+			if not isHeader and not add(id, level, title) then
+				return nil
+			end
+		end
+	else
+		return nil
+	end
+	return quests
+end
+
+-- Quest events land in bursts (accepting a quest fires several, and every
+-- kill with an objective fires QUEST_LOG_UPDATE), so the log is read once
+-- they settle. An unchanged log sends nothing.
+local QUEST_DELAY = 2
+local QUEST_EVENTS = { "QUEST_LOG_UPDATE", "QUEST_ACCEPTED", "QUEST_REMOVED", "QUEST_TURNED_IN",
+	"QUEST_DATA_LOAD_RESULT" }
+
 local function classToken()
 	local _, class = UnitClass("player")
 	if not secret(class) and type(class) == "string" then
@@ -81,8 +135,15 @@ end
 -- ADDON_LOADED, once SavedVariables are in.
 function Corkboard:OnInitialize()
 	self.db = LibStub("AceDB-3.0"):New("CorkboardDB", DEFAULTS, true)
-	self.env = { now = GetServerTime, rand = math.random }
+	self.env = {
+		now = GetServerTime,
+		rand = math.random,
+		questTitle = function(id)
+			return self:QuestTitle(id)
+		end,
+	}
 	self.store = ns.Store.new(self.db, self.env)
+	self.questTitles, self.questRequested = {}, {} -- quest id -> title, and titles asked for (§9.2)
 	self.gate = ns.Gate.new(function(name)
 		return _G[name]
 	end)
@@ -134,6 +195,7 @@ function Corkboard:OnEnable()
 	-- Notes the companion fetched from the cloud since the last session (§7.2).
 	ns.Cloud.load(self.store, _G.CorkboardCloudData)
 	self:WatchGear()
+	self:WatchQuests()
 	ns.Net:Init(self)
 	C_Timer.NewTicker(PUMP, function()
 		self.outbox:pump()
@@ -142,6 +204,7 @@ function Corkboard:OnEnable()
 	C_Timer.After(ns.Net.JOIN_DELAY, function()
 		self:Identify()
 		self:SeedGear() -- in case the name wasn't known at login
+		self:ScanQuestsSoon()
 		ns.Net:Start()
 		self.sync:start()
 	end)
@@ -279,6 +342,80 @@ function Corkboard:WatchGear()
 			self.store:equipped(itemId, link, quality)
 		end
 	end)
+end
+
+-- Quest logs (§9.2) ----------------------------------------------------------------
+
+-- Reads the quest log and shares it. Nothing is read before the client's
+-- first QUEST_LOG_UPDATE: until then the log can look empty, and sharing an
+-- empty log at every login would briefly wipe it for everyone.
+function Corkboard:ScanQuests()
+	if not self.questsReady then
+		return
+	end
+	local quests = readQuestLog()
+	if not quests then
+		return
+	end
+	for _, quest in ipairs(quests) do
+		if quest.title then
+			self.questTitles[quest.id] = quest.title
+		end
+	end
+	self:Identify()
+	local boards, changed = self.store:questLog(quests)
+	if changed or (boards or 0) > 0 then
+		self:ChangedSoon()
+	end
+end
+
+function Corkboard:ScanQuestsSoon()
+	if self.questScanPending then
+		return
+	end
+	self.questScanPending = true
+	C_Timer.After(QUEST_DELAY, function()
+		self.questScanPending = false
+		self:ScanQuests()
+	end)
+end
+
+function Corkboard:WatchQuests()
+	local events = CreateFrame("Frame")
+	for _, event in ipairs(QUEST_EVENTS) do
+		pcall(events.RegisterEvent, events, event) -- a client without the event raises an error
+	end
+	events:SetScript("OnEvent", function(_, event)
+		if event == "QUEST_DATA_LOAD_RESULT" then
+			self:ChangedSoon() -- a title the Quests tab asked for has arrived
+			return
+		end
+		if event == "QUEST_LOG_UPDATE" then
+			self.questsReady = true
+		end
+		self:ScanQuestsSoon()
+	end)
+end
+
+-- A quest's title: from our own quest log, or the client's quest data, which
+-- it may have to load first (QUEST_DATA_LOAD_RESULT says when it has).
+-- Members share only quest ids, so this is how their quests get names.
+function Corkboard:QuestTitle(id)
+	local title = self.questTitles[id]
+	if title then
+		return title
+	end
+	if C_QuestLog and C_QuestLog.GetTitleForQuestID then
+		title = C_QuestLog.GetTitleForQuestID(id)
+		if type(title) == "string" and title ~= "" and not secret(title) then
+			self.questTitles[id] = title
+			return title
+		end
+		if C_QuestLog.RequestLoadQuestByID and not self.questRequested[id] then
+			self.questRequested[id] = true
+			C_QuestLog.RequestLoadQuestByID(id)
+		end
+	end
 end
 
 function Corkboard:OnSlash(input)

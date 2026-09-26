@@ -301,6 +301,45 @@
       }
     },
     {
+      "name": "exact tie: quests beats gear (greater kind)",
+      "board": {
+        "clock": 1790000100,
+        "notes": [
+          { "id": "a1b2c3d4-0007", "author": "Will-Realm", "created": 1790000000, "rev": 1790000100, "editor": "Bob-Realm", "text": "7:5", "color": 1, "deleted": false, "kind": "gear" }
+        ]
+      },
+      "apply": [
+        { "id": "a1b2c3d4-0007", "author": "Will-Realm", "created": 1790000000, "rev": 1790000100, "editor": "Bob-Realm", "text": "7:5", "color": 1, "deleted": false, "kind": "quests" }
+      ],
+      "results": ["stored"],
+      "expect": {
+        "clock": 1790000100,
+        "notes": [
+          { "id": "a1b2c3d4-0007", "author": "Will-Realm", "created": 1790000000, "rev": 1790000100, "editor": "Bob-Realm", "text": "7:5", "color": 1, "deleted": false, "kind": "quests" }
+        ]
+      }
+    },
+    {
+      "name": "a newer quest log replaces the old one, whatever the order",
+      "board": {
+        "clock": 1790000100,
+        "notes": [
+          { "id": "a1b2c3d4-0", "author": "Will-Realm", "created": 1790000000, "rev": 1790000100, "editor": "Will-Realm", "text": "7:5,46:10", "color": 1, "deleted": false, "kind": "quests" }
+        ]
+      },
+      "apply": [
+        { "id": "a1b2c3d4-0", "author": "Will-Realm", "created": 1790000000, "rev": 1790000300, "editor": "Will-Realm", "text": "166:18", "color": 1, "deleted": false, "kind": "quests" },
+        { "id": "a1b2c3d4-0", "author": "Will-Realm", "created": 1790000000, "rev": 1790000200, "editor": "Will-Realm", "text": "7:5", "color": 1, "deleted": false, "kind": "quests" }
+      ],
+      "results": ["stored", "stale"],
+      "expect": {
+        "clock": 1790000300,
+        "notes": [
+          { "id": "a1b2c3d4-0", "author": "Will-Realm", "created": 1790000000, "rev": 1790000300, "editor": "Will-Realm", "text": "166:18", "color": 1, "deleted": false, "kind": "quests" }
+        ]
+      }
+    },
+    {
       "name": "an invalid kind is dropped",
       "board": {
         "clock": 0,

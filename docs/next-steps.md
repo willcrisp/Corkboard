@@ -2,7 +2,7 @@
 
 The handoff between sessions. Read this after `CLAUDE.md`. Before you finish, update it: move what you finished into "Where things stand" and rewrite "Next steps".
 
-Last updated: 2026-09-26 (seventh session that day: minimap button on main).
+Last updated: 2026-09-26 (eighth session that day: quest logs and the Quests tab).
 
 ## Where things stand
 
@@ -25,7 +25,7 @@ On 2026-09-26 Will asked for the remaining work to be built on best assumptions,
 | Phase 6: packaging | `tools/package_addon.py`, `.pkgmeta`, `.github/workflows/release.yml`, `companion/corkboard-companion.spec`, `companion/corkboard_companion/gui.py` | Zip builder tested; the GUI, PyInstaller build and store uploads are untested. |
 | CI | `.github/workflows/ci.yml`, `api-image.yml` | Green on the branch: luacheck, busted, coverage gate (≥ 95%), spike smoke tests, pytest for corkcore, API, companion and packaging, and a check that the fuzz corpus is current. |
 
-Tests: `busted` runs 585 (Core coverage 98.7%, merge core 100%; the coverage run skips `#slow` specs); pytest runs 140 (corkcore), 20 (API), 32 (companion) and 1 (packaging).
+Tests: `busted` runs 617 (Core coverage 98.3%; the coverage run skips `#slow` specs); pytest runs 140 (corkcore), 21 (API), 32 (companion) and 5 (packaging, `tools/tests`).
 
 ### First in-game run (fourth session)
 
@@ -49,6 +49,15 @@ Will installed the addon and CorkSpike in the 1.60.1 beta (build 70009) and ran 
 
 - **LibDBIcon-1.0 minor 55** is vendored in `Libs/LibDBIcon-1.0/`, copied unmodified from Details! Damage Meter's repo because the WowAce SVN is blocked here (source in `Libs/README.md`). The TOC loads it after LibDataBroker.
 - `Corkboard.lua` registers the launcher as a minimap button; its angle and hidden state live in `CorkboardDB.global.minimap`. `/cork minimap` hides or shows it. `ui_spec` covers the rim position, the click, hiding and a dragged angle across `/reload`; the fake client gained `Minimap`, `SetPoint` recording and animation groups.
+
+### Eighth session: quest logs (design.md §9.2)
+
+Will asked for a way to answer "what quests are you on?", with a mark on quests you share.
+
+- **Records.** Each character's quest log is one Note with `kind = "quests"` at id `<prefix>-0`, a counter `Store.nextNoteId` never hands out, so it can't overwrite a real note and every install of the character writes the same record. The text is `id:level` pairs (about 400 bytes for Forever's 40-quest log; full links would pass the 2,000-byte limit). Titles come from each client's own quest data. The sanitiser accepts `"quests"` in Lua and Python; new sanitise and merge vectors (including counter 0 as an id), `"quests"` in both property generators, and an API round trip.
+- **Detection** (`Corkboard.lua`): quest events schedule one read 2 s later; nothing is read before the session's first `QUEST_LOG_UPDATE`, and an unchanged log sends nothing. Sharing is per board, local and **on by default** (like gear); unticking deletes the log, and ticking again writes a newer version over the tombstone.
+- **UI:** a fourth tab, **Quests** (`UI/Quests.lua`): members sharing a log on the left, the chosen member's quests on the right by level, with a ready-check tick on quests you're on too, "online now" or "as of 2h ago", and an "Only quests I'm on too" filter. Clicking a member on the Members tab opens their log. `/cork quests [name]` and `/cork quests on|off` do the same from chat.
+- **Not seen in game yet:** the quest log API names (`C_QuestLog.GetInfo` and friends) are assumptions, recorded as such in design.md §2. The check is next step 3 below. Tests: `addon/spec/quests_spec.lua` (store rules, the view, the command, two fake clients with quest logs, title loading, the tab, the Members click and `/reload`).
 
 ### Spec changes (earlier sessions)
 
@@ -82,7 +91,8 @@ On 2026-09-26, after the first in-game smoke test, Will said he's happy with whe
 
 Not open questions, just code paths the checklists below run in the client for the first time. If one misbehaves, the fix lives where it says.
 
-- Window, templates and popups: `UI/Main.lua`, `UI/Popups.lua`, `UI/Members.lua`, `UI/Debug.lua`.
+- Window, templates and popups: `UI/Main.lua`, `UI/Popups.lua`, `UI/Members.lua`, `UI/Debug.lua`, `UI/Quests.lua`.
+- The quest log API and quest title loading: `readQuestLog` and `Corkboard:QuestTitle` in `Corkboard.lua`.
 - Hidden password channels (join, hiding from chat frames, the wrong-password notice, sender names): `Net.lua`.
 - Link insertion and link round trips: `UI/Links.lua`, `Core/Sanitise.lua`.
 - The live client's folder name at launch: `companion/corkboard_companion/discover.py` lets the player pick if it guesses wrong.
@@ -112,7 +122,15 @@ Do these in order unless Will says otherwise.
    2. Swap it off and on again, and equip a green: nothing new appears.
    3. Untick "Post my new rare and epic gear to this board", equip another new blue: it doesn't appear on that board. `/reload`: the tick state and the feed are unchanged.
    4. Send any Lua errors. If nothing posts, run `/dump GetInventoryItemQuality("player", 1)` with a helmet on and send the output.
-3. **Will: the Phase 2–4 check.** Needs two clients: two accounts, or a friend.
+3. **Will: the quest log check.** Two characters on one board (two accounts, or a friend):
+   1. On A, `/dump C_QuestLog.GetNumQuestLogEntries()` and `/dump C_QuestLog.GetInfo(2)`: send the output. If `C_QuestLog.GetInfo` is nil, `/dump GetQuestLogTitle(2)` instead.
+   2. Open `/cork`, **Quests** tab, on both. Within a few seconds of login each sees the other in the list on the left, with the right quest count.
+   3. On B, pick A: A's quests are listed by level with the right names (a quest B has never seen may show "Quest #id" for a moment). Hover one: its tooltip shows. Quests both have are ticked, and "Only quests I'm on too" leaves just those.
+   4. A accepts a quest, then abandons another: B's list follows within about 5 s. Killing a mob for an objective sends nothing (`/cork debug` shows no PUT).
+   5. A unticks "Share my quest log with this board": A disappears from B's list. A ticks it again: A is back.
+   6. On B, `/cork quests` and `/cork quests <A's first name>` in chat. On the Members tab, clicking A opens A's log.
+   7. `/reload` on A: nothing changes on B, and A's list isn't briefly empty. Send any Lua errors and a screenshot of the tab.
+4. **Will: the Phase 2–4 check.** Needs two clients: two accounts, or a friend.
    1. On A: open the **Members** tab, click the invite box, Ctrl+C, and send it to B out of game. On B: **Join**, paste. Within about 15 s B shows the board's name and A's notes, and once the catch-up finishes the status line reads "Synced with A …".
    2. On both: nothing in any chat tab mentions a `Cork…` channel, even after `/reload`.
    3. A edits a note: B shows it within 5 s. `/cork debug` on both: the gate is Open, and the log shows the PUT.
@@ -120,9 +138,9 @@ Do these in order unless Will says otherwise.
    5. B logs out. A makes 20 notes, edits 5 and deletes 3. B logs in: within 60 s both debug panels show the same digest, and B's log shows IDX for only some buckets.
    6. A removes B in the Members tab: B stops getting A's edits. A sends the new invite, B joins with it, and syncing resumes.
    7. Send Lua errors and screenshots of the window, the Members tab, the debug panel and the status line.
-4. **Apply the results.** Fix whatever the checks turn up and tick the §12 items that have their evidence. Since the spikes are dropped, `spikes/`, its CI smoke steps and `Corkboard.Sanitise` (kept only for CorkSpike2) can go in their own small change. If the 1.60 client has `C_EncodingUtil`, it could replace LibSerialize and LibDeflate.
-5. **Deploy the API:** on Will's box, `$env:ARCANE_API_KEY=…; python tools/arcane_deploy.py create --domain corkboard.<domain>` (`infra/README.md`, full steps in `docs/arcane-next-steps.md`). Then the Phase 5 checks: health over TLS from outside the tailnet, the dashboard unreachable, and a restore drill. Then install the companion (`pip install ./shared/python ./companion`, `corkboard-companion setup --api https://corkboard.<domain>`) and run the "B edits and logs out, A's companion syncs, A reloads" check for real.
-6. **Phase 6 for real:** CurseForge and Wago IDs and tokens, a signing certificate, and a Windows/macOS test of the companion's window and PyInstaller build.
+5. **Apply the results.** Fix whatever the checks turn up and tick the §12 items that have their evidence. Since the spikes are dropped, `spikes/`, its CI smoke steps and `Corkboard.Sanitise` (kept only for CorkSpike2) can go in their own small change. If the 1.60 client has `C_EncodingUtil`, it could replace LibSerialize and LibDeflate.
+6. **Deploy the API:** on Will's box, `$env:ARCANE_API_KEY=…; python tools/arcane_deploy.py create --domain corkboard.<domain>` (`infra/README.md`, full steps in `docs/arcane-next-steps.md`). Then the Phase 5 checks: health over TLS from outside the tailnet, the dashboard unreachable, and a restore drill. Then install the companion (`pip install ./shared/python ./companion`, `corkboard-companion setup --api https://corkboard.<domain>`) and run the "B edits and logs out, A's companion syncs, A reloads" check for real.
+7. **Phase 6 for real:** CurseForge and Wago IDs and tokens, a signing certificate, and a Windows/macOS test of the companion's window and PyInstaller build.
 
 ## Open issues
 

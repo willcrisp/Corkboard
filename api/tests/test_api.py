@@ -75,6 +75,12 @@ def test_gear_entries_keep_their_kind(api, board):
     assert sync(api, {"notes": [note(3) | {"kind": "poll"}]}).json()["rejected"][0]["reason"] == "kind"
 
 
+def test_quest_logs_keep_their_kind(api, board):
+    log = note(1, text="7:5,46:10") | {"kind": "quests"}
+    assert sync(api, {"notes": [log]}).json()["rejected"] == []
+    assert sync(api, {"cursor": 0}).json()["notes"] == [log]
+
+
 def test_a_database_from_before_note_kinds_is_upgraded(make_client, tmp_path):
     old = sqlite3.connect(tmp_path / "cork.db")
     old.executescript("""

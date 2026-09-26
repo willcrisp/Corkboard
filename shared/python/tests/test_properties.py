@@ -28,8 +28,9 @@ def notes(draw):
         "color": draw(st.integers(1, 2)),
         "deleted": deleted,
     }
-    if draw(st.booleans()):  # ties between a gear entry and a plain note come up
-        note["kind"] = "gear"
+    kind = draw(st.sampled_from([None, "gear", "quests"]))  # so ties between kinds and plain notes come up
+    if kind is not None:
+        note["kind"] = kind
     return note
 
 

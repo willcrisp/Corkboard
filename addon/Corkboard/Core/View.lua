@@ -7,6 +7,7 @@ ns = type(ns) == "table" and ns or {}
 local Util = ns.Util or require("Core.Util")
 local Sanitise = ns.Sanitise or require("Core.Sanitise")
 local Commands = ns.Commands or require("Core.Commands")
+local Store = ns.Store or require("Core.Store")
 local plural = Commands.plural
 
 local find, format, gsub, lower, match = string.find, string.format, string.gsub, string.lower, string.match
@@ -327,6 +328,108 @@ function View.gearRows(entries, limit, now, myRealm)
 		}
 	end
 	return rows
+end
+
+-- The Quests tab (§9.2) --------------------------------------------------------
+
+-- The member list: everyone sharing a quest log on the board, others by name
+-- and then you. Each row: { name, label, detail, online, class, you }.
+function View.questMembers(store, board, online)
+	local me = store.env.me
+	local myRealm = View.realmOf(me)
+	local logs, mine = Store.questLogs(board), store:myQuests()
+	local isOnline = {}
+	for _, name in ipairs(online) do
+		isOnline[name] = true
+	end
+	local names = {}
+	for name in pairs(logs) do
+		if name ~= me then
+			names[#names + 1] = name
+		end
+	end
+	table.sort(names, function(a, b)
+		local c = Util.compare(lower(View.shortName(a, myRealm)), lower(View.shortName(b, myRealm)))
+		if c ~= 0 then
+			return c < 0
+		end
+		return Util.less(a, b)
+	end)
+	if logs[me] then
+		names[#names + 1] = me
+	end
+	local rows = {}
+	for i, name in ipairs(names) do
+		local list, shared = Commands.questList(store, logs[name], mine)
+		local seen = board.seen and board.seen[name]
+		local row = {
+			index = i,
+			name = name,
+			label = name == me and "You" or View.shortName(name, myRealm),
+			you = name == me,
+			online = name == me or isOnline[name] == true,
+			class = seen and seen.class,
+		}
+		if row.you then
+			row.detail = plural(#list, "quest")
+		else
+			row.detail = format("%d · %d shared", #list, shared)
+		end
+		rows[i] = row
+	end
+	return rows
+end
+
+-- One member's side of the tab: { title, detail, rows, empty }. rows are
+-- their quests (Commands.questList), only the ones you share when
+-- `onlyShared` is set. `name` may be a member without a log, when the
+-- Members tab sent you here.
+function View.questLog(store, board, name, online, onlyShared, now)
+	local me = store.env.me
+	local myRealm = View.realmOf(me)
+	local log = name and Store.questLogs(board)[name]
+	if not log then
+		return {
+			title = name and View.shortName(name, myRealm) or "",
+			detail = "",
+			rows = {},
+			empty = name and format("%s doesn't share a quest log on this board.", View.shortName(name, myRealm))
+				or "Nobody shares a quest log on this board yet. Members who tick the box above show up here.",
+		}
+	end
+	local list, shared = Commands.questList(store, log, store:myQuests())
+	local rows = {}
+	for _, quest in ipairs(list) do
+		if not onlyShared or quest.shared then
+			quest.index = #rows + 1
+			quest.shared = quest.shared and name ~= me
+			rows[#rows + 1] = quest
+		end
+	end
+	local out = { rows = rows }
+	if name == me then
+		out.title = format("You · %s", plural(#list, "quest"))
+		out.detail = board.quests == false and "Not shared: tick the box above to share it."
+			or "What members of this board see."
+	else
+		local short = View.shortName(name, myRealm)
+		out.filterable = true
+		out.title = format("%s · %s", short, plural(#list, "quest"))
+		local fresh
+		for _, who in ipairs(online) do
+			if who == name then
+				fresh = "online now"
+			end
+		end
+		fresh = fresh or Commands.asOf(log, board.seen and board.seen[name], now)
+		local together = shared == 0 and format("you share none with %s", short)
+			or format("you share %s with %s", plural(shared, "quest"), short)
+		out.detail = fresh .. " · " .. together
+	end
+	if #rows == 0 then
+		out.empty = onlyShared and #list > 0 and "None of these are in your quest log." or "No quests."
+	end
+	return out
 end
 
 ns.View = View

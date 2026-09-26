@@ -15,6 +15,7 @@ files["addon/Corkboard/Corkboard.lua"] = {
 		"C_Timer", "CreateFrame", "DEFAULT_CHAT_FRAME", "GetNormalizedRealmName", "GetServerTime", "GetTime", "LibStub",
 		"NORMAL_FONT_COLOR_CODE", "UnitClass", "GetPlayerInfoByGUID", "UnitGUID", "issecretvalue",
 		"C_Item", "GetInventoryItemLink", "GetInventoryItemQuality",
+		"C_QuestLog", "GetNumQuestLogEntries", "GetQuestLogTitle",
 	},
 }
 files["addon/Corkboard/Net.lua"] = {

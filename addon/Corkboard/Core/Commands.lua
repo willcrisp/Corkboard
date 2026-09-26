@@ -8,9 +8,11 @@ ns = type(ns) == "table" and ns or {}
 local Sanitise = ns.Sanitise or require("Core.Sanitise")
 local Store = ns.Store or require("Core.Store")
 local Invite = ns.Invite or require("Core.Invite")
+local Util = ns.Util or require("Core.Util")
 
-local format, lower, match = string.format, string.lower, string.match
+local format, gsub, lower, match, sub = string.format, string.gsub, string.lower, string.match, string.sub
 local floor = math.floor
+local concat, sort = table.concat, table.sort
 
 local Commands = {}
 
@@ -26,6 +28,8 @@ local USAGE = {
 	"  /cork remove <name> - remove a member (owner only; rotates the secret)",
 	"  /cork rotate - give the current board a new secret (owner only)",
 	"  /cork cloud on|off, /cork guild on|off - the current board's sync options",
+	"  /cork quests [name] - who shares a quest log here, or one member's quests",
+	"  /cork quests on|off - share your quest log with the current board",
 	"  /cork sync - ask members for changes now; /cork debug - the sync panel",
 	"  /cork minimap - show or hide the minimap button",
 }
@@ -90,6 +94,72 @@ function Commands.plural(n, word)
 end
 
 local plural = Commands.plural
+
+-- Quest logs (§9.2) -----------------------------------------------------------
+
+-- The mark on a quest you're on too, in the Quests tab and in chat.
+Commands.SHARED_ICON = "Interface\\RaidFrame\\ReadyCheck-Ready"
+local SHARED = "|T" .. Commands.SHARED_ICON .. ":0|t"
+
+-- "as of 5m ago": how current a member's quest log is. That's the later of
+-- its last change and the last time anything was heard from the member,
+-- since a running client republishes its log as soon as it changes.
+function Commands.asOf(log, seen, now)
+	local at = log.rev
+	if seen and seen.at and seen.at > at then
+		at = seen.at
+	end
+	return "as of " .. Commands.age(math.max(0, now - at))
+end
+
+-- A quest's title from the client's quest data, or "Quest #id" until the
+-- client has it. Only ids travel between members (§9.2).
+function Commands.questTitle(store, id)
+	local lookup = store.env.questTitle
+	local title = lookup and lookup(id)
+	if type(title) ~= "string" or title == "" then
+		return format("Quest #%d", id)
+	end
+	return (gsub(title, "[|%[%]]", ""))
+end
+
+-- A quest link, as the client makes them. It's built locally for display
+-- and never stored, so it needn't pass the sanitiser.
+function Commands.questLink(id, level, title)
+	return format("|cffffff00|Hquest:%d:%d|h[%s]|h|r", id, level, title)
+end
+
+-- A quest-log note's quests, by level, then title, then id: { id, level,
+-- title, link, shared }, where shared means `mine` (id -> true) has it too.
+-- Also returns how many are shared.
+function Commands.questList(store, log, mine)
+	local list, shared = {}, 0
+	for _, quest in ipairs(Store.decodeQuests(log.text)) do
+		local title = Commands.questTitle(store, quest.id)
+		local row = {
+			id = quest.id,
+			level = quest.level,
+			title = title,
+			link = Commands.questLink(quest.id, quest.level, title),
+			shared = mine[quest.id] == true,
+		}
+		if row.shared then
+			shared = shared + 1
+		end
+		list[#list + 1] = row
+	end
+	sort(list, function(a, b)
+		if a.level ~= b.level then
+			return a.level < b.level
+		end
+		local c = Util.compare(lower(a.title), lower(b.title))
+		if c ~= 0 then
+			return c < 0
+		end
+		return a.id < b.id
+	end)
+	return list, shared
+end
 
 local function current(store)
 	local board = store:current()
@@ -194,6 +264,98 @@ end
 
 handlers.cloud = option("cloud", "Cloud sync")
 handlers.guild = option("guild", "Guild sync")
+
+local shareQuests = option("quests", "Sharing your quest log")
+
+local function shortName(name, me)
+	local short, realm = match(name, "^([^%-]+)%-(.+)$")
+	if short and realm == (me and match(me, "^[^%-]+%-(.+)$")) then
+		return short
+	end
+	return name
+end
+
+-- The quest log `query` names: a whole name or the part before the realm, in
+-- any case, or failing that the start of one. Returns the name, or nil and
+-- the names it could mean when there are several.
+local function findLog(logs, query)
+	query = lower(query)
+	local exact, partial = {}, {}
+	for name in pairs(logs) do
+		local full = lower(name)
+		if full == query or match(full, "^([^%-]+)") == query then
+			exact[#exact + 1] = name
+		elseif sub(full, 1, #query) == query then
+			partial[#partial + 1] = name
+		end
+	end
+	local found = #exact > 0 and exact or partial
+	if #found == 1 then
+		return found[1]
+	end
+	sort(found, Util.less)
+	return nil, #found > 1 and found or nil
+end
+
+-- /cork quests: who shares a quest log on the current board. /cork quests
+-- <name>: that member's quests, marking the ones you're on too.
+function handlers.quests(store, name)
+	local word = lower(name)
+	if word == "on" or word == "off" then
+		return shareQuests(store, word)
+	end
+	local board, problem = current(store)
+	if not board then
+		return problem
+	end
+	local logs = Store.questLogs(board)
+	local me, now, mine = store.env.me, store.env.now(), store:myQuests()
+	local function asOf(who)
+		return Commands.asOf(logs[who], board.seen and board.seen[who], now)
+	end
+	if name == "" then
+		local names = {}
+		for who in pairs(logs) do
+			names[#names + 1] = who
+		end
+		if #names == 0 then
+			return { format("Nobody on %s shares a quest log yet.", Store.name(board)) }
+		end
+		sort(names, Util.less)
+		local out = { format("Quest logs on %s:", Store.name(board)) }
+		for _, who in ipairs(names) do
+			local list, shared = Commands.questList(store, logs[who], mine)
+			if who == me then
+				out[#out + 1] = format("  You: %s", plural(#list, "quest"))
+			else
+				out[#out + 1] = format("  %s: %s, %d shared with you %s(%s)|r", shortName(who, me),
+					plural(#list, "quest"), shared, GREY, asOf(who))
+			end
+		end
+		out[#out + 1] = GREY .. "/cork quests <name> lists someone's quests.|r"
+		return out
+	end
+	local who, choices = findLog(logs, name)
+	if not who then
+		if choices then
+			return { warn(format("%q could be %s.", name, concat(choices, " or "))) }
+		end
+		return { warn(format("Nobody called %q shares a quest log on %s.", name, Store.name(board))) }
+	end
+	local list, shared = Commands.questList(store, logs[who], mine)
+	local out
+	if who == me then
+		out = { format("You're on %s, shared with %s.", plural(#list, "quest"), Store.name(board)) }
+	else
+		out = { format("%s is on %s %s(%s)|r. You share %d.", shortName(who, me), plural(#list, "quest"), GREY,
+			asOf(who), shared) }
+	end
+	for _, quest in ipairs(list) do
+		local level = quest.level > 0 and format(" %s(%d)|r", GREY, quest.level) or ""
+		out[#out + 1] = "  " .. quest.link .. level .. (quest.shared and who ~= me and " " .. SHARED or "")
+	end
+	return out
+end
 
 local ALIASES = { ["?"] = "help", [""] = "help" }
 

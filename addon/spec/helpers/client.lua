@@ -12,6 +12,17 @@ Client.__index = Client
 
 local ADDON_DIR = "addon/Corkboard/"
 
+-- The quests the fake game knows, by id: a client can load any of these
+-- titles (C_QuestLog.RequestLoadQuestByID), and knows its own log's at once.
+Client.QUEST_DB = {
+	[7] = "Kobold Camp Cleanup",
+	[15] = "Investigate Echo Ridge",
+	[46] = "Bounty on Murlocs",
+	[54] = "Report to Goldshire",
+	[166] = "The Defias Brotherhood",
+	[2040] = "Underground Assault",
+}
+
 local LUA_GLOBALS = {
 	"assert", "collectgarbage", "error", "getfenv", "getmetatable", "ipairs", "loadstring", "next", "pairs",
 	"pcall", "print", "rawequal", "rawget", "rawset", "select", "setfenv", "setmetatable", "tonumber",
@@ -419,6 +430,11 @@ function Client.new(options)
 		sentAddon = {},
 		received = {},
 		equipped = options.equipped or {}, -- slot -> { link, quality }
+		-- The quest log, in order: { id, level } for a quest (its title comes
+		-- from Client.QUEST_DB) or { header = "Zone" }.
+		quests = options.quests or {},
+		questCache = {}, -- quest id -> title, for quests loaded from QUEST_DB
+		questRequests = {},
 	}, Client)
 	self.env = self:makeEnv()
 	return self
@@ -719,6 +735,41 @@ function Client:makeEnv()
 		local item = unit == "player" and client.equipped[slot]
 		return item and item.quality or nil
 	end
+	env.C_QuestLog = {
+		GetNumQuestLogEntries = function()
+			local quests = 0
+			for _, entry in ipairs(client.quests) do
+				quests = quests + (entry.header and 0 or 1)
+			end
+			return #client.quests, quests
+		end,
+		GetInfo = function(index)
+			local entry = client.quests[index]
+			if not entry then
+				return nil
+			elseif entry.header then
+				return { title = entry.header, isHeader = true, isHidden = false, level = 0 }
+			end
+			return { title = Client.QUEST_DB[entry.id], questID = entry.id, level = entry.level, isHeader = false,
+				isHidden = false }
+		end,
+		GetTitleForQuestID = function(id)
+			for _, entry in ipairs(client.quests) do
+				if entry.id == id then
+					return Client.QUEST_DB[id]
+				end
+			end
+			return client.questCache[id]
+		end,
+		-- Loads a quest's data a moment later, then fires QUEST_DATA_LOAD_RESULT.
+		RequestLoadQuestByID = function(id)
+			client.questRequests[#client.questRequests + 1] = id
+			env.C_Timer.After(0.1, function()
+				client.questCache[id] = Client.QUEST_DB[id]
+				fire("QUEST_DATA_LOAD_RESULT", id, Client.QUEST_DB[id] ~= nil)
+			end)
+		end,
+	}
 	env.issecretvalue = function(value)
 		return client.secrets[value] == true
 	end
@@ -1063,6 +1114,7 @@ function Client:reload()
 		guild = self.guild,
 		network = self.network,
 		equipped = self.equipped,
+		quests = self.quests,
 	})
 	-- The server keeps channel membership across a /reload.
 	fresh.myChannels = self.myChannels
@@ -1092,6 +1144,15 @@ end
 function Client:equip(slot, link, quality)
 	self.equipped[slot] = link and { link = link, quality = quality } or nil
 	self.fire("PLAYER_EQUIPMENT_CHANGED", slot, link == nil)
+	return self:check()
+end
+
+-- Replaces the quest log (see Client.new) and fires QUEST_LOG_UPDATE, as
+-- accepting, abandoning or turning in a quest does. Pass nil to fire the
+-- event without a change, as killing a mob for an objective does.
+function Client:setQuests(quests)
+	self.quests = quests or self.quests
+	self.fire("QUEST_LOG_UPDATE")
 	return self:check()
 end
 

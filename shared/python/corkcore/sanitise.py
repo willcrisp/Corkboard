@@ -14,8 +14,9 @@ MAX_ID = 18
 COLOR_MAX = 8
 
 LINK_TYPES = frozenset({"item", "quest", "spell", "achievement", "currency", "mount", "battlepet", "journal"})
-# Note kinds (§4.2): no kind is an ordinary note, "gear" a gear-feed entry (§9.1).
-KINDS = frozenset({"gear"})
+# Note kinds (§4.2): no kind is an ordinary note, "gear" a gear-feed entry (§9.1)
+# and "quests" a member's quest log (§9.2).
+KINDS = frozenset({"gear", "quests"})
 
 _CONTROL = re.compile(r"[\x00-\x1f\x7f]")
 _TEXT_CONTROL = re.compile(r"[\x00-\x09\x0b-\x1f\x7f]")

@@ -30,9 +30,10 @@ Sanitise.LINK_TYPES = {
 }
 
 -- Note kinds (§4.2). A note without `kind` is an ordinary note; "gear" is an
--- entry in the board's gear feed (§9.1).
+-- entry in the board's gear feed (§9.1) and "quests" a member's quest log (§9.2).
 Sanitise.KINDS = {
 	gear = true,
+	quests = true,
 }
 
 local LINK_TYPES = Sanitise.LINK_TYPES

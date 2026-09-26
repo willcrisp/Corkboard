@@ -41,6 +41,7 @@ UI\Links.lua
 UI\Main.lua
 UI\Members.lua
 UI\Gear.lua
+UI\Quests.lua
 UI\Editor.lua
 UI\Popups.lua
 UI\Debug.lua
