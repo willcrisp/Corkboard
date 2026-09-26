@@ -163,6 +163,32 @@ describe("merge laws (random records)", function()
 	end)
 end)
 
+-- Digest lines ------------------------------------------------------------------
+-- Between two edits by one editor, a note's digest line changes only in its rev
+-- digits. Adler-32 missed some of those changes (revs 81 apart); the digest
+-- hash must see every one that touches up to three adjacent digits.
+
+describe("digest line hash", function()
+	it("changes whenever up to three adjacent rev digits change", function()
+		local Util = require("Core.Util")
+		local rand = prng(3)
+		for _ = 1, 12 do
+			local rev = T0 + rand(10000000)
+			local digits = Util.formatInt(rev)
+			local base = Util.fnv1a32(Digest.line({ id = "22222222-4", rev = rev, editor = "Zed-Realm" }))
+			for pos = 1, #digits - 2 do
+				for k = 0, 999 do
+					local changed = digits:sub(1, pos - 1) .. ("%03d"):format(k) .. digits:sub(pos + 3)
+					if changed ~= digits and changed:sub(1, 1) ~= "0" then
+						local line = Digest.line({ id = "22222222-4", rev = tonumber(changed), editor = "Zed-Realm" })
+						check(Util.fnv1a32(line) ~= base, "collision at rev " .. changed .. " vs " .. digits)
+					end
+				end
+			end
+		end
+	end)
+end)
+
 -- Simulated network -----------------------------------------------------------------
 -- Nodes make random local changes and broadcast them as PUTs. The network drops,
 -- duplicates and reorders deliveries; nodes also sync through a server. After a

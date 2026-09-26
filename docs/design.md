@@ -119,16 +119,17 @@ Note = {
 
 ### 4.4 Digests (bucketed)
 
-- `bucket(id) = LibDeflate:Adler32(id) % 32`
-- `bucketHash[i] = Adler32(sorted "id=rev;editor\n" lines in bucket i)`
-- `boardDigest = Adler32(concat(bucketHash[0..31]))`
+- `bucket(id) = FNV1a32(id) % 32`
+- `bucketHash[i] = FNV1a32(sorted "id=rev;editor\n" lines in bucket i)`
+- `boardDigest = FNV1a32(concat(bucketHash[0..31]))`
 
-The details, pinned by `shared/test-vectors/digest.json`:
+The details, pinned by `shared/test-vectors/digest.json` and `fnv1a32.json`:
 
-- Adler-32 is zlib's, which `LibDeflate:Adler32` matches. The merge core carries its own copy so it stays pure Lua.
+- FNV1a32 is 32-bit FNV-1a (offset basis 2166136261, prime 16777619). The merge core implements it in pure Lua 5.1 without bit operators.
 - `rev` is written in plain decimal, never in exponent form.
-- Lines sort byte-wise. Tombstones are included. An empty bucket hashes to 1.
+- Lines sort byte-wise. Tombstones are included. An empty bucket hashes to 2166136261.
 - `concat` joins each bucket hash as 4 big-endian bytes.
+- **Why not Adler-32** (v0.2 used it, since LibDeflate provides it): Adler-32 is blind to small structured changes in short inputs. A note's line only changes in the rev digits between two edits by the same editor, and revs that differ by 81 (digit changes of +1, −2, +1, such as `…184` → `…265`) leave both Adler sums unchanged. So do 810, 891 and many others. Two peers holding those two versions would see equal digests and never repair the stale one over P2P. The convergence property test found this. FNV-1a multiplies after every byte, so it has no such structure: a property test checks that no change to up to three adjacent rev digits collides, and any other pair of lines collides only by chance, about 1 in 2^32. Neither hash resists a member who crafts collisions on purpose, which the trust model (§10) already accepts.
 
 The 32 bucket hashes are 128 bytes raw, about one addon message after compression. Only the notes in mismatched buckets are ever exchanged as indexes.
 

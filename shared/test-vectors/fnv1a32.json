@@ -1,0 +1,15 @@
+{
+  "description": "32-bit FNV-1a (offset basis 2166136261, prime 16777619). input is UTF-8 text; input_hex is raw bytes. repeat (default 1) repeats the input.",
+  "cases": [
+    { "input": "", "note": "FNV reference value: the offset basis", "fnv1a32": 2166136261 },
+    { "input": "a", "note": "FNV reference value", "fnv1a32": 3826002220 },
+    { "input": "foobar", "note": "FNV reference value", "fnv1a32": 3214735720 },
+    { "input": "a1b2c3d4-0007", "fnv1a32": 3143650101 },
+    { "input": "Björn-Realm", "fnv1a32": 3391898158 },
+    { "input": "|cffff8000|Hitem:19019::::::::60:::::::::|h[Thunderfury, Blessed Blade of the Windseeker]|h|r", "fnv1a32": 1034288302 },
+    { "input_hex": "00", "repeat": 16, "fnv1a32": 1768495365 },
+    { "input_hex": "ff", "repeat": 12000, "fnv1a32": 1088614501 },
+    { "input": "22222222-4=1790000184;Zed-Realm\n", "note": "collides with the next case under Adler-32, not under FNV-1a", "fnv1a32": 1077783651 },
+    { "input": "22222222-4=1790000265;Zed-Realm\n", "fnv1a32": 3313346411 }
+  ]
+}

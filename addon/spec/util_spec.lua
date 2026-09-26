@@ -1,13 +1,24 @@
 local Util = require("Core.Util")
 local Vectors = require("helpers.vectors")
 
-describe("Util.adler32", function()
-	for _, case in ipairs(Vectors.load("adler32.json").cases) do
+describe("Util.fnv1a32", function()
+	for _, case in ipairs(Vectors.load("fnv1a32.json").cases) do
 		local input = Vectors.input(case)
-		it(("matches zlib for %q (%d bytes)"):format(input:sub(1, 16), #input), function()
-			assert.are.equal(case.adler32, Util.adler32(input))
+		it(("matches the reference for %q (%d bytes)"):format(input:sub(1, 16), #input), function()
+			assert.are.equal(case.fnv1a32, Util.fnv1a32(input))
 		end)
 	end
+
+	it("xors every byte value correctly", function()
+		-- One byte from the offset basis exercises the xor on all 256 values.
+		local seen = {}
+		for c = 0, 255 do
+			local h = Util.fnv1a32(string.char(c))
+			assert.is_true(h >= 0 and h < 2 ^ 32 and h % 1 == 0)
+			assert.is_nil(seen[h])
+			seen[h] = true
+		end
+	end)
 end)
 
 describe("Util.compare", function()

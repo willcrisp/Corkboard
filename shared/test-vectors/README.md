@@ -2,7 +2,7 @@
 
 JSON fixtures that pin down the merge core (docs/design.md §4.3, §4.4, §6). The Lua suite (`addon/spec/`) runs every case. The Python ports in `companion/` and `api/` must run the same cases and pass them unchanged. A case that one side can't pass is a bug in that side, not in the vector.
 
-Expected Adler-32 and digest values were computed with Python's `zlib.adler32`, independently of the Lua code. Merge and sanitiser expectations are written out by hand from the spec.
+Expected FNV-1a and digest values were computed with a short Python reference implementation, independently of the Lua code, and checked against the published FNV test values. Merge and sanitiser expectations are written out by hand from the spec.
 
 ## Conventions
 
@@ -15,9 +15,9 @@ Expected Adler-32 and digest values were computed with Python's `zlib.adler32`, 
 
 ## Files
 
-### `adler32.json`
+### `fnv1a32.json`
 
-`cases[]`: `{ input | input_hex, repeat?, adler32 }`. This is Adler-32 exactly as in zlib (and `LibDeflate:Adler32`).
+`cases[]`: `{ input | input_hex, repeat?, fnv1a32 }`. This is 32-bit FNV-1a: start from 2166136261, and for each byte xor it in, then multiply by 16777619 modulo 2^32. In Python: `h = ((h ^ b) * 0x01000193) & 0xFFFFFFFF`.
 
 ### `sanitise.json`
 
@@ -42,6 +42,6 @@ The final board must be the same for every order of `apply`, and when `apply` ru
 
 ### `digest.json`
 
-- `bucket[]`: `{ id, bucket }`, where the bucket is `Adler32(id) % 32`.
+- `bucket[]`: `{ id, bucket }`, where the bucket is `FNV1a32(id) % 32`.
 - `line[]`: `{ note, line }`, the digest line `id=rev;editor\n`, with `rev` in plain decimal.
-- `boards[]`: `{ name, notes[], count, buckets[32], digest }`. `buckets[0]` is bucket 0. Each bucket hash is the Adler-32 of that bucket's lines, sorted byte-wise and joined. The digest is the Adler-32 of the 32 hashes, each written as 4 big-endian bytes. `count` includes tombstones. The "lines sort byte-wise, not by id" board catches an implementation that sorts by id instead: `a1b2c3d4-7` sorts before `a1b2c3d4-700`, but its line sorts after, because `=` is greater than `0`.
+- `boards[]`: `{ name, notes[], count, buckets[32], digest }`. `buckets[0]` is bucket 0. Each bucket hash is the FNV-1a of that bucket's lines, sorted byte-wise and joined, so an empty bucket hashes to 2166136261. The digest is the FNV-1a of the 32 hashes, each written as 4 big-endian bytes. `count` includes tombstones. The "lines sort byte-wise, not by id" board catches an implementation that sorts by id instead: `a1b2c3d4-7` sorts before `a1b2c3d4-722` (chosen to share its bucket), but its line sorts after, because `=` is greater than `2`. The two "revs 81 apart" boards hold the same note at revs whose digest lines collide under Adler-32; their digests must differ.

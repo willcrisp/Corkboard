@@ -34,26 +34,34 @@ function Util.less(a, b)
 	return Util.compare(a, b) < 0
 end
 
--- Adler-32 as in zlib (and LibDeflate:Adler32). The sums stay far below 2^53
--- between reductions, so reducing once per 4,000 bytes is exact.
-function Util.adler32(s)
-	local a, b = 1, 0
-	local len = #s
-	local i = 1
-	while i <= len do
-		local j = i + 3999
-		if j > len then
-			j = len
+-- XOR of two nibbles, as a flat table: XOR4[a * 16 + b + 1] = a xor b.
+local XOR4 = {}
+for a = 0, 15 do
+	for b = 0, 15 do
+		local r, bit, x, y = 0, 1, a, b
+		for _ = 1, 4 do
+			if x % 2 ~= y % 2 then
+				r = r + bit
+			end
+			x, y, bit = floor(x / 2), floor(y / 2), bit * 2
 		end
-		for k = i, j do
-			a = a + byte(s, k)
-			b = b + a
-		end
-		a = a % 65521
-		b = b % 65521
-		i = j + 1
+		XOR4[a * 16 + b + 1] = r
 	end
-	return b * 65536 + a
+end
+
+-- 32-bit FNV-1a: for each byte, h = (h xor byte) * 16777619 mod 2^32, from
+-- h = 2166136261. Lua 5.1 has no bit operators, so the xor goes through XOR4
+-- on the low byte, and the multiply splits the prime into 2^24 + 403 so every
+-- intermediate stays below 2^53 and exact.
+function Util.fnv1a32(s)
+	local h = 2166136261
+	for i = 1, #s do
+		local c = byte(s, i)
+		local lo = h % 256
+		h = h - lo + XOR4[floor(lo / 16) * 16 + floor(c / 16) + 1] * 16 + XOR4[lo % 16 * 16 + c % 16 + 1]
+		h = (h * 403 + h % 256 * 16777216) % 4294967296
+	end
+	return h
 end
 
 -- A 32-bit unsigned integer as 4 big-endian bytes.

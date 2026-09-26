@@ -53,6 +53,15 @@ describe("Digest", function()
 		assert.are_not.equal(before, Digest.compute({ note }).digest)
 	end)
 
+	it("sees a rev change that Adler-32 can't (revs 81 apart)", function()
+		-- 184 -> 265 moves three digits by +1, -2, +1, which leaves both
+		-- Adler-32 sums unchanged. The board vectors pin these two digests.
+		local before = Digest.compute({ { id = "22222222-4", rev = 1790000184, editor = "Zed-Realm" } })
+		local after = Digest.compute({ { id = "22222222-4", rev = 1790000265, editor = "Zed-Realm" } })
+		assert.are_not.equal(before.digest, after.digest)
+		assert.are.same({ Digest.bucket("22222222-4") }, Digest.mismatched(before.buckets, after.buckets))
+	end)
+
 	describe("mismatched", function()
 		it("lists differing buckets, 0-based and ascending", function()
 			local a, b = {}, {}
