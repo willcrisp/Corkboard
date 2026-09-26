@@ -330,10 +330,11 @@ corkboard.<domain> {
 
 - **Board list:** name, members, who's online (from recent HELLOs), and a sync badge such as "P2P: Bob 3m ago · Cloud: 2h ago", "Queued (restricted)", or "N behind: /reload after cloud sync".
 - **Board view:** sticky-card grid (colour, author, relative time, live links).
-- **Editor:** multiline EditBox, shift-click links, character counter, colour picker.
+- **Editor:** multiline EditBox, shift-click links, character counter, colour picker. The counter counts bytes, since the sanitiser's 2,000 limit is in bytes. Save stays disabled while `Sanitise.text` would reject the text, and the editor says why. An unchanged save writes nothing, so it doesn't bump the rev and resend the note.
 - **Share:** "Copy invite" produces `CORK1:<base64(boardId|secret|ownerName)>`. "Join" takes a pasted string.
 - **Slash commands:** `/cork`, `/cork join <invite>`, `/cork sync`, `/cork debug`.
-- **Phase 1 store commands**, for testing before the UI exists: `/cork boards`, `create <name>`, `use <board>`, `rename <name>`, `deleteboard <board>`, `list`, `add <text>`, `edit <note> <text>`, `color <note> <1-5>` and `delete <note>`. A board is named by its name or id (or an unambiguous id prefix). A note is named by its `#counter` when that's unique on the board, otherwise by its full id. Output goes to the default chat frame with a gold `Corkboard:` prefix.
+- **Opening the window:** `/cork` with nothing after it, the addon compartment by the minimap (`## AddonCompartmentFunc`), or the LibDataBroker launcher in a broker display. The minimap button waits for LibDBIcon.
+- **Phase 1 store commands**, kept for testing and power users: `/cork boards`, `create <name>`, `use <board>`, `rename <name>`, `deleteboard <board>`, `list`, `add <text>`, `edit <note> <text>`, `color <note> <1-5>` and `delete <note>`. A board is named by its name or id (or an unambiguous id prefix). A note is named by its `#counter` when that's unique on the board, otherwise by its full id. Output goes to the default chat frame with a gold `Corkboard:` prefix.
 - Works with Forever's modern and Classic visual presets (no reliance on retail-only art atlases; verify in Phase 1).
 
 ---

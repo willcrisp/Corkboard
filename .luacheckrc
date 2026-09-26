@@ -6,11 +6,25 @@ exclude_files = { "addon/Corkboard/Libs/**" }
 -- The specs run under busted.
 files["addon/spec/**"] = { std = "+busted" }
 
--- The addon's WoW wrapper. Core/ stays on plain lua51 (purity_spec enforces it).
+-- The addon's WoW side: the wrapper and the UI. Core/ stays on plain lua51
+-- (purity_spec enforces it).
 files["addon/Corkboard/Corkboard.lua"] = {
+	self = false, -- methods like Corkboard:Changed() needn't use self
+	globals = { "CorkboardCompartment_OnClick" },
 	read_globals = {
 		"DEFAULT_CHAT_FRAME", "GetNormalizedRealmName", "GetServerTime", "LibStub", "NORMAL_FONT_COLOR_CODE",
 		"UnitFullName", "UnitGUID", "issecretvalue",
+	},
+}
+files["addon/Corkboard/UI/**"] = {
+	self = false,
+	globals = { "StaticPopupDialogs", "UISpecialFrames" },
+	read_globals = {
+		"ButtonFrameTemplate_HideButtonBar", "ButtonFrameTemplate_HidePortrait", "C_Timer", "CANCEL",
+		"ChatEdit_InsertLink", "ChatFontNormal", "ChatFrameUtil", "ClearCursor", "CreateDataProvider", "CreateFrame",
+		"CreateScrollBoxListLinearView", "DEFAULT_CHAT_FRAME", "DELETE", "GameTooltip", "GetCursorInfo", "SAVE",
+		"ScrollBoxConstants", "ScrollUtil", "ScrollingEdit_OnCursorChanged", "ScrollingEdit_OnUpdate", "SetItemRef",
+		"StaticPopup_Show", "UIParent", "hooksecurefunc",
 	},
 }
 

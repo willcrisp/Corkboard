@@ -19,10 +19,34 @@ local LUA_GLOBALS = {
 }
 
 -- Frames --------------------------------------------------------------------
+-- Frames, font strings and textures share one permissive model. Methods it
+-- doesn't know (capitalised names, like the client's API) are no-ops, so
+-- layout calls just work. Lower-case fields read as nil, like on a real frame.
 
 local Frame = {}
+local function noop() end
 Frame.__index = function(_, key)
-	return Frame[key] or function() end -- anything else is a no-op
+	local method = Frame[key]
+	if method ~= nil then
+		return method
+	end
+	if type(key) == "string" and key:match("^%u") then
+		return noop
+	end
+end
+
+local function newRegion(kind, parent, name)
+	return setmetatable({
+		kind = kind,
+		parent = parent,
+		name = name,
+		events = {},
+		scripts = {},
+		shown = true,
+		enabled = true,
+		text = "",
+		width = 0,
+	}, Frame)
 end
 
 function Frame:RegisterEvent(event)
@@ -59,18 +83,171 @@ function Frame:HookScript(name, fn)
 	end
 end
 
+function Frame:Run(script, ...)
+	local fn = self.scripts[script]
+	if fn then
+		return fn(self, ...)
+	end
+end
+
+function Frame:GetParent()
+	return self.parent
+end
+
+function Frame:GetName()
+	return self.name
+end
+
+function Frame:IsVisible()
+	local frame = self
+	while frame do
+		if not frame.shown then
+			return false
+		end
+		frame = frame.parent
+	end
+	return true
+end
+
 function Frame:Show()
-	self.shown = true
+	if not self.shown then
+		self.shown = true
+		self:Run("OnShow")
+	end
 end
 
 function Frame:Hide()
-	self.shown = false
+	if self.shown then
+		self.shown = false
+		if self.hasFocus then
+			self:ClearFocus()
+		end
+		self:Run("OnHide")
+	end
+end
+
+function Frame:SetShown(shown)
+	if shown then
+		self:Show()
+	else
+		self:Hide()
+	end
 end
 
 function Frame:IsShown()
 	return self.shown
 end
 
+function Frame.IsMouseOver()
+	return false
+end
+
+function Frame:SetWidth(width)
+	self.width = width
+end
+
+function Frame:SetSize(width)
+	self.width = width
+end
+
+function Frame:GetWidth()
+	return self.width
+end
+
+function Frame:SetText(text)
+	self.text = text or ""
+	if self.kind == "EditBox" then
+		self:Run("OnTextChanged", false)
+	end
+end
+
+function Frame:GetText()
+	return self.text
+end
+
+-- Roughly 6 units per byte and 14 per line, enough to size cards.
+function Frame:GetStringHeight()
+	if self.text == "" then
+		return 0
+	end
+	local perLine = math.max(1, math.floor((self.width > 0 and self.width or 300) / 6))
+	return 14 * math.ceil(#self.text / perLine)
+end
+
+function Frame:Insert(text)
+	self.text = self.text .. text
+	self:Run("OnTextChanged", true)
+end
+
+function Frame:SetFocus()
+	self.hasFocus = true
+end
+
+function Frame:ClearFocus()
+	self.hasFocus = false
+end
+
+function Frame:HasFocus()
+	return self.hasFocus == true
+end
+
+function Frame:SetEnabled(enabled)
+	self.enabled = enabled and true or false
+end
+
+function Frame:Enable()
+	self.enabled = true
+end
+
+function Frame:Disable()
+	self.enabled = false
+end
+
+function Frame:IsEnabled()
+	return self.enabled
+end
+
+-- A click as the player makes it: nothing happens on a disabled or hidden button.
+function Frame:Click(button)
+	assert(self:IsVisible(), "clicked a hidden button")
+	assert(self.enabled, "clicked a disabled button")
+	return self:Run("OnClick", button or "LeftButton")
+end
+
+-- Font strings are kept in frame.fontStrings so tests can read labels.
+function Frame:CreateFontString(name)
+	local region = newRegion("FontString", self, name)
+	self.fontStrings = self.fontStrings or {}
+	self.fontStrings[#self.fontStrings + 1] = region
+	return region
+end
+
+function Frame:CreateTexture(name)
+	return newRegion("Texture", self, name)
+end
+
+function Frame:SetTitle(title)
+	self.title = title
+end
+
+-- WowScrollBoxList: builds a frame per element, like the client does for the
+-- visible ones, and keeps them in box.elements for tests to inspect.
+function Frame:SetDataProvider(provider)
+	local view = assert(self.view, "SetDataProvider before InitScrollBoxListWithScrollBar")
+	self.elements = self.elements or {}
+	for _, element in ipairs(self.elements) do
+		element:Hide()
+	end
+	for i, data in ipairs(provider.list) do
+		local element = self.elements[i] or newRegion(view.template, self)
+		self.elements[i] = element
+		element.data = data
+		element.extent = view.calculator and view.calculator(i, data) or view.extent
+		view.initializer(element, data)
+		element:Show()
+	end
+	self.count = #provider.list
+end
 -- Saved variables -------------------------------------------------------------
 
 -- Writes a value as Lua source, the way the client writes SavedVariables.
@@ -114,6 +291,8 @@ function Client.new(options)
 		frames = {},
 		chat = {},
 		errors = {},
+		tickers = {},
+		itemRefs = {},
 		timers = {},
 		loggedIn = false,
 		now = options.now or 1790000000,
@@ -151,13 +330,96 @@ function Client:makeEnv()
 	end
 	client.fire = fire
 
-	env.CreateFrame = function(kind, name)
-		local frame = setmetatable({ kind = kind, events = {}, scripts = {}, shown = true }, Frame)
+	env.CreateFrame = function(kind, name, parent, template)
+		local frame = newRegion(kind, parent, name)
+		frame.template = template
+		if template == "ButtonFrameTemplate" then
+			frame.Inset = newRegion("Frame", frame)
+		end
 		client.frames[#client.frames + 1] = frame
 		if name then
 			env[name] = frame
 		end
 		return frame
+	end
+	env.UIParent = newRegion("Frame")
+	env.UISpecialFrames = {}
+	env.ChatFontNormal = {}
+	env.CANCEL, env.DELETE, env.SAVE = "Cancel", "Delete", "Save"
+
+	-- ScrollBox lists (see Frame:SetDataProvider).
+	env.CreateScrollBoxListLinearView = function()
+		local view = {}
+		function view.SetElementInitializer(_, template, initializer)
+			view.template, view.initializer = template, initializer
+		end
+		function view.SetElementExtent(_, extent)
+			view.extent = extent
+		end
+		function view.SetElementExtentCalculator(_, calculator)
+			view.calculator = calculator
+		end
+		return view
+	end
+	env.ScrollUtil = {
+		InitScrollBoxListWithScrollBar = function(box, _, view)
+			box.view = view
+		end,
+	}
+	env.ScrollBoxConstants = { RetainScrollPosition = 2 }
+	env.CreateDataProvider = function(list)
+		return { list = list or {} }
+	end
+
+	-- Links: the tooltip shows item, spell and quest links and raises an error
+	-- for anything else, as the client does for types it can't show.
+	env.GameTooltip = newRegion("GameTooltip")
+	function env.GameTooltip.SetOwner(tooltip, owner)
+		tooltip.owner = owner
+	end
+	function env.GameTooltip.SetHyperlink(tooltip, link)
+		local kind = link:match("^(%a+):")
+		assert(kind == "item" or kind == "spell" or kind == "quest", "Unknown link type")
+		tooltip.link = link
+	end
+	env.SetItemRef = function(link, text, button)
+		client.itemRefs[#client.itemRefs + 1] = { link = link, text = text, button = button }
+	end
+	env.ChatFrameUtil = {
+		InsertLink = function()
+			return false -- no chat edit box is open
+		end,
+	}
+	env.GetCursorInfo = function()
+		if client.cursor then
+			return "item", 1, client.cursor
+		end
+	end
+	env.ClearCursor = function()
+		client.cursor = nil
+	end
+
+	-- StaticPopups: one dialog per popup name, shown with the formatted text.
+	env.StaticPopupDialogs = {}
+	env.StaticPopup_Show = function(which, a1, a2, data)
+		local info = assert(env.StaticPopupDialogs[which], which)
+		local dialog = newRegion("Frame", env.UIParent)
+		dialog.which, dialog.data = which, data
+		dialog.text = info.text:format(a1, a2)
+		if info.hasEditBox then
+			dialog.editBox = newRegion("EditBox", dialog)
+		end
+		function dialog.Hide(frame)
+			frame.shown = false
+			if client.popup == frame then
+				client.popup = nil
+			end
+		end
+		client.popup = dialog
+		if info.OnShow then
+			info.OnShow(dialog, data)
+		end
+		return dialog
 	end
 	env.hooksecurefunc = function(target, name, hook)
 		if type(target) == "string" then
@@ -252,6 +514,14 @@ function Client:makeEnv()
 	env.C_Timer = {
 		After = function(seconds, fn)
 			client.timers[#client.timers + 1] = { at = client.time + seconds, fn = fn }
+		end,
+		NewTicker = function(seconds, fn)
+			local ticker = { seconds = seconds, fn = fn }
+			function ticker.Cancel()
+				ticker.cancelled = true
+			end
+			client.tickers[#client.tickers + 1] = ticker
+			return ticker
 		end,
 	}
 	env.SlashCmdList = {}
@@ -380,6 +650,30 @@ function Client:reload()
 		realm = self.realm,
 		guid = self.guid,
 	}):login()
+end
+
+-- The popup on screen: its accept button, or typing and pressing Enter.
+function Client:acceptPopup()
+	local dialog = assert(self.popup, "no popup is showing")
+	local info = self.env.StaticPopupDialogs[dialog.which]
+	if not info.OnAccept(dialog, dialog.data) then
+		dialog:Hide()
+	end
+	return self:check()
+end
+
+function Client:typeInPopup(text)
+	local dialog = assert(self.popup, "no popup is showing")
+	local info = self.env.StaticPopupDialogs[dialog.which]
+	dialog.editBox:SetText(text)
+	info.EditBoxOnEnterPressed(dialog.editBox, dialog.data)
+	return self:check()
+end
+
+-- A shift-click on a link somewhere in the game's UI.
+function Client:shiftClick(link)
+	self.env.ChatFrameUtil.InsertLink(link)
+	return self:check()
 end
 
 return Client

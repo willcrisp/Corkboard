@@ -45,6 +45,16 @@ In game these come from the templates and font objects wherever possible. Only t
 5. **Sync states**: status line variants, a yellow alert strip, chat output, and the minimap button tooltip.
 6. **Debug (`/cork debug`)**: stats list, 32-bucket diff grid, peers table, message log.
 
+## Phase 1 build notes
+
+What the first in-game build does differently from the mockups, and why:
+
+- **No bottom tabs yet.** Members and Settings hold invites, roster and sync options, which arrive in Phase 2. The Notes view is the whole window until then.
+- **Board list footer:** New creates a board; Rename and Delete act on the selected one. Join arrives next to New in Phase 2.
+- **Five tags, no "No tag" swatch.** A note always has a colour (1–8 in the data, §6), so there's no untagged state to pick. New notes default to amber.
+- **Card chrome** is a flat 1px backdrop in the note-card colours above, the one place Corkboard draws its own frame colour. Everything else is a Blizzard template.
+- **Edit and Delete** appear on a card when it's hovered, in place of its age, as in the mockup.
+
 ## Optional extras
 
 - **Flat skin.** An ElvUI-style variant (1px black borders, `#1a1a1a` background, narrow font) for players who run flat UIs. It's a setting, not the default.

@@ -19,6 +19,7 @@ local YELLOW = "|cffffff00" -- warnings, per docs/ui-style.md
 
 local USAGE = {
 	"Commands:",
+	"  /cork - open or close the board window",
 	"  /cork boards - list your boards",
 	"  /cork create <name> - create a board and switch to it",
 	"  /cork use <board> - switch boards (name or id)",
@@ -54,8 +55,13 @@ local function warn(text)
 	return YELLOW .. text .. "|r"
 end
 
+-- A sentence for a store or sanitiser reason code. The note editor uses it too.
+function Commands.explain(reason)
+	return REASONS[reason] or ("That didn't work (" .. tostring(reason) .. ").")
+end
+
 local function failure(reason)
-	return { warn(REASONS[reason] or ("That didn't work (" .. tostring(reason) .. ").")) }
+	return { warn(Commands.explain(reason)) }
 end
 
 function Commands.age(seconds)

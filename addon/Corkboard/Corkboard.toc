@@ -4,6 +4,8 @@
 ## Author: Will
 ## Version: 0.1.0-dev
 ## SavedVariables: CorkboardDB
+## IconTexture: Interface\Icons\INV_Misc_Note_01
+## AddonCompartmentFunc: CorkboardCompartment_OnClick
 
 # Libraries (docs/design.md §13)
 Libs\LibStub\LibStub.lua
@@ -24,7 +26,12 @@ Core\Sanitise.lua
 Core\Merge.lua
 Core\Digest.lua
 
-# Store and /cork commands (pure Lua), then the WoW wrapper
+# Store, /cork commands and window logic (pure Lua), then the WoW side
 Core\Store.lua
 Core\Commands.lua
+Core\View.lua
 Corkboard.lua
+UI\Links.lua
+UI\Main.lua
+UI\Editor.lua
+UI\Popups.lua

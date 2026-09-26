@@ -57,8 +57,18 @@ describe("Corkboard.toc", function()
 			"Core/Digest.lua",
 			"Core/Store.lua",
 			"Core/Commands.lua",
+			"Core/View.lua",
 		}, core)
-		assert.are.equal("Corkboard.lua", files[#files])
+		local wrapper
+		for i, file in ipairs(files) do
+			if file == "Corkboard.lua" then
+				wrapper = i
+			end
+		end
+		assert.is_number(wrapper)
+		for i = wrapper + 1, #files do
+			assert.is_truthy(files[i]:find("^UI/"), files[i] .. " should be UI, after the wrapper")
+		end
 	end)
 
 	it("loads LibStub first", function()
@@ -84,14 +94,14 @@ describe("Corkboard in a fake client", function()
 
 	it("keeps the merge core the same tables the TOC loaded", function()
 		local client = Client.new():login()
-		for _, name in ipairs({ "Util", "Sanitise", "Merge", "Digest", "Store", "Commands" }) do
+		for _, name in ipairs({ "Util", "Sanitise", "Merge", "Digest", "Store", "Commands", "View" }) do
 			assert.is_table(client.ns[name], name)
 		end
 	end)
 
 	it("exercises the store through /cork", function()
 		local client = Client.new():login()
-		has(client:slash("/cork"), "Commands:")
+		has(client:slash("/cork help"), "Commands:")
 		has(client:slash("/cork create Molten Core prep"), "|cffffd100Corkboard:|r Created board Molten Core prep")
 		has(client:slash("/cork add Need 4x " .. LINK), "Added #1")
 		has(client:slash("/cork list"), "#1 Need 4x " .. LINK .. " |cff808080(Will-MirageRaceway, just now)|r")
