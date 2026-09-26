@@ -27,6 +27,7 @@ local USAGE = {
 	"  /cork rotate - give the current board a new secret (owner only)",
 	"  /cork cloud on|off, /cork guild on|off - the current board's sync options",
 	"  /cork sync - ask members for changes now; /cork debug - the sync panel",
+	"  /cork minimap - show or hide the minimap button",
 }
 
 local REASONS = {

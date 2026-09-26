@@ -2,7 +2,7 @@
 
 The handoff between sessions. Read this after `CLAUDE.md`. Before you finish, update it: move what you finished into "Where things stand" and rewrite "Next steps".
 
-Last updated: 2026-09-26 (sixth session that day: Arcane project and deploy script prepared, not yet run; note editor click area and gear feed on main).
+Last updated: 2026-09-26 (seventh session that day: minimap button on main).
 
 ## Where things stand
 
@@ -25,7 +25,7 @@ On 2026-09-26 Will asked for the remaining work to be built on best assumptions,
 | Phase 6: packaging | `tools/package_addon.py`, `.pkgmeta`, `.github/workflows/release.yml`, `companion/corkboard-companion.spec`, `companion/corkboard_companion/gui.py` | Zip builder tested; the GUI, PyInstaller build and store uploads are untested. |
 | CI | `.github/workflows/ci.yml`, `api-image.yml` | Green on the branch: luacheck, busted, coverage gate (≥ 95%), spike smoke tests, pytest for corkcore, API, companion and packaging, and a check that the fuzz corpus is current. |
 
-Tests: `busted` runs 584 (Core coverage 98.7%, merge core 100%; the coverage run skips `#slow` specs); pytest runs 140 (corkcore), 20 (API), 32 (companion) and 1 (packaging).
+Tests: `busted` runs 585 (Core coverage 98.7%, merge core 100%; the coverage run skips `#slow` specs); pytest runs 140 (corkcore), 20 (API), 32 (companion) and 1 (packaging).
 
 ### First in-game run (fourth session)
 
@@ -44,6 +44,11 @@ Will installed the addon and CorkSpike in the 1.60.1 beta (build 70009) and ran 
 - **Note editor:** clicking anywhere in the text box now focuses it with the cursor at the end (`UI/Editor.lua`). Before, only the line holding text took the click.
 - **Probes Will ran in game (1.60.1):** `CombatLogGetCurrentEventInfo` is nil and registering `COMBAT_LOG_EVENT_UNFILTERED` is blocked ("only available to the Blizzard UI"), so a crit leaderboard can't be built; dropped. `PLAYER_EQUIPMENT_CHANGED` plus `GetInventoryItemLink` give a plain link and quality. Both are new §2 rows. A screenshot-pasting idea was also dropped (addons can't read the clipboard or show new images).
 - **Gear feed (design.md §9.1):** a rare-or-better item a character equips for the first time is posted to the **Gear** tab of every board with the option on (local, on by default, checkbox on the Gear tab). An entry is a Note with `kind = "gear"`, so it syncs over every existing path. The merge core learned `kind` in Lua and Python (sanitiser reason `kind`, tie-break after `deleted`), with new shared vectors and `kind` in both property-test generators. The API has a `kind` column and upgrades older databases in place. Tests: `addon/spec/gear_spec.lua` (store rules, two fake clients, the tab, `/reload`), `api/tests/test_api.py`, and the companion's addon-loads-Data.lua test.
+
+### Seventh session: the minimap button
+
+- **LibDBIcon-1.0 minor 55** is vendored in `Libs/LibDBIcon-1.0/`, copied unmodified from Details! Damage Meter's repo because the WowAce SVN is blocked here (source in `Libs/README.md`). The TOC loads it after LibDataBroker.
+- `Corkboard.lua` registers the launcher as a minimap button; its angle and hidden state live in `CorkboardDB.global.minimap`. `/cork minimap` hides or shows it. `ui_spec` covers the rim position, the click, hiding and a dragged angle across `/reload`; the fake client gained `Minimap`, `SetPoint` recording and animation groups.
 
 ### Spec changes (earlier sessions)
 
@@ -88,7 +93,7 @@ Not open questions, just code paths the checklists below run in the client for t
 - **Deploy:** the `corkboard` Arcane project doesn't exist yet. `tools/arcane_deploy.py create --domain …` makes it from a tailnet machine; it needs the public hostname, DNS pointing at the host and ports 80/443 forwarded. The backup service installs sqlite with `apk` at start, so it needs network access.
 - **Companion:** the tkinter window and the PyInstaller build need a run on Windows and macOS; there's no code-signing certificate yet.
 - **Stores:** CurseForge and Wago need project IDs in the TOCs, tokens as secrets, and a Forever listing. Until then releases are GitHub-only.
-- **Libraries:** LibDBIcon-1.0 for the minimap button, and a licence check on LibDataBroker-1.1 before publishing.
+- **Libraries:** a licence check on LibDataBroker-1.1 and LibDBIcon-1.0 before publishing, and LibDBIcon from its WowAce release in place of the Details copy.
 
 ## Next steps
 
@@ -101,6 +106,7 @@ Do these in order unless Will says otherwise.
    4. Edit the second note, delete the third, search `fire`, then clear the search. Try saving `|T`: Save stays greyed with a yellow message.
    5. Make a second board, rename it, select the first again. `/reload`, `/cork`: everything is still there.
    6. Escape closes the editor, then the window; the window drags; the addon compartment lists Corkboard.
+   7. The minimap button (a note icon on the rim) shows a tooltip, opens the window and drags round the rim. `/cork minimap` hides it; `/reload` keeps it hidden and keeps its dragged spot once shown again.
 2. **Will: the gear feed check.** One character is enough; a second on the same board also checks that entries sync:
    1. Equip a blue or purple item you haven't worn on that character since installing: the **Gear** tab on both clients shows "Name equipped [item]" within a few seconds, and hovering the link shows its tooltip.
    2. Swap it off and on again, and equip a green: nothing new appears.
@@ -116,8 +122,7 @@ Do these in order unless Will says otherwise.
    7. Send Lua errors and screenshots of the window, the Members tab, the debug panel and the status line.
 4. **Apply the results.** Fix whatever the checks turn up and tick the §12 items that have their evidence. Since the spikes are dropped, `spikes/`, its CI smoke steps and `Corkboard.Sanitise` (kept only for CorkSpike2) can go in their own small change. If the 1.60 client has `C_EncodingUtil`, it could replace LibSerialize and LibDeflate.
 5. **Deploy the API:** on Will's box, `$env:ARCANE_API_KEY=…; python tools/arcane_deploy.py create --domain corkboard.<domain>` (`infra/README.md`, full steps in `docs/arcane-next-steps.md`). Then the Phase 5 checks: health over TLS from outside the tailnet, the dashboard unreachable, and a restore drill. Then install the companion (`pip install ./shared/python ./companion`, `corkboard-companion setup --api https://corkboard.<domain>`) and run the "B edits and logs out, A's companion syncs, A reloads" check for real.
-6. **LibDBIcon and the minimap button** once Will supplies a current LibDBIcon build: add it to the TOC after LibDataBroker and to `addon_spec`, and register `Corkboard.launcher` with its position in `CorkboardDB.global`.
-7. **Phase 6 for real:** CurseForge and Wago IDs and tokens, a signing certificate, and a Windows/macOS test of the companion's window and PyInstaller build.
+6. **Phase 6 for real:** CurseForge and Wago IDs and tokens, a signing certificate, and a Windows/macOS test of the companion's window and PyInstaller build.
 
 ## Open issues
 
@@ -125,7 +130,7 @@ Do these in order unless Will says otherwise.
 - **Board deletion is local-only.** Closing a board for everyone is out of scope for v1 (§14.5).
 - **Digest blind spot:** the digest can't see a same-`(rev, editor)` tie with different content (§4.3). Those ties resolve through live `PUT`s or the cloud. Accepted for v1.
 - **Tombstones are never collected**, and the API caps a board at 1,000 rows including them. Accepted for v1 (§14.7).
-- **LibDataBroker-1.1 licence.** Its repository states none. Check before publishing.
+- **LibDataBroker-1.1 and LibDBIcon-1.0 licences.** Neither states one in its files. Check before publishing.
 
 ## Environment notes (cloud sessions)
 

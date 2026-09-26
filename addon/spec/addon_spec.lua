@@ -103,7 +103,10 @@ describe("Corkboard in a fake client", function()
 	it("loads, registers its libraries and logs in without errors", function()
 		local client = Client.new():login()
 		local LibStub = client.env.LibStub
-		for _, lib in ipairs({ "CallbackHandler-1.0", "AceDB-3.0", "LibSerialize", "LibDeflate", "LibDataBroker-1.1" }) do
+		local libs = {
+			"CallbackHandler-1.0", "AceDB-3.0", "LibSerialize", "LibDeflate", "LibDataBroker-1.1", "LibDBIcon-1.0",
+		}
+		for _, lib in ipairs(libs) do
 			assert.is_table(LibStub(lib, true), lib)
 		end
 		assert.is_table(client.env.ChatThrottleLib)

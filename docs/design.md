@@ -370,8 +370,8 @@ corkboard.<domain> {
 - **Board view:** sticky-card grid (colour, author, relative time, live links).
 - **Editor:** multiline EditBox, shift-click links, character counter, colour picker. The counter counts bytes, since the sanitiser's 2,000 limit is in bytes. Save stays disabled while `Sanitise.text` would reject the text, and the editor says why. An unchanged save writes nothing, so it doesn't bump the rev and resend the note.
 - **Share:** "Copy invite" produces `CORK1:<base64(boardId|secret|ownerName)>`. "Join" takes a pasted string.
-- **Slash commands:** `/cork`, `/cork join <invite>`, `/cork invite`, `/cork members`, `/cork remove <Name-Realm>`, `/cork rotate`, `/cork cloud on|off`, `/cork guild on|off`, `/cork sync` (HELLO on every board now) and `/cork debug`.
-- **Opening the window:** `/cork` with nothing after it, the addon compartment by the minimap (`## AddonCompartmentFunc`), or the LibDataBroker launcher in a broker display. The minimap button waits for LibDBIcon.
+- **Slash commands:** `/cork`, `/cork join <invite>`, `/cork invite`, `/cork members`, `/cork remove <Name-Realm>`, `/cork rotate`, `/cork cloud on|off`, `/cork guild on|off`, `/cork sync` (HELLO on every board now), `/cork debug` and `/cork minimap` (show or hide the minimap button).
+- **Opening the window:** `/cork` with nothing after it, the addon compartment by the minimap (`## AddonCompartmentFunc`), the LibDataBroker launcher in a broker display, or the minimap button (LibDBIcon). The button starts at LibDBIcon's default spot on the rim, can be dragged round it, and keeps its angle and hidden state in `CorkboardDB.global.minimap`.
 - Boards and notes are created, renamed, edited and deleted in the window only. (The Phase 1 store commands, `/cork create`, `add`, `list` and the rest, were removed once the window covered them; the specs drive the store directly instead.) Command output goes to the default chat frame with a gold `Corkboard:` prefix.
 - Works with Forever's modern and Classic visual presets (no reliance on retail-only art atlases; verify in Phase 1).
 

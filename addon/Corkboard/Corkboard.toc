@@ -15,6 +15,7 @@ Libs\ChatThrottleLib\ChatThrottleLib.lua
 Libs\LibSerialize\lib.xml
 Libs\LibDeflate\lib.xml
 Libs\LibDataBroker-1.1\LibDataBroker-1.1.lua
+Libs\LibDBIcon-1.0\lib.xml
 
 # Merge core: pure Lua, in this order
 Core\Util.lua

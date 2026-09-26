@@ -154,6 +154,24 @@ function Frame:GetWidth()
 	return self.width
 end
 
+function Frame:GetHeight()
+	return self.height or self.width
+end
+
+-- SetPoint keeps the last anchor, so tests can see where a button went.
+function Frame:SetPoint(point, relativeTo, relativePoint, x, y)
+	self.anchorPoint = { point, relativeTo, relativePoint, x, y }
+end
+
+-- Animation groups and their animations are plain regions (LibDBIcon's fade).
+function Frame:CreateAnimationGroup()
+	return newRegion("AnimationGroup", self)
+end
+
+function Frame:CreateAnimation(kind)
+	return newRegion(kind, self)
+end
+
 function Frame:SetText(text)
 	self.text = text or ""
 	if self.kind == "EditBox" then
@@ -588,6 +606,8 @@ function Client:makeEnv()
 	env.UIParent = newRegion("Frame")
 	env.ChatFrame1 = newRegion("Frame", env.UIParent, "ChatFrame1")
 	env.ChatFrame2 = newRegion("Frame", env.UIParent, "ChatFrame2")
+	env.Minimap = newRegion("Frame", env.UIParent, "Minimap")
+	env.Minimap.width = 140
 	env.ReloadUI = function()
 		client.reloadRequested = true
 	end

@@ -14,11 +14,12 @@ The WoW client raises "Division by zero" where plain Lua gives inf or nan, so th
 | LibSerialize | github.com/rossnichols/LibSerialize | `v1.2.2` (2026-07-15) | `40d96aa` |
 | LibDeflate | github.com/SafeteeWoW/LibDeflate | `1.0.2-release` | `6831edc` |
 | LibDataBroker-1.1 | github.com/tekkub/libdatabroker-1-1 | `v1.1.4` (minor 4, unchanged since 2008) | `1a63ede` |
+| LibDBIcon-1.0 | `Libs/LibDBIcon-1.0/` in github.com/Tercioo/Details-Damage-Meter (see below) | minor 55 | Details `1fc0b3e` (2026-09-25) |
 
 Only these files from Ace3 are carried: the addon uses its own frame, slash command and `C_Timer` in place of AceAddon, AceConsole, AceEvent and AceTimer, and frames its own messages instead of using AceComm (§5.2). Ace3 r1403 includes the ChatThrottleLib fix for secret values during chat lockdown (WoW 12.x), which matters on Forever's Midnight-style restrictions (§2).
 
-## Not vendored yet
+## LibDBIcon-1.0's source
 
-**LibDBIcon-1.0.** Its upstream is the WowAce SVN repository (`repos.wowace.com/wow/libdbicon-1-0`), which the cloud sessions' network policy blocks. The GitHub mirrors are years out of date (the newest is minor 43, from 2019), so they aren't a substitute for a build that loads on modern-API clients. Nothing uses it until the Phase 1 UI adds the minimap button. It needs `LibDBIcon-1.0/LibDBIcon-1.0.lua` and `LibDBIcon-1.0/lib.xml` from a current release.
+Its upstream is the WowAce SVN repository (`repos.wowace.com/wow/libdbicon-1-0`), which the cloud sessions' network policy blocks, and the standalone GitHub mirrors stop at minor 43 (2019). Details! Damage Meter commits its libraries, and its copy was minor 55 on 2026-09-25, so this one came from there, unmodified (Will approved the source). Replace it from the WowAce release when someone can reach it; it's the same library, so nothing else changes.
 
-Licences: Ace3 (`Ace3-LICENSE.txt`, BSD-3-Clause; LibStub is public domain), LibSerialize (`LibSerialize/LICENSE`, MIT), LibDeflate (`LibDeflate/LICENSE.txt`, zlib). LibDataBroker-1.1's repository states no licence; it's embedded by thousands of addons, but check before Phase 6 packaging.
+Licences: Ace3 (`Ace3-LICENSE.txt`, BSD-3-Clause; LibStub is public domain), LibSerialize (`LibSerialize/LICENSE`, MIT), LibDeflate (`LibDeflate/LICENSE.txt`, zlib). LibDataBroker-1.1's repository states no licence, and LibDBIcon-1.0's files carry none; both are embedded by thousands of addons, but check their CurseForge licences before Phase 6 packaging.

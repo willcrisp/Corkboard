@@ -10,7 +10,8 @@ ns.Corkboard = Corkboard
 _G.Corkboard = Corkboard -- other addons reached it through AceAddon before
 Corkboard.Sanitise = ns.Sanitise -- read by spikes/CorkSpike2 (spike 04)
 
-local DEFAULTS = { global = { boards = {} } }
+-- minimap is LibDBIcon's own table: minimapPos (degrees round the minimap) and hide.
+local DEFAULTS = { global = { boards = {}, minimap = { hide = false } } }
 local PREFIX = (NORMAL_FONT_COLOR_CODE or "|cffffd100") .. "Corkboard:|r " -- docs/ui-style.md
 local WARNING = "|cffffff00"
 local PUMP = 0.5 -- seconds between outbox pumps
@@ -144,8 +145,7 @@ function Corkboard:OnEnable()
 		ns.Net:Start()
 		self.sync:start()
 	end)
-	-- A launcher for broker displays. The minimap button (LibDBIcon) comes
-	-- once that library is vendored.
+	-- A launcher for broker displays, and the minimap button that shows it.
 	local LDB = LibStub("LibDataBroker-1.1", true)
 	if LDB then
 		self.launcher = LDB:NewDataObject(ADDON, {
@@ -160,10 +160,29 @@ function Corkboard:OnEnable()
 				for _, line in ipairs(ns.View.tooltipLines(self.store, self.sync)) do
 					tooltip:AddLine(line[1], line[2], line[3], line[4])
 				end
-				tooltip:AddLine("Click to open your boards.", 1, 1, 1)
+				tooltip:AddLine("Click to open your boards. Drag to move this button.", 1, 1, 1)
 			end,
 		})
+		local icon = LibStub("LibDBIcon-1.0", true)
+		if icon then
+			icon:Register(ADDON, self.launcher, self.db.global.minimap)
+		end
 	end
+end
+
+-- /cork minimap: shows or hides the minimap button, remembered per account.
+function Corkboard:ToggleMinimap()
+	local settings = self.db.global.minimap
+	settings.hide = not settings.hide
+	local icon = LibStub("LibDBIcon-1.0", true)
+	if icon then
+		if settings.hide then
+			icon:Hide(ADDON)
+		else
+			icon:Show(ADDON)
+		end
+	end
+	return settings.hide and "Minimap button hidden. /cork minimap brings it back." or "Minimap button shown."
 end
 
 local loader = CreateFrame("Frame")
@@ -275,6 +294,8 @@ function Corkboard:OnSlash(input)
 	elseif word == "debug" then
 		ns.Debug:Toggle()
 		return
+	elseif word == "minimap" then
+		lines = { self:ToggleMinimap() }
 	else
 		lines = ns.Commands.run(self.store, input)
 	end

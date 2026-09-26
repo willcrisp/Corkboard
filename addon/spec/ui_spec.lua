@@ -98,6 +98,32 @@ describe("the board window", function()
 		assert.is_false(client.env.CorkboardFrame:IsShown())
 	end)
 
+	it("puts a minimap button on the edge that opens the window and remembers where it was dragged", function()
+		local client = Client.new():login()
+		local button = client.env.LibDBIcon10_Corkboard
+		assert.is_table(button)
+		assert.are.equal(client.env.Minimap, button:GetParent())
+		assert.is_true(button:IsShown())
+		-- The default spot is 225 degrees: down and left of the centre, on the rim.
+		local point, anchor, _, x, y = unpack(button.anchorPoint)
+		assert.are.same({ "CENTER", client.env.Minimap }, { point, anchor })
+		assert.is_true(x < 0 and y < 0)
+		assert.is_true(math.abs(math.sqrt(x * x + y * y) - 75) < 1)
+		button:Run("OnClick", "LeftButton")
+		assert.is_true(client.env.CorkboardFrame:IsShown())
+
+		client.env.CorkboardDB.global.minimap.minimapPos = 90
+		has(client:slash("/cork minimap"), "Minimap button hidden.")
+		assert.is_false(button:IsShown())
+		local saved = client:reload()
+		local again = saved.env.LibDBIcon10_Corkboard
+		assert.is_false(again:IsShown())
+		has(saved:slash("/cork minimap"), "Minimap button shown.")
+		assert.is_true(again:IsShown())
+		local _, _, _, x2, y2 = unpack(again.anchorPoint)
+		assert.is_true(math.abs(x2) < 1e-6 and y2 > 0)
+	end)
+
 	it("starts empty, with only New enabled", function()
 		local client = openWindow()
 		assert.is_false(buttonNamed(client, "New Note").enabled)
