@@ -145,10 +145,20 @@ local function build()
 		end)
 	end
 	scroll:SetScrollChild(ui.edit)
-	box:EnableMouse(true)
-	box:SetScript("OnMouseDown", function()
-		ui.edit:SetFocus()
+	-- Clicks anywhere in the inset (including the empty space below the last
+	-- line) focus the note, with the cursor at the end of the text.
+	ui.edit:SetHeight(150 - 12)
+	scroll:SetScript("OnSizeChanged", function(_, _, height)
+		ui.edit:SetHeight(height)
 	end)
+	local function focusAtEnd()
+		ui.edit:SetFocus()
+		ui.edit:SetCursorPosition(#(ui.edit:GetText() or ""))
+	end
+	box:EnableMouse(true)
+	box:SetScript("OnMouseDown", focusAtEnd)
+	scroll:EnableMouse(true)
+	scroll:SetScript("OnMouseDown", focusAtEnd)
 	ns.Links.HookInsert(ui.edit)
 
 	local hint = frame:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
