@@ -330,7 +330,7 @@ function View.gearRows(entries, limit, now, myRealm)
 	return rows
 end
 
--- The Quests tab (§9.2) --------------------------------------------------------
+-- The Quests tab (§9.3) --------------------------------------------------------
 
 -- The member list: everyone sharing a quest log on the board, others by name
 -- and then you. Each row: { name, label, detail, online, class, you }.

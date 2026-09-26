@@ -25,7 +25,7 @@ Expected FNV-1a and digest values were computed with a short Python reference im
 - `name[]`: `{ name, input | input_hex, append?, ok }` for character names (`Name-Realm`).
 - `board_name[]`: `{ name, input | input_hex, repeat?, append?, ok }` for board names: 1–64 bytes of strict UTF-8 with at least one non-space, and no control characters or `|` at all (not even `||`).
 - `note`, `member` and `meta`: `{ base, cases[] }`. Each case's record is `input` if present. Otherwise it's `base` with `patch` merged over it and the fields in `remove` deleted. When `ok` is true, the sanitiser returns a copy equal to `output` (default: the record itself), with unknown fields dropped. When `ok` is false it returns `reason`. Fields are checked in this order:
-  - notes: `id`, `author`, `created`, `rev`, `editor`, `color`, `deleted`, `kind` (absent, `"gear"` for a gear-feed entry or `"quests"` for a member's quest log; kept in the output only when present), then the text reasons, then `tombstone_text`;
+  - notes: `id`, `author`, `created`, `rev`, `editor`, `color`, `deleted`, `kind` (absent, `"gear"` for a gear-feed entry, `"recipes"` for a recipe list or `"quests"` for a quest log; kept in the output only when present), then the text reasons, then `tombstone_text`;
   - members: `name`, `role`, `rev`, `editor`, `removed`;
   - meta (the board's name record): `name`, `rev`, `editor`.
 

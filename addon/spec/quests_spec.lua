@@ -1,4 +1,4 @@
--- Quest logs (docs/design.md §9.2): each member's quest log is one
+-- Quest logs (docs/design.md §9.3): each member's quest log is one
 -- quests-kind note of "id:level" pairs, shown on the Quests tab and by
 -- /cork quests, with the quests you're on too marked.
 
@@ -369,7 +369,7 @@ describe("quest logs in game", function()
 		network:advance(10, clients)
 
 		b:slash("/cork")
-		b.env.CorkboardFrameTab4:Click()
+		b.env.CorkboardFrameTab5:Click()
 		local ui = b.ns.Quests.Widgets()
 		assert.is_true(ui.share:GetChecked())
 		local members = ui.members.elements
@@ -448,7 +448,7 @@ describe("quest logs in game", function()
 		a:setQuests()
 		network:advance(10, clients)
 		a:slash("/cork")
-		a.env.CorkboardFrameTab4:Click()
+		a.env.CorkboardFrameTab5:Click()
 		local ui = a.ns.Quests.Widgets()
 		ui.share:SetChecked(false)
 		ui.share:Click()

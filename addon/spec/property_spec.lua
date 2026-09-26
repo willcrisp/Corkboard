@@ -55,11 +55,10 @@ local function randomNote(rand)
 		color = rand(2),
 		deleted = deleted,
 	}
-	local kind = rand(4)
-	if kind == 1 then
-		note.kind = "gear" -- so ties between kinds and plain notes come up
-	elseif kind == 2 then
-		note.kind = "quests"
+	if rand(3) == 1 then
+		-- so ties between kinds, and between a kind and a plain note, come up
+		local kinds = { "gear", "recipes", "quests" }
+		note.kind = kinds[rand(#kinds)]
 	end
 	if rand(20) == 1 then
 		note.rev = 0 -- invalid: must be dropped without disturbing anything

@@ -27,12 +27,16 @@ Sanitise.LINK_TYPES = {
 	mount = true,
 	battlepet = true,
 	journal = true,
+	enchant = true, -- a profession recipe (§9.2)
+	trade = true, -- a whole profession's recipe list
 }
 
 -- Note kinds (§4.2). A note without `kind` is an ordinary note; "gear" is an
--- entry in the board's gear feed (§9.1) and "quests" a member's quest log (§9.2).
+-- entry in the board's gear feed (§9.1), "recipes" a character's recipe list
+-- for one profession (§9.2) and "quests" a character's quest log (§9.3).
 Sanitise.KINDS = {
 	gear = true,
+	recipes = true,
 	quests = true,
 }
 

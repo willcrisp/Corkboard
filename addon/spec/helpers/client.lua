@@ -430,6 +430,9 @@ function Client.new(options)
 		sentAddon = {},
 		received = {},
 		equipped = options.equipped or {}, -- slot -> { link, quality }
+		-- The profession window: nil while closed, else { info, recipes (id -> fields), ready, linked }.
+		trade = nil,
+		spellNames = options.spellNames or {}, -- spell id -> name, for C_Spell.GetSpellName
 		-- The quest log, in order: { id, level } for a quest (its title comes
 		-- from Client.QUEST_DB) or { header = "Zone" }.
 		quests = options.quests or {},
@@ -664,7 +667,7 @@ function Client:makeEnv()
 	end
 	function env.GameTooltip.SetHyperlink(tooltip, link)
 		local kind = link:match("^(%a+):")
-		assert(kind == "item" or kind == "spell" or kind == "quest", "Unknown link type")
+		assert(kind == "item" or kind == "spell" or kind == "quest" or kind == "enchant", "Unknown link type")
 		tooltip.link = link
 	end
 	env.SetItemRef = function(link, text, button)
@@ -735,6 +738,47 @@ function Client:makeEnv()
 		local item = unit == "player" and client.equipped[slot]
 		return item and item.quality or nil
 	end
+	-- Professions, as Forever 1.60.1 answers (§2): nothing until the window is
+	-- open and ready, then the whole catalogue with `learned` flags.
+	local NO_PROFESSION = { professionID = 0, professionName = "", skillLevel = 0, maxSkillLevel = 0 }
+	local function trade()
+		return client.trade and client.trade.ready and client.trade or nil
+	end
+	env.C_TradeSkillUI = {
+		IsTradeSkillReady = function()
+			return trade() ~= nil
+		end,
+		IsTradeSkillLinked = function()
+			return trade() ~= nil and trade().linked == true
+		end,
+		GetBaseProfessionInfo = function()
+			return trade() and trade().info or NO_PROFESSION
+		end,
+		GetAllRecipeIDs = function()
+			local ids = {}
+			for id in pairs(trade() and trade().recipes or {}) do
+				ids[#ids + 1] = id
+			end
+			table.sort(ids)
+			return ids
+		end,
+		GetRecipeInfo = function(id)
+			local recipe = trade() and trade().recipes[id]
+			if not recipe then
+				return nil
+			end
+			local info = { recipeID = id }
+			for k, v in pairs(recipe) do
+				info[k] = v
+			end
+			return info
+		end,
+	}
+	env.C_Spell = {
+		GetSpellName = function(id)
+			return client.spellNames[id]
+		end,
+	}
 	env.C_QuestLog = {
 		GetNumQuestLogEntries = function()
 			local quests = 0
@@ -1114,6 +1158,7 @@ function Client:reload()
 		guild = self.guild,
 		network = self.network,
 		equipped = self.equipped,
+		spellNames = self.spellNames,
 		quests = self.quests,
 	})
 	-- The server keeps channel membership across a /reload.
@@ -1144,6 +1189,42 @@ end
 function Client:equip(slot, link, quality)
 	self.equipped[slot] = link and { link = link, quality = quality } or nil
 	self.fire("PLAYER_EQUIPMENT_CHANGED", slot, link == nil)
+	return self:check()
+end
+
+-- Opens a profession window: info as GetBaseProfessionInfo gives it, and
+-- recipes as id -> GetRecipeInfo fields ({ learned = true, name = ... }). The
+-- data arrives a moment later, as on the client: TRADE_SKILL_SHOW first,
+-- then TRADE_SKILL_LIST_UPDATE once it's ready. `linked` views someone else's.
+function Client:openProfession(info, recipes, linked)
+	self.trade = { info = info, recipes = recipes, ready = false, linked = linked }
+	self.fire("TRADE_SKILL_SHOW")
+	self.trade.ready = true
+	self.fire("TRADE_SKILL_LIST_UPDATE")
+	return self:check()
+end
+
+function Client:closeProfession()
+	self.trade = nil
+	self.fire("TRADE_SKILL_CLOSE")
+	return self:check()
+end
+
+-- Crafting fires TRADE_SKILL_LIST_UPDATE, and may raise the skill.
+function Client:craft(skill)
+	if skill then
+		self.trade.info.skillLevel = skill
+	end
+	self.fire("TRADE_SKILL_LIST_UPDATE")
+	return self:check()
+end
+
+function Client:learnRecipe(id, fields)
+	if self.trade then
+		self.trade.recipes[id] = fields
+	end
+	self.fire("NEW_RECIPE_LEARNED", id)
+	self.fire("TRADE_SKILL_LIST_UPDATE")
 	return self:check()
 end
 

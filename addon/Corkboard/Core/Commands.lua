@@ -45,7 +45,7 @@ local REASONS = {
 	escape = "Notes can hold links and colours, but not textures, icons or other escape codes.",
 	link = "That link is malformed.",
 	link_type = "That kind of link can't go on a board. Items, quests, spells, achievements, currencies, "
-		.. "mounts, battle pets and journal links can.",
+		.. "mounts, battle pets, journal, recipe and profession links can.",
 	id_space = "You've run out of note ids on this board.",
 	deleted = "That note has been deleted.",
 	missing = "That board or note no longer exists.",
@@ -95,7 +95,7 @@ end
 
 local plural = Commands.plural
 
--- Quest logs (§9.2) -----------------------------------------------------------
+-- Quest logs (§9.3) -----------------------------------------------------------
 
 -- The mark on a quest you're on too, in the Quests tab and in chat.
 Commands.SHARED_ICON = "Interface\\RaidFrame\\ReadyCheck-Ready"
@@ -113,7 +113,7 @@ function Commands.asOf(log, seen, now)
 end
 
 -- A quest's title from the client's quest data, or "Quest #id" until the
--- client has it. Only ids travel between members (§9.2).
+-- client has it. Only ids travel between members (§9.3).
 function Commands.questTitle(store, id)
 	local lookup = store.env.questTitle
 	local title = lookup and lookup(id)

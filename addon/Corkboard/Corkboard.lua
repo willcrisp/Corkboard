@@ -71,7 +71,59 @@ local function equippedItem(slot)
 	return itemId, link, quality
 end
 
--- The quest log (§9.2), as { id, level, title } for each quest, headers and
+-- The open profession window's profession and learned recipe ids (§9.2), or
+-- nil when no window is ready, it shows someone else's recipes (a linked,
+-- guild or NPC view), or anything read back is a secret value.
+local SKIPPED_VIEWS = { "IsTradeSkillLinked", "IsTradeSkillGuild", "IsNPCCrafting", "IsRuneforging" }
+local SKIPPED_RECIPES = { "isDummyRecipe", "isRecraft", "isSalvageRecipe", "isGatheringRecipe" }
+
+local function openProfession()
+	local T = C_TradeSkillUI
+	if not T or not T.IsTradeSkillReady or not T.IsTradeSkillReady() then
+		return nil
+	end
+	for _, check in ipairs(SKIPPED_VIEWS) do
+		if T[check] and T[check]() then
+			return nil
+		end
+	end
+	local info = T.GetBaseProfessionInfo and T.GetBaseProfessionInfo()
+	if type(info) ~= "table" then
+		return nil
+	end
+	local profession = {
+		id = info.professionID,
+		name = info.professionName,
+		skill = info.skillLevel,
+		max = info.maxSkillLevel,
+	}
+	for _, value in pairs(profession) do
+		if secret(value) then
+			return nil
+		end
+	end
+	if type(profession.id) ~= "number" or profession.id <= 0 then
+		return nil
+	end
+	local ids = {}
+	for _, id in ipairs(T.GetAllRecipeIDs() or {}) do
+		local recipe = not secret(id) and T.GetRecipeInfo(id)
+		if type(recipe) == "table" and not secret(recipe.learned) and recipe.learned == true then
+			local skip = false
+			for _, field in ipairs(SKIPPED_RECIPES) do
+				if secret(recipe[field]) or recipe[field] == true then
+					skip = true
+				end
+			end
+			if not skip then
+				ids[#ids + 1] = id
+			end
+		end
+	end
+	return profession, ids
+end
+
+-- The quest log (§9.3), as { id, level, title } for each quest, headers and
 -- hidden entries left out. Nil when the client has no quest log API or hands
 -- back a secret value, so nothing is published from it.
 local function readQuestLog()
@@ -143,7 +195,7 @@ function Corkboard:OnInitialize()
 		end,
 	}
 	self.store = ns.Store.new(self.db, self.env)
-	self.questTitles, self.questRequested = {}, {} -- quest id -> title, and titles asked for (§9.2)
+	self.questTitles, self.questRequested = {}, {} -- quest id -> title, and titles asked for (§9.3)
 	self.gate = ns.Gate.new(function(name)
 		return _G[name]
 	end)
@@ -175,11 +227,19 @@ function Corkboard:OnInitialize()
 		changed = function()
 			self:ChangedSoon()
 		end,
+		-- A joined board shares recipe lists once it has synced (§9.2).
+		synced = function(boardId)
+			self.store:shareRecipes(boardId)
+		end,
 	}
 	self.sync = ns.Sync.new(self.store, self.outbox, self.syncEnv)
 	self.store:listen(function(change)
 		if change.kind == "board" or change.kind == "deleted" then
 			ns.Net:Refresh()
+		end
+		-- A created or joined board gets this character's kept recipe lists (§9.2).
+		if change.kind == "board" then
+			self.store:shareRecipes(change.board)
 		end
 	end)
 	SLASH_CORK1 = "/cork"
@@ -195,6 +255,7 @@ function Corkboard:OnEnable()
 	-- Notes the companion fetched from the cloud since the last session (§7.2).
 	ns.Cloud.load(self.store, _G.CorkboardCloudData)
 	self:WatchGear()
+	self:WatchProfessions()
 	self:WatchQuests()
 	ns.Net:Init(self)
 	C_Timer.NewTicker(PUMP, function()
@@ -204,6 +265,7 @@ function Corkboard:OnEnable()
 	C_Timer.After(ns.Net.JOIN_DELAY, function()
 		self:Identify()
 		self:SeedGear() -- in case the name wasn't known at login
+		self.store:shareRecipes() -- kept scans, to boards joined on another character
 		self:ScanQuestsSoon()
 		ns.Net:Start()
 		self.sync:start()
@@ -344,7 +406,66 @@ function Corkboard:WatchGear()
 	end)
 end
 
--- Quest logs (§9.2) ----------------------------------------------------------------
+-- Professions tab (§9.2) -----------------------------------------------------------
+
+-- A scan is wanted when a profession window opens or switches profession, or
+-- a recipe is learned, and runs once the window's data is ready. Not on every
+-- TRADE_SKILL_LIST_UPDATE: that fires on each craft, and re-sending a recipe
+-- list per skill-up would use up the throttle (§5.6).
+local WANT_SCAN = { TRADE_SKILL_SHOW = true, TRADE_SKILL_DATA_SOURCE_CHANGED = true, NEW_RECIPE_LEARNED = true }
+
+function Corkboard:ScanProfession()
+	local profession, ids = openProfession()
+	if not profession then
+		return nil
+	end
+	self.scanWanted = false
+	self:Identify()
+	return self.store:learned(profession, ids)
+end
+
+function Corkboard:WatchProfessions()
+	if not C_TradeSkillUI or not C_TradeSkillUI.GetAllRecipeIDs then
+		return
+	end
+	local events = CreateFrame("Frame")
+	for _, event in ipairs({ "TRADE_SKILL_SHOW", "TRADE_SKILL_DATA_SOURCE_CHANGED", "TRADE_SKILL_LIST_UPDATE",
+		"NEW_RECIPE_LEARNED", "TRADE_SKILL_CLOSE" }) do
+		pcall(events.RegisterEvent, events, event) -- an event this client lacks raises an error
+	end
+	events:SetScript("OnEvent", function(_, event)
+		if WANT_SCAN[event] then
+			self.scanWanted = true
+		end
+		if self.scanWanted and event ~= "TRADE_SKILL_CLOSE" then
+			self:ScanProfession()
+		end
+	end)
+end
+
+-- A recipe's name on this client, or nil. The recipe id is the craft's spell
+-- id, so the spell API names recipes from professions this character lacks.
+local recipeNames = {}
+
+function Corkboard:RecipeName(id)
+	if recipeNames[id] then
+		return recipeNames[id]
+	end
+	local name
+	if C_Spell and C_Spell.GetSpellName then
+		name = C_Spell.GetSpellName(id)
+	end
+	if (secret(name) or name == nil) and GetSpellInfo then
+		name = GetSpellInfo(id)
+	end
+	if secret(name) or type(name) ~= "string" or name == "" then
+		return nil
+	end
+	recipeNames[id] = name
+	return name
+end
+
+-- Quest logs (§9.3) ----------------------------------------------------------------
 
 -- Reads the quest log and shares it. Nothing is read before the client's
 -- first QUEST_LOG_UPDATE: until then the log can look empty, and sharing an

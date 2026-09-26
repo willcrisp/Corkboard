@@ -1,4 +1,4 @@
--- The Quests tab (docs/design.md §9.2): what quests each member is on. The
+-- The Quests tab (docs/design.md §9.3): what quests each member is on. The
 -- members sharing a quest log are listed on the left; the one picked shows on
 -- the right, with a tick on every quest you're on too. It sits in the main
 -- window's note area while its tab is chosen, like the Members tab.
@@ -8,7 +8,7 @@ local View, Commands = ns.View, ns.Commands
 
 local Quests = {}
 ns.Quests = Quests
-Quests.TAB = 4 -- its bottom tab in the main window
+Quests.TAB = 5 -- its bottom tab in the main window
 
 local PAD = 10
 local MEMBER_ROW = 34

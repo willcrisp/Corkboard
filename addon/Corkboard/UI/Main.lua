@@ -408,9 +408,9 @@ local function build()
 	ui.count = frame:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
 	ui.count:SetPoint("BOTTOMRIGHT", -16, 10)
 
-	-- Bottom tabs: Notes, Members, Gear and Quests (docs/ui-style.md).
+	-- Bottom tabs: Notes, Members, Gear, Professions and Quests (docs/ui-style.md).
 	ui.tabs = {}
-	for i, label in ipairs({ "Notes", "Members", "Gear", "Quests" }) do
+	for i, label in ipairs({ "Notes", "Members", "Gear", "Professions", "Quests" }) do
 		local ok, tab = pcall(CreateFrame, "Button", "CorkboardFrameTab" .. i, frame, "PanelTabButtonTemplate")
 		if not ok then
 			tab = CreateFrame("Button", "CorkboardFrameTab" .. i, frame, "CharacterFrameTabButtonTemplate")
@@ -435,6 +435,7 @@ local function build()
 	end
 	ui.members = ns.Members:Build(notes)
 	ui.gear = ns.Gear:Build(notes)
+	ui.professions = ns.Professions:Build(notes)
 	ui.quests = ns.Quests:Build(notes)
 	ui.tab = 1
 
@@ -493,6 +494,7 @@ function Main:Refresh()
 	ui.tabs[2]:SetEnabled(current ~= nil)
 	ui.tabs[3]:SetEnabled(current ~= nil)
 	ui.tabs[4]:SetEnabled(current ~= nil)
+	ui.tabs[5]:SetEnabled(current ~= nil)
 
 	local all = current and Store.notes(current) or {}
 	local shown = View.filter(all, ui.search:GetText())
@@ -521,12 +523,15 @@ function Main:Refresh()
 	elseif ui.tab == 3 then
 		ns.Gear:Refresh(current)
 	elseif ui.tab == 4 then
+		ns.Professions:Refresh(current)
+	elseif ui.tab == 5 then
 		ns.Quests:Refresh(current)
 	end
 end
 
 -- Tab 1 is the notes; tab 2 the members, invite and sync options; tab 3 the
--- gear feed; tab 4 the members' quest logs.
+-- gear feed; tab 4 the members' professions and recipes; tab 5 their quest
+-- logs.
 function Main:ShowTab(index)
 	if index ~= 1 and not store():current() then
 		index = 1
@@ -542,7 +547,8 @@ function Main:ShowTab(index)
 	ui.empty:SetShown(index == 1)
 	ui.members:SetShown(index == 2)
 	ui.gear:SetShown(index == 3)
-	ui.quests:SetShown(index == 4)
+	ui.professions:SetShown(index == 4)
+	ui.quests:SetShown(index == 5)
 	if index ~= 1 then
 		ui.alert:Hide()
 	end

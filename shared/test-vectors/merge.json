@@ -301,21 +301,59 @@
       }
     },
     {
-      "name": "exact tie: quests beats gear (greater kind)",
+      "name": "exact tie: recipes beats gear (kinds compare byte-wise)",
       "board": {
         "clock": 1790000100,
         "notes": [
-          { "id": "a1b2c3d4-0007", "author": "Will-Realm", "created": 1790000000, "rev": 1790000100, "editor": "Bob-Realm", "text": "7:5", "color": 1, "deleted": false, "kind": "gear" }
+          { "id": "a1b2c3d4-0007", "author": "Will-Realm", "created": 1790000000, "rev": 1790000100, "editor": "Bob-Realm", "text": "note", "color": 1, "deleted": false, "kind": "gear" }
         ]
       },
       "apply": [
-        { "id": "a1b2c3d4-0007", "author": "Will-Realm", "created": 1790000000, "rev": 1790000100, "editor": "Bob-Realm", "text": "7:5", "color": 1, "deleted": false, "kind": "quests" }
+        { "id": "a1b2c3d4-0007", "author": "Will-Realm", "created": 1790000000, "rev": 1790000100, "editor": "Bob-Realm", "text": "note", "color": 1, "deleted": false, "kind": "recipes" }
       ],
       "results": ["stored"],
       "expect": {
         "clock": 1790000100,
         "notes": [
+          { "id": "a1b2c3d4-0007", "author": "Will-Realm", "created": 1790000000, "rev": 1790000100, "editor": "Bob-Realm", "text": "note", "color": 1, "deleted": false, "kind": "recipes" }
+        ]
+      }
+    },
+    {
+      "name": "a newer edit to a recipe list replaces its text and keeps the kind",
+      "board": {
+        "clock": 1790000100,
+        "notes": [
+          { "id": "a1b2c3d4-0007", "author": "Will-Realm", "created": 1790000000, "rev": 1790000100, "editor": "Bob-Realm", "text": "R1;165;47;75;1;Leatherworking\nr2l3", "color": 1, "deleted": false, "kind": "recipes" }
+        ]
+      },
+      "apply": [
+        { "id": "a1b2c3d4-0007", "author": "Will-Realm", "created": 1790000000, "rev": 1790000200, "editor": "Bob-Realm", "text": "R1;165;52;75;2;Leatherworking\nr2l3,1", "color": 1, "deleted": false, "kind": "recipes" }
+      ],
+      "results": ["stored"],
+      "expect": {
+        "clock": 1790000200,
+        "notes": [
+          { "id": "a1b2c3d4-0007", "author": "Will-Realm", "created": 1790000000, "rev": 1790000200, "editor": "Bob-Realm", "text": "R1;165;52;75;2;Leatherworking\nr2l3,1", "color": 1, "deleted": false, "kind": "recipes" }
+        ]
+      }
+    },
+    {
+      "name": "exact tie: recipes beats quests (kinds compare byte-wise)",
+      "board": {
+        "clock": 1790000100,
+        "notes": [
           { "id": "a1b2c3d4-0007", "author": "Will-Realm", "created": 1790000000, "rev": 1790000100, "editor": "Bob-Realm", "text": "7:5", "color": 1, "deleted": false, "kind": "quests" }
+        ]
+      },
+      "apply": [
+        { "id": "a1b2c3d4-0007", "author": "Will-Realm", "created": 1790000000, "rev": 1790000100, "editor": "Bob-Realm", "text": "7:5", "color": 1, "deleted": false, "kind": "recipes" }
+      ],
+      "results": ["stored"],
+      "expect": {
+        "clock": 1790000100,
+        "notes": [
+          { "id": "a1b2c3d4-0007", "author": "Will-Realm", "created": 1790000000, "rev": 1790000100, "editor": "Bob-Realm", "text": "7:5", "color": 1, "deleted": false, "kind": "recipes" }
         ]
       }
     },

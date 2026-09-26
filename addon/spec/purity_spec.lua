@@ -5,8 +5,8 @@
 -- Reading any other global, or writing a global, fails the load.
 
 -- Load order in Corkboard.toc (toc_spec checks the two agree).
-local CORE = { "Util", "Sanitise", "Merge", "Digest", "Invite", "Store", "Commands", "View", "Wire", "Gate", "Outbox",
-	"Sync", "Cloud" }
+local CORE = { "Util", "Sanitise", "Merge", "Digest", "Invite", "Recipes", "Store", "Commands", "View", "Wire", "Gate",
+	"Outbox", "Sync", "Cloud" }
 
 local BUILTINS = {
 	"assert", "error", "getmetatable", "ipairs", "next", "pairs", "pcall", "rawequal", "rawget", "rawset",

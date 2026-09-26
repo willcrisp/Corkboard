@@ -63,7 +63,7 @@ local function initRow(row, data)
 		row.shade = row:CreateTexture(nil, "BACKGROUND")
 		row.shade:SetAllPoints()
 		row.shade:SetColorTexture(1, 1, 1, 0.03)
-		-- A click shows the member's quest log (§9.2).
+		-- A click shows the member's quest log (§9.3).
 		row:SetHighlightTexture("Interface\\QuestFrame\\UI-QuestTitleHighlight", "ADD")
 		row:SetScript("OnClick", function(self)
 			ns.Quests:ShowMember(boardId, self.member)
