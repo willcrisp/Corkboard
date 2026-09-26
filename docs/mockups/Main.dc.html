@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Corkboard board view</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Marcellus&amp;family=PT+Sans+Narrow:wght@400;700&amp;display=swap">
+<style>
+body{margin:0;background:#1c2024;font-family:'PT Sans Narrow',sans-serif;color:#e6e6e6}
+a{text-decoration:none}a:hover{text-decoration:underline}
+button{font-family:inherit}
+</style>
+</helmet>
+<div style="width: 1280px; height: 800px; box-sizing: border-box; padding: 72px 0 0 180px; background: #1c2024;">
+<div style="position: relative; width: 920px; height: 620px; box-sizing: border-box; display: flex; flex-direction: column; background: #1b1a18; border: 3px solid #2e2b27; border-radius: 4px; box-shadow: 0 0 0 1px #000000, inset 0 0 0 1px #4d4840, 0 20px 50px rgba(0,0,0,0.7);">
+
+<div style="position: absolute; left: -16px; top: -16px; width: 64px; height: 64px; box-sizing: border-box; z-index: 5; display: flex; align-items: center; justify-content: center; border-radius: 32px; background: #24211d; border: 3px solid #3b3731; box-shadow: 0 0 0 1px #000000, inset 0 0 0 1px #6a6358, 0 3px 8px rgba(0,0,0,0.6);">
+<svg width="30" height="30" viewBox="0 0 24 24" aria-hidden="true" style="fill: none; stroke: #c9b88e; stroke-width: 1.6; stroke-linejoin: round; stroke-linecap: round;"><path d="M5 4h14v11l-5 5H5z"></path><path d="M14 20v-5h5"></path><path d="M8 9h8M8 12h6"></path></svg>
+</div>
+
+<div style="position: relative; height: 26px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; background: #0f0e0d; border-bottom: 1px solid #3a3630; font-family: 'Marcellus', Georgia, serif; font-size: 14px; color: #ffd100;">
+Corkboard
+<button aria-label="Close" style="position: absolute; right: 3px; top: 2px; width: 22px; height: 20px; display: flex; align-items: center; justify-content: center; background: #3b100c; border: 1px solid #120403; border-radius: 3px; box-shadow: inset 0 1px 0 #6a2a20; cursor: pointer;">
+<svg width="11" height="11" viewBox="0 0 24 24" aria-hidden="true" style="fill: none; stroke: #e0c9b0; stroke-width: 3; stroke-linecap: round;"><path d="M6 6l12 12M18 6L6 18"></path></svg>
+</button>
+</div>
+
+<div style="height: 44px; flex-shrink: 0; box-sizing: border-box; padding: 0 12px 0 64px; display: flex; align-items: center; gap: 10px;">
+<div style="font-family: 'Marcellus', Georgia, serif; font-size: 17px; color: #ffffff;">Molten Core prep</div>
+<div style="font-size: 14px; color: #9d9d9d;">6 members</div>
+<div style="flex-grow: 1;"></div>
+<div style="position: relative; width: 200px;">
+<svg width="13" height="13" viewBox="0 0 24 24" aria-hidden="true" style="position: absolute; left: 7px; top: 6px; fill: none; stroke: #8a8378; stroke-width: 2.5; stroke-linecap: round;"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-3.5-3.5"></path></svg>
+<input type="text" aria-label="Search notes" placeholder="Search" style="width: 100%; height: 25px; box-sizing: border-box; padding: 0 8px 0 26px; background: #0b0a09; border: 1px solid #4a453e; border-radius: 3px; box-shadow: inset 0 1px 2px rgba(0,0,0,0.8); color: #ffffff; font-family: inherit; font-size: 14px;">
+</div>
+<button style="height: 25px; padding: 0 14px; background: linear-gradient(#6e1a12, #4a0f0a); border: 1px solid #140403; border-radius: 3px; box-shadow: inset 0 1px 0 rgba(255,190,120,0.25); color: #ffd100; font-family: 'Marcellus', Georgia, serif; font-size: 13px; cursor: pointer;">New Note</button>
+</div>
+
+<div style="flex-grow: 1; min-height: 0; box-sizing: border-box; padding: 0 10px; display: flex; gap: 8px;">
+
+<div style="width: 200px; flex-shrink: 0; box-sizing: border-box; padding: 8px 6px; display: flex; flex-direction: column; gap: 2px; background: #0f0e0d; border: 1px solid #34302b; box-shadow: inset 0 1px 3px rgba(0,0,0,0.9);">
+<div style="padding: 2px 6px 6px; font-family: 'Marcellus', Georgia, serif; font-size: 13px; color: #ffd100;">Boards</div>
+<button style="display: flex; flex-direction: column; align-items: flex-start; gap: 1px; width: 100%; box-sizing: border-box; padding: 5px 8px; background: rgba(255,209,0,0.08); border: 1px solid rgba(255,209,0,0.28); border-radius: 2px; color: #ffffff; text-align: left; cursor: pointer;">
+<span style="font-size: 15px; font-weight: 700;">Molten Core prep</span>
+<span style="display: flex; align-items: center; gap: 5px; font-size: 13px; color: #9d9d9d;"><span style="width: 6px; height: 6px; border-radius: 3px; background: #4f9a47;"></span>3 online</span>
+</button>
+<button style="display: flex; flex-direction: column; align-items: flex-start; gap: 1px; width: 100%; box-sizing: border-box; padding: 5px 8px; background: transparent; border: 1px solid transparent; border-radius: 2px; color: #ffffff; text-align: left; cursor: pointer;">
+<span style="font-size: 15px;">Guild bank wishlist</span>
+<span style="display: flex; align-items: center; gap: 5px; font-size: 13px; color: #9d9d9d;"><span style="width: 6px; height: 6px; border-radius: 3px; background: #b8903a;"></span>Guild · 2 queued</span>
+</button>
+<button style="display: flex; flex-direction: column; align-items: flex-start; gap: 1px; width: 100%; box-sizing: border-box; padding: 5px 8px; background: transparent; border: 1px solid transparent; border-radius: 2px; color: #ffffff; text-align: left; cursor: pointer;">
+<span style="font-size: 15px;">Alt levelling route</span>
+<span style="display: flex; align-items: center; gap: 5px; font-size: 13px; color: #9d9d9d;"><span style="width: 6px; height: 6px; box-sizing: border-box; border-radius: 3px; border: 1px solid #7a7a7a;"></span>Nobody online</span>
+</button>
+<div style="flex-grow: 1;"></div>
+<div style="display: flex; gap: 4px; padding: 0 2px;">
+<button style="flex-grow: 1; height: 22px; background: linear-gradient(#6e1a12, #4a0f0a); border: 1px solid #140403; border-radius: 3px; box-shadow: inset 0 1px 0 rgba(255,190,120,0.25); color: #ffd100; font-family: 'Marcellus', Georgia, serif; font-size: 12px; cursor: pointer;">New</button>
+<button style="flex-grow: 1; height: 22px; background: linear-gradient(#6e1a12, #4a0f0a); border: 1px solid #140403; border-radius: 3px; box-shadow: inset 0 1px 0 rgba(255,190,120,0.25); color: #ffd100; font-family: 'Marcellus', Georgia, serif; font-size: 12px; cursor: pointer;">Join</button>
+</div>
+</div>
+
+<div style="position: relative; flex-grow: 1; min-width: 0; box-sizing: border-box; padding: 10px 22px 10px 10px; background: #0f0e0d; border: 1px solid #34302b; box-shadow: inset 0 1px 3px rgba(0,0,0,0.9);">
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px;">
+
+<div style="position: relative; box-sizing: border-box; min-height: 118px; padding: 8px 10px 10px; display: flex; flex-direction: column; gap: 5px; background: #1f1d1a; border: 1px solid #36322c; border-radius: 2px;">
+<div style="display: flex; align-items: center; gap: 6px; font-size: 13px; color: #9d9d9d;"><span style="width: 8px; height: 8px; background: #9a7a3c; border: 1px solid #000000;"></span>Will<span style="flex-grow: 1;"></span>2h</div>
+<div style="font-size: 16px; line-height: 1.35; color: #e6e6e6;">Need 4x <a href="#" style="color: #a335ee;">[Fiery Core]</a> and 2x <a href="#" style="color: #a335ee;">[Lava Core]</a> for the fire-res cloak. Anyone with spares, mail Will.</div>
+<div style="position: absolute; left: 96px; top: 56px; width: 210px; z-index: 10; box-sizing: border-box; padding: 7px 9px; display: flex; flex-direction: column; gap: 2px; background: rgba(6,8,14,0.96); border: 1px solid #5f646e; border-radius: 3px; box-shadow: 0 4px 12px rgba(0,0,0,0.7); font-size: 14px;">
+<div style="font-size: 15px; color: #a335ee;">Fiery Core</div>
+<div style="color: #66bbff;">Crafting Reagent</div>
+</div>
+</div>
+
+<div style="box-sizing: border-box; min-height: 118px; padding: 8px 10px 10px; display: flex; flex-direction: column; gap: 5px; background: #1f1d1a; border: 1px solid #36322c; border-radius: 2px;">
+<div style="display: flex; align-items: center; gap: 6px; font-size: 13px; color: #9d9d9d;"><span style="width: 8px; height: 8px; background: #4f6f92; border: 1px solid #000000;"></span>Bob<span style="flex-grow: 1;"></span>40m</div>
+<div style="font-size: 16px; line-height: 1.35; color: #e6e6e6;">Everyone bring 3x <a href="#" style="color: #ffffff;">[Greater Fire Protection Potion]</a>. Swap to fire-res gear before the first boss.</div>
+</div>
+
+<div style="box-sizing: border-box; min-height: 118px; padding: 8px 10px 10px; display: flex; flex-direction: column; gap: 5px; background: #1f1d1a; border: 1px solid #36322c; border-radius: 2px;">
+<div style="display: flex; align-items: center; gap: 6px; font-size: 13px; color: #9d9d9d;"><span style="width: 8px; height: 8px; background: #5d7d4c; border: 1px solid #000000;"></span>Kaelthra · edited by Mira<span style="flex-grow: 1;"></span>14m</div>
+<div style="font-size: 16px; line-height: 1.35; color: #e6e6e6;"><a href="#" style="color: #ffff00;">[Attunement to the Core]</a> done: Bob, Kaelthra, Will. Still need Mira and Dorn.</div>
+</div>
+
+<div style="box-sizing: border-box; min-height: 118px; padding: 8px 10px 10px; display: flex; flex-direction: column; gap: 5px; background: #1f1d1a; border: 1px solid #36322c; border-radius: 2px;">
+<div style="display: flex; align-items: center; gap: 6px; font-size: 13px; color: #9d9d9d;"><span style="width: 8px; height: 8px; background: #8f5563; border: 1px solid #000000;"></span>Will<span style="flex-grow: 1;"></span>1d</div>
+<div style="font-size: 16px; line-height: 1.35; color: #e6e6e6;">Raid Tuesday 7:30pm server time. Flasks if you have them, otherwise <a href="#" style="color: #ffffff;">[Elixir of the Mongoose]</a>.</div>
+</div>
+
+<div style="box-sizing: border-box; min-height: 118px; padding: 8px 10px 10px; display: flex; flex-direction: column; gap: 5px; background: #24221e; border: 1px solid #6b624f; border-radius: 2px;">
+<div style="display: flex; align-items: center; gap: 6px; font-size: 13px; color: #9d9d9d;"><span style="width: 8px; height: 8px; background: #6d5c8f; border: 1px solid #000000;"></span>Dorn<span style="flex-grow: 1;"></span>
+<button aria-label="Edit note" style="width: 20px; height: 18px; display: flex; align-items: center; justify-content: center; background: #2c2925; border: 1px solid #000000; border-radius: 2px; cursor: pointer;"><svg width="11" height="11" viewBox="0 0 24 24" aria-hidden="true" style="fill: none; stroke: #c8c0b0; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round;"><path d="M4 20h4L19 9l-4-4L4 16v4z"></path></svg></button>
+<button aria-label="Delete note" style="width: 20px; height: 18px; display: flex; align-items: center; justify-content: center; background: #2c2925; border: 1px solid #000000; border-radius: 2px; cursor: pointer;"><svg width="11" height="11" viewBox="0 0 24 24" aria-hidden="true" style="fill: none; stroke: #c8c0b0; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round;"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"></path></svg></button>
+</div>
+<div style="font-size: 16px; line-height: 1.35; color: #e6e6e6;">Loot plan: <a href="#" style="color: #a335ee;">[Onslaught Girdle]</a> to Dorn first, then Bob. Rolls for everything else.</div>
+</div>
+
+<div style="box-sizing: border-box; min-height: 118px; padding: 8px 10px 10px; display: flex; flex-direction: column; gap: 5px; background: #1f1d1a; border: 1px solid #36322c; border-radius: 2px;">
+<div style="display: flex; align-items: center; gap: 6px; font-size: 13px; color: #9d9d9d;"><span style="width: 8px; height: 8px; background: #9a7a3c; border: 1px solid #000000;"></span>Mira<span style="flex-grow: 1;"></span>5h</div>
+<div style="font-size: 16px; line-height: 1.35; color: #e6e6e6;">Repair before you zone in. There's a repair vendor at Thorium Point if you're coming from the south.</div>
+</div>
+
+</div>
+<div style="position: absolute; right: 5px; top: 8px; bottom: 8px; width: 8px; display: flex; flex-direction: column; align-items: center; gap: 3px;">
+<svg width="8" height="6" viewBox="0 0 8 6" aria-hidden="true" style="fill: #6a6358;"><path d="M4 0L8 6H0z"></path></svg>
+<div style="flex-grow: 1; width: 4px; border-radius: 2px; background: #1e1c19;"><div style="width: 4px; height: 70%; border-radius: 2px; background: #57524a;"></div></div>
+<svg width="8" height="6" viewBox="0 0 8 6" aria-hidden="true" style="fill: #6a6358;"><path d="M0 0h8L4 6z"></path></svg>
+</div>
+</div>
+
+</div>
+
+<div style="height: 30px; flex-shrink: 0; box-sizing: border-box; padding: 0 14px; display: flex; align-items: center; gap: 7px; font-size: 14px; color: #9d9d9d;">
+<span style="width: 6px; height: 6px; border-radius: 3px; background: #4f9a47;"></span>
+Synced with Bob 3m ago · Cloud 2h ago
+<span style="flex-grow: 1;"></span>
+6 notes
+</div>
+
+<div style="position: absolute; left: 20px; bottom: -31px; display: flex; gap: 2px; align-items: flex-start;">
+<div style="height: 30px; box-sizing: border-box; padding: 0 18px; display: flex; align-items: center; background: #1b1a18; border: 3px solid #2e2b27; border-top: none; border-radius: 0 0 6px 6px; box-shadow: 0 0 0 1px #000000; font-family: 'Marcellus', Georgia, serif; font-size: 13px; color: #ffffff;">Notes</div>
+<div style="height: 26px; box-sizing: border-box; padding: 0 18px; display: flex; align-items: center; background: #121110; border: 3px solid #26231f; border-top: none; border-radius: 0 0 6px 6px; box-shadow: 0 0 0 1px #000000; font-family: 'Marcellus', Georgia, serif; font-size: 13px; color: #ffd100;">Members</div>
+<div style="height: 26px; box-sizing: border-box; padding: 0 18px; display: flex; align-items: center; background: #121110; border: 3px solid #26231f; border-top: none; border-radius: 0 0 6px 6px; box-shadow: 0 0 0 1px #000000; font-family: 'Marcellus', Georgia, serif; font-size: 13px; color: #ffd100;">Settings</div>
+</div>
+
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":800}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Corkboard members and invites</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Marcellus&amp;family=PT+Sans+Narrow:wght@400;700&amp;display=swap">
+<style>
+body{margin:0;background:#1c2024;font-family:'PT Sans Narrow',sans-serif;color:#e6e6e6}
+a{text-decoration:none}a:hover{text-decoration:underline}
+button{font-family:inherit}
+</style>
+</helmet>
+<div style="position: relative; width: 1400px; height: 800px; box-sizing: border-box; background: #1c2024;">
+
+<div style="position: absolute; left: 60px; top: 72px; width: 920px; height: 620px; box-sizing: border-box; display: flex; flex-direction: column; background: #1b1a18; border: 3px solid #2e2b27; border-radius: 4px; box-shadow: 0 0 0 1px #000000, inset 0 0 0 1px #4d4840, 0 20px 50px rgba(0,0,0,0.7);">
+
+<div style="position: absolute; left: -16px; top: -16px; width: 64px; height: 64px; box-sizing: border-box; z-index: 5; display: flex; align-items: center; justify-content: center; border-radius: 32px; background: #24211d; border: 3px solid #3b3731; box-shadow: 0 0 0 1px #000000, inset 0 0 0 1px #6a6358, 0 3px 8px rgba(0,0,0,0.6);">
+<svg width="30" height="30" viewBox="0 0 24 24" aria-hidden="true" style="fill: none; stroke: #c9b88e; stroke-width: 1.6; stroke-linejoin: round; stroke-linecap: round;"><path d="M5 4h14v11l-5 5H5z"></path><path d="M14 20v-5h5"></path><path d="M8 9h8M8 12h6"></path></svg>
+</div>
+
+<div style="position: relative; height: 26px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; background: #0f0e0d; border-bottom: 1px solid #3a3630; font-family: 'Marcellus', Georgia, serif; font-size: 14px; color: #ffd100;">
+Corkboard
+<button aria-label="Close" style="position: absolute; right: 3px; top: 2px; width: 22px; height: 20px; display: flex; align-items: center; justify-content: center; background: #3b100c; border: 1px solid #120403; border-radius: 3px; box-shadow: inset 0 1px 0 #6a2a20; cursor: pointer;">
+<svg width="11" height="11" viewBox="0 0 24 24" aria-hidden="true" style="fill: none; stroke: #e0c9b0; stroke-width: 3; stroke-linecap: round;"><path d="M6 6l12 12M18 6L6 18"></path></svg>
+</button>
+</div>
+
+<div style="height: 44px; flex-shrink: 0; box-sizing: border-box; padding: 0 12px 0 64px; display: flex; align-items: center; gap: 10px;">
+<div style="font-family: 'Marcellus', Georgia, serif; font-size: 17px; color: #ffffff;">Molten Core prep</div>
+<div style="font-size: 14px; color: #9d9d9d;">You're the owner</div>
+</div>
+
+<div style="flex-grow: 1; min-height: 0; margin: 0 10px; box-sizing: border-box; padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; background: #0f0e0d; border: 1px solid #34302b; box-shadow: inset 0 1px 3px rgba(0,0,0,0.9);">
+
+<div style="font-family: 'Marcellus', Georgia, serif; font-size: 13px; color: #ffd100;">Invite</div>
+<div style="display: flex; align-items: center; gap: 8px;">
+<div style="flex-grow: 1; height: 24px; box-sizing: border-box; padding: 0 8px; display: flex; align-items: center; overflow: hidden; white-space: nowrap; background: #0b0a09; border: 1px solid #4a453e; border-radius: 2px; box-shadow: inset 0 1px 3px rgba(0,0,0,0.9); font-size: 14px;"><span style="background: #2d4f86; color: #ffffff;">CORK1:azNmOXgybTdxMXB6OGM0d3xmUzl2S2VyUjJ0QlhwN3FHbUx6eHxXaWxs</span></div>
+<button style="height: 24px; padding: 0 14px; background: linear-gradient(#6e1a12, #4a0f0a); border: 1px solid #140403; border-radius: 3px; box-shadow: inset 0 1px 0 rgba(255,190,120,0.25); color: #ffd100; font-family: 'Marcellus', Georgia, serif; font-size: 13px; cursor: pointer;">Rotate Secret</button>
+</div>
+<div style="font-size: 14px; color: #9d9d9d;">Selected. Press Ctrl+C to copy. Anyone with this string can read and edit the board.</div>
+
+<div style="display: flex; gap: 28px; padding-top: 2px;">
+<div style="display: flex; align-items: center; gap: 6px; font-size: 15px;">
+<button aria-pressed="true" aria-label="Cloud sync" style="width: 18px; height: 18px; box-sizing: border-box; padding: 0; display: flex; align-items: center; justify-content: center; background: #0b0a09; border: 1px solid #6a6358; border-radius: 2px; cursor: pointer;"><svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true" style="fill: none; stroke: #ffd100; stroke-width: 3.5; stroke-linecap: round; stroke-linejoin: round;"><path d="M5 12l5 5 9-10"></path></svg></button>
+<span>Cloud sync</span>
+</div>
+<div style="display: flex; align-items: center; gap: 6px; font-size: 15px;">
+<button aria-pressed="false" aria-label="Also sync over guild chat" style="width: 18px; height: 18px; box-sizing: border-box; padding: 0; background: #0b0a09; border: 1px solid #6a6358; border-radius: 2px; cursor: pointer;"></button>
+<span>Also sync over guild chat</span>
+</div>
+</div>
+
+<div style="height: 1px; background: #2a2723; margin: 4px 0;"></div>
+
+<div style="font-family: 'Marcellus', Georgia, serif; font-size: 13px; color: #ffd100;">Members</div>
+<div style="display: flex; flex-direction: column;">
+<div style="display: flex; gap: 2px; height: 22px;">
+<div style="width: 200px; box-sizing: border-box; padding: 0 8px; display: flex; align-items: center; background: #26231f; border: 1px solid #000000; font-size: 14px; color: #ffffff;">Name</div>
+<div style="width: 110px; box-sizing: border-box; padding: 0 8px; display: flex; align-items: center; background: #26231f; border: 1px solid #000000; font-size: 14px; color: #ffffff;">Role</div>
+<div style="width: 180px; box-sizing: border-box; padding: 0 8px; display: flex; align-items: center; background: #26231f; border: 1px solid #000000; font-size: 14px; color: #ffffff;">Last Seen</div>
+<div style="flex-grow: 1; box-sizing: border-box; padding: 0 8px; display: flex; align-items: center; background: #26231f; border: 1px solid #000000; font-size: 14px; color: #ffffff;">Sync</div>
+</div>
+<sc-for list="{{ members }}" as="m" hint-placeholder-count="6">
+<div style="display: flex; gap: 2px; align-items: center; height: 26px; font-size: 15px; background: {{ m.rowBg }};">
+<div style="width: 200px; box-sizing: border-box; padding: 0 8px; color: {{ m.color }};">{{ m.name }}</div>
+<div style="width: 110px; box-sizing: border-box; padding: 0 8px; color: {{ m.dim }};">{{ m.role }}</div>
+<div style="width: 180px; box-sizing: border-box; padding: 0 8px; color: {{ m.dim }};">{{ m.seen }}</div>
+<div style="flex-grow: 1; box-sizing: border-box; padding: 0 8px; color: {{ m.dim }};">{{ m.sync }}</div>
+<div style="width: 30px; display: flex; justify-content: center;">
+<sc-if value="{{ m.removable }}" hint-placeholder-val="{{ true }}">
+<button aria-label="{{ m.removeLabel }}" style="width: 18px; height: 18px; display: flex; align-items: center; justify-content: center; background: #2c2925; border: 1px solid #000000; border-radius: 2px; cursor: pointer;"><svg width="9" height="9" viewBox="0 0 24 24" aria-hidden="true" style="fill: none; stroke: #b0a898; stroke-width: 3; stroke-linecap: round;"><path d="M6 6l12 12M18 6L6 18"></path></svg></button>
+</sc-if>
+</div>
+</div>
+</sc-for>
+</div>
+</div>
+
+<div style="height: 30px; flex-shrink: 0; box-sizing: border-box; padding: 0 14px; display: flex; align-items: center; gap: 7px; font-size: 14px; color: #9d9d9d;">
+<span style="width: 6px; height: 6px; border-radius: 3px; background: #4f9a47;"></span>
+Synced with Bob 3m ago · Cloud 2h ago
+</div>
+
+<div style="position: absolute; left: 20px; bottom: -31px; display: flex; gap: 2px; align-items: flex-start;">
+<div style="height: 26px; box-sizing: border-box; padding: 0 18px; display: flex; align-items: center; background: #121110; border: 3px solid #26231f; border-top: none; border-radius: 0 0 6px 6px; box-shadow: 0 0 0 1px #000000; font-family: 'Marcellus', Georgia, serif; font-size: 13px; color: #ffd100;">Notes</div>
+<div style="height: 30px; box-sizing: border-box; padding: 0 18px; display: flex; align-items: center; background: #1b1a18; border: 3px solid #2e2b27; border-top: none; border-radius: 0 0 6px 6px; box-shadow: 0 0 0 1px #000000; font-family: 'Marcellus', Georgia, serif; font-size: 13px; color: #ffffff;">Members</div>
+<div style="height: 26px; box-sizing: border-box; padding: 0 18px; display: flex; align-items: center; background: #121110; border: 3px solid #26231f; border-top: none; border-radius: 0 0 6px 6px; box-shadow: 0 0 0 1px #000000; font-family: 'Marcellus', Georgia, serif; font-size: 13px; color: #ffd100;">Settings</div>
+</div>
+</div>
+
+<div style="position: absolute; left: 1030px; top: 110px; width: 330px; box-sizing: border-box; padding: 16px 16px 14px; display: flex; flex-direction: column; align-items: center; gap: 10px; background: #1b1a18; border: 3px solid #2e2b27; border-radius: 4px; box-shadow: 0 0 0 1px #000000, inset 0 0 0 1px #4d4840, 0 16px 40px rgba(0,0,0,0.7);">
+<div style="font-family: 'Marcellus', Georgia, serif; font-size: 14px; line-height: 1.4; color: #ffffff; text-align: center;">Paste a Corkboard invite to join a board.</div>
+<div style="width: 100%; height: 24px; box-sizing: border-box; padding: 0 8px; display: flex; align-items: center; overflow: hidden; white-space: nowrap; background: #0b0a09; border: 1px solid #4a453e; border-radius: 2px; box-shadow: inset 0 1px 3px rgba(0,0,0,0.9); font-size: 14px; color: #ffffff;">CORK1:azNmOXgybTdxMXB6OGM0d3xmUzl2S2Vy…</div>
+<div style="font-size: 14px; color: #9d9d9d; text-align: center;">Molten Core prep · owner <span style="color: #c69b6d;">Will</span> · 3 online</div>
+<div style="display: flex; gap: 8px;">
+<button style="width: 110px; height: 24px; background: linear-gradient(#6e1a12, #4a0f0a); border: 1px solid #140403; border-radius: 3px; box-shadow: inset 0 1px 0 rgba(255,190,120,0.25); color: #ffd100; font-family: 'Marcellus', Georgia, serif; font-size: 13px; cursor: pointer;">Join</button>
+<button style="width: 110px; height: 24px; background: linear-gradient(#6e1a12, #4a0f0a); border: 1px solid #140403; border-radius: 3px; box-shadow: inset 0 1px 0 rgba(255,190,120,0.25); color: #ffd100; font-family: 'Marcellus', Georgia, serif; font-size: 13px; cursor: pointer;">Cancel</button>
+</div>
+</div>
+
+<div style="position: absolute; left: 1030px; top: 330px; width: 330px; box-sizing: border-box; padding: 16px 16px 14px; display: flex; flex-direction: column; align-items: center; gap: 12px; background: #1b1a18; border: 3px solid #2e2b27; border-radius: 4px; box-shadow: 0 0 0 1px #000000, inset 0 0 0 1px #4d4840, 0 16px 40px rgba(0,0,0,0.7);">
+<div style="font-family: 'Marcellus', Georgia, serif; font-size: 14px; line-height: 1.4; color: #ffffff; text-align: center;">Remove <span style="color: #9d9d9d;">Mira</span> from Molten Core prep?<br>This rotates the secret. Everyone you keep will need the new invite.</div>
+<div style="display: flex; gap: 8px;">
+<button style="width: 110px; height: 24px; background: linear-gradient(#6e1a12, #4a0f0a); border: 1px solid #140403; border-radius: 3px; box-shadow: inset 0 1px 0 rgba(255,190,120,0.25); color: #ffd100; font-family: 'Marcellus', Georgia, serif; font-size: 13px; cursor: pointer;">Remove</button>
+<button style="width: 110px; height: 24px; background: linear-gradient(#6e1a12, #4a0f0a); border: 1px solid #140403; border-radius: 3px; box-shadow: inset 0 1px 0 rgba(255,190,120,0.25); color: #ffd100; font-family: 'Marcellus', Georgia, serif; font-size: 13px; cursor: pointer;">Cancel</button>
+</div>
+</div>
+
+<div style="position: absolute; left: 1030px; top: 510px; width: 330px; box-sizing: border-box; padding: 16px 16px 14px; display: flex; flex-direction: column; align-items: center; gap: 12px; background: #1b1a18; border: 3px solid #2e2b27; border-radius: 4px; box-shadow: 0 0 0 1px #000000, inset 0 0 0 1px #4d4840, 0 16px 40px rgba(0,0,0,0.7);">
+<div style="font-family: 'Marcellus', Georgia, serif; font-size: 14px; line-height: 1.4; color: #ffffff; text-align: center;">That invite is out of date. Ask the board owner for a new one.</div>
+<button style="width: 110px; height: 24px; background: linear-gradient(#6e1a12, #4a0f0a); border: 1px solid #140403; border-radius: 3px; box-shadow: inset 0 1px 0 rgba(255,190,120,0.25); color: #ffd100; font-family: 'Marcellus', Georgia, serif; font-size: 13px; cursor: pointer;">Okay</button>
+</div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1400,"height":800}}'>
+class Component extends DCLogic {
+  renderVals() {
+    var grey = '#9d9d9d';
+    function row(i, name, cls, role, seen, sync, online, removable) {
+      return {
+        name: name, role: role, seen: seen, sync: sync, removable: removable,
+        removeLabel: 'Remove ' + name,
+        color: online ? cls : grey,
+        dim: online ? '#e6e6e6' : grey,
+        rowBg: i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.03)'
+      };
+    }
+    return {
+      members: [
+        row(0, 'Will', '#c69b6d', 'Owner', 'Online', 'Up to date', true, false),
+        row(1, 'Bob', '#3fc7eb', 'Member', 'Online', 'Up to date', true, true),
+        row(2, 'Kaelthra', '#ffffff', 'Member', 'Online', 'Up to date', true, true),
+        row(3, 'Mira', '#ff7c0a', 'Member', '3 hours', '3 notes behind', false, true),
+        row(4, 'Dorn', '#f48cba', 'Member', '1 day', 'Cloud only', false, true),
+        row(5, 'Pixxel', '#fff468', 'Member', '2 days', 'Cloud only', false, true)
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

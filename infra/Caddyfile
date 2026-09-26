@@ -1,0 +1,12 @@
+# Replace with your public hostname. Caddy fetches the TLS certificate automatically
+# (ports 80 and 443 must be reachable). See docs/design.md §8.
+corkboard.example.com {
+	request_body {
+		max_size 64KB
+	}
+	reverse_proxy api:8000
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		-Server
+	}
+}

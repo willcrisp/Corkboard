@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Corkboard sync states</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Marcellus&amp;family=PT+Sans+Narrow:wght@400;700&amp;display=swap">
+<style>
+body{margin:0;background:#1c2024;font-family:'PT Sans Narrow',sans-serif;color:#e6e6e6}
+a{text-decoration:none}
+button{font-family:inherit}
+</style>
+</helmet>
+<div style="width: 960px; height: 700px; box-sizing: border-box; padding: 40px; background: #1c2024; display: flex; gap: 40px;">
+
+<div style="width: 420px; flex-shrink: 0; display: flex; flex-direction: column; gap: 10px;">
+<div style="font-family: 'Marcellus', Georgia, serif; font-size: 14px; color: #ffd100;">Status line</div>
+<sc-for list="{{ states }}" as="s" hint-placeholder-count="6">
+<div style="display: flex; flex-direction: column; gap: 3px;">
+<div style="height: 30px; box-sizing: border-box; padding: 0 12px; display: flex; align-items: center; gap: 7px; background: #1b1a18; border: 1px solid #2e2b27; box-shadow: 0 0 0 1px #000000; font-size: 14px; color: #9d9d9d;">
+<span style="width: 6px; height: 6px; flex-shrink: 0; box-sizing: border-box; border-radius: 3px; background: {{ s.dot }}; border: 1px solid {{ s.ring }};"></span>
+<span style="color: {{ s.lead }};">{{ s.label }}</span>
+<span>{{ s.detail }}</span>
+</div>
+<div style="font-size: 13px; color: #8a8a8a; padding-left: 2px;">{{ s.when }}</div>
+</div>
+</sc-for>
+</div>
+
+<div style="flex-grow: 1; display: flex; flex-direction: column; gap: 10px;">
+<div style="font-family: 'Marcellus', Georgia, serif; font-size: 14px; color: #ffd100;">Alert strip</div>
+<div style="display: flex; align-items: center; gap: 8px; box-sizing: border-box; padding: 6px 8px 6px 12px; background: #1b1a18; border: 1px solid #4a3f2a; box-shadow: 0 0 0 1px #000000; font-size: 15px;">
+<span style="flex-grow: 1; color: #ffd100;">142 notes behind. The companion will fetch the rest, then /reload.</span>
+<button style="height: 22px; padding: 0 10px; background: linear-gradient(#6e1a12, #4a0f0a); border: 1px solid #140403; border-radius: 3px; box-shadow: inset 0 1px 0 rgba(255,190,120,0.25); color: #ffd100; font-family: 'Marcellus', Georgia, serif; font-size: 12px; cursor: pointer;">Reload</button>
+<button aria-label="Dismiss" style="width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; background: transparent; border: none; cursor: pointer;"><svg width="10" height="10" viewBox="0 0 24 24" aria-hidden="true" style="fill: none; stroke: #9d9d9d; stroke-width: 3; stroke-linecap: round;"><path d="M6 6l12 12M18 6L6 18"></path></svg></button>
+</div>
+<div style="display: flex; align-items: center; box-sizing: border-box; padding: 6px 12px; background: #1b1a18; border: 1px solid #4a3f2a; box-shadow: 0 0 0 1px #000000; font-size: 15px; color: #ffd100;">Sync paused during the encounter. 3 edits will send when it ends.</div>
+
+<div style="font-family: 'Marcellus', Georgia, serif; font-size: 14px; color: #ffd100; padding-top: 12px;">Chat output</div>
+<div style="box-sizing: border-box; padding: 8px 10px; display: flex; flex-direction: column; gap: 2px; background: rgba(0,0,0,0.35); font-size: 15px; line-height: 1.35; text-shadow: 1px 1px 0 #000000;">
+<div><span style="color: #ffd100;">Corkboard:</span> Joined Molten Core prep. Pulling notes from <span style="color: #3fc7eb;">Bob</span>.</div>
+<div><span style="color: #ffd100;">Corkboard:</span> Synced 7 notes.</div>
+<div><span style="color: #ffd100;">Corkboard:</span> Sync paused (encounter). 3 edits queued.</div>
+<div><span style="color: #ffd100;">Corkboard:</span> 3 edits sent.</div>
+</div>
+
+<div style="font-family: 'Marcellus', Georgia, serif; font-size: 14px; color: #ffd100; padding-top: 12px;">Minimap button</div>
+<div style="display: flex; align-items: flex-start; gap: 12px;">
+<button aria-label="Open Corkboard" style="width: 32px; height: 32px; flex-shrink: 0; box-sizing: border-box; display: flex; align-items: center; justify-content: center; border-radius: 16px; background: #1b1a18; border: 3px solid #5d5445; box-shadow: 0 0 0 1px #000000; cursor: pointer;">
+<svg width="15" height="15" viewBox="0 0 24 24" aria-hidden="true" style="fill: none; stroke: #c9b88e; stroke-width: 2; stroke-linejoin: round;"><path d="M5 4h14v11l-5 5H5z"></path><path d="M14 20v-5h5"></path></svg>
+</button>
+<div style="flex-grow: 1; box-sizing: border-box; padding: 7px 10px; display: flex; flex-direction: column; gap: 2px; background: rgba(6,8,14,0.96); border: 1px solid #5f646e; border-radius: 3px; box-shadow: 0 4px 12px rgba(0,0,0,0.7); font-size: 15px;">
+<div style="font-size: 16px; color: #ffffff;">Corkboard</div>
+<div style="display: flex; justify-content: space-between; gap: 12px;"><span style="color: #ffd100;">Molten Core prep</span><span style="color: #ffffff;">3 online</span></div>
+<div style="display: flex; justify-content: space-between; gap: 12px;"><span style="color: #ffd100;">Guild bank wishlist</span><span style="color: #ffffff;">2 queued</span></div>
+<div style="display: flex; justify-content: space-between; gap: 12px;"><span style="color: #ffd100;">Alt levelling route</span><span style="color: #9d9d9d;">Nobody online</span></div>
+<div style="height: 6px;"></div>
+<div style="color: #9d9d9d;">Left-click to open. Right-click to pin a board.</div>
+</div>
+</div>
+</div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":960,"height":700}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      states: [
+        { label: 'Synced with Bob 3m ago', detail: '· Cloud 2h ago', when: 'Matches a member seen in the last 10 minutes', dot: '#4f9a47', ring: '#4f9a47', lead: '#e6e6e6' },
+        { label: 'Syncing', detail: '· 12 notes from Kaelthra', when: 'Catching up after a HELLO', dot: 'transparent', ring: '#5a8cc0', lead: '#e6e6e6' },
+        { label: 'Paused', detail: '· 3 edits queued', when: 'Encounter, death or res. Sends when allowed again', dot: '#b8903a', ring: '#b8903a', lead: '#e6e6e6' },
+        { label: '142 notes behind', detail: '· /reload after cloud sync', when: 'Too big for in-game sync. Newest 20 pulled', dot: '#b8663a', ring: '#b8663a', lead: '#e6e6e6' },
+        { label: 'Nobody online', detail: '· Cloud 1d ago', when: 'Showing your last local copy', dot: 'transparent', ring: '#7a7a7a', lead: '#9d9d9d' },
+        { label: 'In-game sync only', detail: '· cloud off', when: 'Catch-up needs another member online', dot: '#7a7a7a', ring: '#7a7a7a', lead: '#9d9d9d' }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

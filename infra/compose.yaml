@@ -1,0 +1,36 @@
+# Corkboard sync API, deployed as an Arcane project.
+# See docs/design.md §8. Replace <you> and set TAG.
+services:
+  api:
+    image: ghcr.io/<you>/corkboard-api:${TAG:-latest}
+    restart: unless-stopped
+    environment:
+      CORK_DB: /data/corkboard.db
+      CORK_MAX_BODY: "65536"
+      CORK_TRUSTED_PROXY: caddy
+    volumes: [corkboard-data:/data]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:8000/v1/health')"]
+      interval: 30s
+    networks: [internal]
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports: ["80:80", "443:443"]
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+    networks: [internal]
+
+  backup:
+    image: alpine
+    command: ["sh", "-c", "apk add sqlite && while true; do sqlite3 /data/corkboard.db \".backup /data/backup-$$(date +%a).db\"; sleep 86400; done"]
+    volumes: [corkboard-data:/data]
+
+volumes:
+  corkboard-data: {}
+  caddy-data: {}
+
+networks:
+  internal: {}
