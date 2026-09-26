@@ -1,0 +1,385 @@
+-- A fake WoW client: just enough API to load addon/Corkboard/Corkboard.toc
+-- with its real libraries, log in, run slash commands, and write
+-- SavedVariables out and read them back the way a /reload does.
+--
+-- Each Client.new is a fresh client session with its own global table, so
+-- nothing leaks from one "session" to the next except the saved text.
+-- It models none of the client's timing or restrictions; it's for catching
+-- load-order, wiring and persistence bugs.
+
+local Client = {}
+Client.__index = Client
+
+local ADDON_DIR = "addon/Corkboard/"
+
+local LUA_GLOBALS = {
+	"assert", "collectgarbage", "error", "getfenv", "getmetatable", "ipairs", "loadstring", "next", "pairs",
+	"pcall", "print", "rawequal", "rawget", "rawset", "select", "setfenv", "setmetatable", "tonumber",
+	"tostring", "type", "unpack", "xpcall", "coroutine", "math", "string", "table",
+}
+
+-- Frames --------------------------------------------------------------------
+
+local Frame = {}
+Frame.__index = function(_, key)
+	return Frame[key] or function() end -- anything else is a no-op
+end
+
+function Frame:RegisterEvent(event)
+	self.events[event] = true
+end
+
+function Frame:UnregisterEvent(event)
+	self.events[event] = nil
+end
+
+function Frame:UnregisterAllEvents()
+	self.events = {}
+end
+
+function Frame:IsEventRegistered(event)
+	return self.events[event] or false
+end
+
+function Frame:SetScript(name, fn)
+	self.scripts[name] = fn
+end
+
+function Frame:GetScript(name)
+	return self.scripts[name]
+end
+
+function Frame:HookScript(name, fn)
+	local old = self.scripts[name]
+	self.scripts[name] = function(...)
+		if old then
+			old(...)
+		end
+		fn(...)
+	end
+end
+
+function Frame:Show()
+	self.shown = true
+end
+
+function Frame:Hide()
+	self.shown = false
+end
+
+function Frame:IsShown()
+	return self.shown
+end
+
+-- Saved variables -------------------------------------------------------------
+
+-- Writes a value as Lua source, the way the client writes SavedVariables.
+local function serialize(value, indent)
+	local t = type(value)
+	if t == "string" then
+		return string.format("%q", value)
+	elseif t == "number" then
+		if value % 1 == 0 and math.abs(value) < 2 ^ 53 then
+			return string.format("%.0f", value)
+		end
+		return string.format("%.17g", value)
+	elseif t == "boolean" then
+		return tostring(value)
+	elseif t == "table" then
+		local keys = {}
+		for k in pairs(value) do
+			keys[#keys + 1] = k
+		end
+		table.sort(keys, function(a, b)
+			return tostring(a) < tostring(b)
+		end)
+		local inner = indent .. "\t"
+		local out = { "{\n" }
+		for _, k in ipairs(keys) do
+			out[#out + 1] = ("%s[%s] = %s,\n"):format(inner, serialize(k, inner), serialize(value[k], inner))
+		end
+		out[#out + 1] = indent .. "}"
+		return table.concat(out)
+	end
+	error("can't save a " .. t)
+end
+
+-- The client ------------------------------------------------------------------
+
+-- options: saved (SavedVariables text from a previous session), name, realm,
+-- guid, now (server time).
+function Client.new(options)
+	options = options or {}
+	local self = setmetatable({
+		frames = {},
+		chat = {},
+		errors = {},
+		timers = {},
+		loggedIn = false,
+		now = options.now or 1790000000,
+		time = 1000,
+		saved = options.saved,
+		name = options.name or "Will",
+		realm = options.realm or "Mirage Raceway",
+		guid = options.guid or "Player-4372-0ABCDEF0",
+	}, Client)
+	self.env = self:makeEnv()
+	return self
+end
+
+function Client:makeEnv()
+	local client = self
+	local env = {}
+	for _, name in ipairs(LUA_GLOBALS) do
+		env[name] = _G[name]
+	end
+	env._G = env
+	-- WoW's xpcall passes extra arguments on to the function, like Lua 5.2's.
+	env.xpcall = function(fn, handler, ...)
+		local args, n = { ... }, select("#", ...)
+		return xpcall(function()
+			return fn(unpack(args, 1, n))
+		end, handler)
+	end
+
+	local function fire(event, ...)
+		for _, frame in ipairs(client.frames) do
+			if frame.events[event] and frame.scripts.OnEvent then
+				frame.scripts.OnEvent(frame, event, ...)
+			end
+		end
+	end
+	client.fire = fire
+
+	env.CreateFrame = function(kind, name)
+		local frame = setmetatable({ kind = kind, events = {}, scripts = {}, shown = true }, Frame)
+		client.frames[#client.frames + 1] = frame
+		if name then
+			env[name] = frame
+		end
+		return frame
+	end
+	env.hooksecurefunc = function(target, name, hook)
+		if type(target) == "string" then
+			target, name, hook = env, target, name
+		end
+		local original = target[name]
+		target[name] = function(...)
+			local results = { original(...) }
+			hook(...)
+			return unpack(results)
+		end
+	end
+	env.securecallfunction = function(fn, ...)
+		return fn(...)
+	end
+	-- Libraries run addon callbacks under xpcall with this handler, so errors
+	-- are collected here and Client:check() raises them.
+	env.geterrorhandler = function()
+		return function(err)
+			client.errors[#client.errors + 1] = tostring(err)
+		end
+	end
+	env.issecretvalue = function()
+		return false
+	end
+	env.IsLoggedIn = function()
+		return client.loggedIn
+	end
+	env.GetTime = function()
+		return client.time
+	end
+	env.GetFramerate = function()
+		return 60
+	end
+	env.GetServerTime = function()
+		return client.now
+	end
+	env.GetLocale = function()
+		return "enUS"
+	end
+	env.GetCurrentRegion = function()
+		return 3
+	end
+	env.GetCurrentRegionName = function()
+		return "EU"
+	end
+	env.GetRealmName = function()
+		return client.realm
+	end
+	env.GetNormalizedRealmName = function()
+		return (client.realm:gsub("[%s%-]", ""))
+	end
+	env.UnitName = function()
+		return client.name
+	end
+	env.UnitFullName = function()
+		return client.name, env.GetNormalizedRealmName()
+	end
+	env.UnitGUID = function()
+		return client.guid
+	end
+	env.UnitClass = function()
+		return "Mage", "MAGE", 8
+	end
+	env.UnitRace = function()
+		return "Gnome", "Gnome", 7
+	end
+	env.UnitFactionGroup = function()
+		return "Alliance", "Alliance"
+	end
+	env.Ambiguate = function(name)
+		return name
+	end
+	env.Enum = { SendAddonMessageResult = { Success = 0, AddonMessageThrottle = 3, AddOnMessageLockdown = 11 } }
+	env.C_ChatInfo = {
+		RegisterAddonMessagePrefix = function()
+			return 0
+		end,
+		IsAddonMessagePrefixRegistered = function()
+			return false
+		end,
+		InChatMessagingLockdown = function()
+			return false
+		end,
+		SendAddonMessage = function()
+			error("Corkboard doesn't send addon messages in Phase 1")
+		end,
+		SendAddonMessageLogged = function()
+			error("Corkboard doesn't send addon messages in Phase 1")
+		end,
+	}
+	env.C_Timer = {
+		After = function(seconds, fn)
+			client.timers[#client.timers + 1] = { at = client.time + seconds, fn = fn }
+		end,
+	}
+	env.SlashCmdList = {}
+	env.hash_SlashCmdList = {}
+	env.NORMAL_FONT_COLOR_CODE = "|cffffd100"
+	env.DEFAULT_CHAT_FRAME = {
+		AddMessage = function(_, text)
+			client.chat[#client.chat + 1] = text
+		end,
+	}
+	return env
+end
+
+function Client:loadLua(path)
+	local chunk = assert(loadfile(path))
+	setfenv(chunk, self.env)
+	chunk("Corkboard", self.ns)
+end
+
+function Client:loadXml(path)
+	local dir = path:match("^(.*/)") or ""
+	local f = assert(io.open(path, "rb"))
+	local xml = f:read("*a")
+	f:close()
+	for tag, file in xml:gmatch("<(%a+)%s+file=\"([^\"]+)\"") do
+		local sub = dir .. file:gsub("\\", "/")
+		if tag == "Script" then
+			self:loadLua(sub)
+		elseif tag == "Include" then
+			self:loadXml(sub)
+		end
+	end
+end
+
+-- The files Corkboard.toc lists, in order, with "/" separators.
+function Client.tocFiles()
+	local files = {}
+	for line in io.lines(ADDON_DIR .. "Corkboard.toc") do
+		line = line:gsub("%s+$", "")
+		if line ~= "" and not line:find("^#") then
+			files[#files + 1] = (line:gsub("\\", "/"))
+		end
+	end
+	return files
+end
+
+-- Loads the addon, then its SavedVariables, then logs in, like the client.
+function Client:login()
+	self.ns = {}
+	for _, file in ipairs(Client.tocFiles()) do
+		if file:find("%.xml$") then
+			self:loadXml(ADDON_DIR .. file)
+		else
+			self:loadLua(ADDON_DIR .. file)
+		end
+	end
+	if self.saved then
+		local chunk = assert(loadstring(self.saved, "SavedVariables/Corkboard.lua"))
+		setfenv(chunk, self.env)
+		chunk()
+	end
+	self.fire("ADDON_LOADED", "Corkboard")
+	self.loggedIn = true
+	self.fire("PLAYER_LOGIN")
+	self.fire("PLAYER_ENTERING_WORLD", true, false)
+	return self:check()
+end
+
+-- Raises any error a library caught and passed to the error handler.
+function Client:check()
+	if #self.errors > 0 then
+		error("Lua errors in the client:\n" .. table.concat(self.errors, "\n"), 2)
+	end
+	return self
+end
+
+-- Advances the clock, running any C_Timer callbacks that come due.
+function Client:advance(seconds)
+	self.time = self.time + seconds
+	self.now = self.now + seconds
+	local due = {}
+	for i = #self.timers, 1, -1 do
+		if self.timers[i].at <= self.time then
+			due[#due + 1] = table.remove(self.timers, i)
+		end
+	end
+	for i = #due, 1, -1 do
+		due[i].fn()
+	end
+end
+
+-- Runs "/cork ..." through the registered slash handler. Returns the chat
+-- lines it printed, joined by "\n".
+function Client:slash(text)
+	local command, rest = text:match("^(/%S+)%s*(.*)$")
+	local first = #self.chat + 1
+	for key, value in pairs(self.env) do
+		local id = type(key) == "string" and key:match("^SLASH_(.-)%d+$")
+		if id and type(value) == "string" and value:lower() == command:lower() then
+			self.env.SlashCmdList[id](rest, {})
+			self:check()
+			return table.concat(self.chat, "\n", first)
+		end
+	end
+	error("no slash command " .. command)
+end
+
+-- Logs out and returns the SavedVariables text the client would write.
+function Client:logout()
+	self.fire("PLAYER_LOGOUT")
+	self:check()
+	local db = self.env.CorkboardDB
+	if db == nil then
+		return nil
+	end
+	return "CorkboardDB = " .. serialize(db, "") .. "\n"
+end
+
+-- A /reload: log out, then log in again as a fresh session from the saved text.
+function Client:reload()
+	local saved = self:logout()
+	return Client.new({
+		saved = saved,
+		now = self.now,
+		name = self.name,
+		realm = self.realm,
+		guid = self.guid,
+	}):login()
+end
+
+return Client

@@ -77,7 +77,7 @@ The same **merge core** (§4.3) runs in the addon (Lua 5.1) and in the companion
 ### 4.1 Board
 
 ```lua
-CorkboardDB.boards[boardId] = {
+CorkboardDB.global.boards[boardId] = {
   id       = "k3f9x2m7q1pz8c4w",   -- 16 chars, random base36
   meta     = BoardMeta,            -- the board's name, replicated LWW (below)
   secret   = "…24 chars…",         -- shared by members: channel password + cloud credential
@@ -92,11 +92,15 @@ CorkboardDB.boards[boardId] = {
 }
 ```
 
+- **Storage.** `CorkboardDB` is an AceDB database. Boards live in its account-wide `global` section, so every character on the account sees the same boards. The selected board is per character (`CorkboardDB.char["Name - Realm"].current`). AceDB also writes its own `profileKeys`. The companion reads boards from `CorkboardDB.global.boards`.
+- **Every change goes through the merge core.** Creating a board names it with `Merge.setMeta` and adds the creator as owner with `Merge.setMember`. Renaming is `Merge.setMeta`. Note changes are `Merge.createNote`, `editNote` and `deleteNote`.
+- **Deleting a board is local.** It removes the board from this account and isn't replicated. Other members keep their copies, and without the secret this client never hears the board again unless someone re-invites it. Closing a board for everyone is an open question (§14).
+
 ### 4.2 Note
 
 ```lua
 Note = {
-  id      = "a1b2c3d4-0007",   -- <8-char hash of author GUID>-<per-author counter>
+  id      = "a1b2c3d4-0007",   -- <prefix>-<counter>, see "Note ids" below
   author  = "Will-Realm",
   created = 1790000123,
   rev     = 1790000456,        -- §4.3
@@ -106,6 +110,12 @@ Note = {
   deleted = false,             -- tombstone; text cleared when true
 }
 ```
+
+**Note ids** are `<prefix>-<counter>`:
+
+- **Prefix:** `%08x` of FNV1a32 (§4.4) over the author's `UnitGUID("player")`. It's computed once at login, never from a secret value, so it's plain data by the time a note carries it. It's the same on every install of a character.
+- **Counter:** one more than the highest counter of any note on this board whose id has my prefix, tombstones included. Counters are compared as numbers and written with at least 4 digits (`0007`), up to 999,999,999, which keeps ids within the sanitiser's 18 bytes.
+- **Why the board, not the install:** a counter kept in each install's SavedVariables would let one character playing on two computers create two different notes with the same id, and LWW would silently discard one. Taken from the board, the counter moves past everything this client has seen. So only two installs creating notes while neither has seen the other's can still collide, which is accepted for v1. It also keeps two characters whose prefixes collide off each other's ids once their notes have synced.
 
 `MemberRecord = { name, role = "owner"|"member", rev, editor, removed }` uses the same last-write-wins (LWW) rules as notes.
 
@@ -323,6 +333,7 @@ corkboard.<domain> {
 - **Editor:** multiline EditBox, shift-click links, character counter, colour picker.
 - **Share:** "Copy invite" produces `CORK1:<base64(boardId|secret|ownerName)>`. "Join" takes a pasted string.
 - **Slash commands:** `/cork`, `/cork join <invite>`, `/cork sync`, `/cork debug`.
+- **Phase 1 store commands**, for testing before the UI exists: `/cork boards`, `create <name>`, `use <board>`, `rename <name>`, `deleteboard <board>`, `list`, `add <text>`, `edit <note> <text>`, `color <note> <1-5>` and `delete <note>`. A board is named by its name or id (or an unambiguous id prefix). A note is named by its `#counter` when that's unique on the board, otherwise by its full id. Output goes to the default chat frame with a gold `Corkboard:` prefix.
 - Works with Forever's modern and Classic visual presets (no reliance on retail-only art atlases; verify in Phase 1).
 
 ---
@@ -404,3 +415,4 @@ corkboard.<domain> {
 2. Public IP with port forwarding, or a Cloudflare Tunnel (CGNAT, or to avoid opening ports)?
 3. Delete permissions: can any member delete any note, or only the author and the owner? This is enforceable at the API and UI level only.
 4. Guild boards: auto-join for the whole guild, or invite-only?
+5. Board deletion is local-only (§4.1). Should the owner be able to close a board for everyone? That would need a replicated flag in BoardMeta, plus an answer to question 3 about who may do it.

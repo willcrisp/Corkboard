@@ -1,10 +1,11 @@
--- The merge core must not touch the WoW API (docs/design.md §11). This loads
--- the Core files the way the client does, with ("Corkboard", ns) as the
+-- The merge core must not touch the WoW API (docs/design.md §11), and nor
+-- must the rest of Core/ (the store and /cork commands). This loads the Core
+-- files the way the client does, with ("Corkboard", ns) as the
 -- vararg and no `require`, in an environment holding only Lua 5.1 builtins.
 -- Reading any other global, or writing a global, fails the load.
 
--- Load order for the TOC.
-local CORE = { "Util", "Sanitise", "Merge", "Digest" }
+-- Load order in Corkboard.toc (toc_spec checks the two agree).
+local CORE = { "Util", "Sanitise", "Merge", "Digest", "Store", "Commands" }
 
 local BUILTINS = {
 	"assert", "error", "getmetatable", "ipairs", "next", "pairs", "pcall", "rawequal", "rawget", "rawset",
@@ -55,5 +56,23 @@ describe("merge core purity", function()
 		assert(ns.Merge.deleteNote(board, "a1b2c3d4-0001", "Bob-Realm", 1790000000))
 		assert(ns.Merge.setMember(board, "Bob-Realm", "member", false, "Will-Realm", 1790000000))
 		assert.is_number(ns.Digest.compute(board.notes).digest)
+	end)
+
+	it("runs the store and /cork commands inside the sandbox", function()
+		local ns = loadCore()
+		local env = {
+			now = function()
+				return 1790000000
+			end,
+			rand = function(n)
+				return n
+			end,
+			me = "Will-Realm",
+			prefix = ns.Store.notePrefix("Player-1-00000001"),
+		}
+		local store = ns.Store.new({ global = { boards = {} }, char = {} }, env)
+		assert(ns.Commands.run(store, "create MC")[1]:find("Created board MC", 1, true))
+		assert(ns.Commands.run(store, "add hello")[1]:find("Added #1", 1, true))
+		assert(ns.Commands.run(store, "list")[2]:find("#1 hello", 1, true))
 	end)
 end)

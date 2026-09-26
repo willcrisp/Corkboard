@@ -1,0 +1,30 @@
+## Interface: 16001
+## Title: Corkboard
+## Notes: Shared post-it boards with item, quest and spell links.
+## Author: Will
+## Version: 0.1.0-dev
+## SavedVariables: CorkboardDB
+
+# Libraries (docs/design.md §13)
+Libs\LibStub\LibStub.lua
+Libs\CallbackHandler-1.0\CallbackHandler-1.0.xml
+Libs\AceAddon-3.0\AceAddon-3.0.xml
+Libs\AceEvent-3.0\AceEvent-3.0.xml
+Libs\AceTimer-3.0\AceTimer-3.0.xml
+Libs\AceDB-3.0\AceDB-3.0.xml
+Libs\AceConsole-3.0\AceConsole-3.0.xml
+Libs\AceComm-3.0\AceComm-3.0.xml
+Libs\LibSerialize\lib.xml
+Libs\LibDeflate\lib.xml
+Libs\LibDataBroker-1.1\LibDataBroker-1.1.lua
+
+# Merge core: pure Lua, in this order
+Core\Util.lua
+Core\Sanitise.lua
+Core\Merge.lua
+Core\Digest.lua
+
+# Store and /cork commands (pure Lua), then the WoW wrapper
+Core\Store.lua
+Core\Commands.lua
+Corkboard.lua
