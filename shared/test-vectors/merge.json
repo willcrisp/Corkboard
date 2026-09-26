@@ -542,5 +542,101 @@
         ]
       }
     }
+  ],
+  "meta": [
+    {
+      "name": "into an empty board",
+      "board": { "clock": 0 },
+      "apply": [
+        { "name": "Molten Core prep", "rev": 1790000100, "editor": "Will-Realm" }
+      ],
+      "results": ["stored"],
+      "expect": { "clock": 1790000100, "meta": { "name": "Molten Core prep", "rev": 1790000100, "editor": "Will-Realm" } }
+    },
+    {
+      "name": "newer rename wins",
+      "board": { "clock": 1790000100, "meta": { "name": "Molten Core prep", "rev": 1790000100, "editor": "Will-Realm" } },
+      "apply": [
+        { "name": "BWL prep", "rev": 1790000200, "editor": "Bob-Realm" }
+      ],
+      "results": ["stored"],
+      "expect": { "clock": 1790000200, "meta": { "name": "BWL prep", "rev": 1790000200, "editor": "Bob-Realm" } }
+    },
+    {
+      "name": "stale rename loses",
+      "board": { "clock": 1790000200, "meta": { "name": "BWL prep", "rev": 1790000200, "editor": "Bob-Realm" } },
+      "apply": [
+        { "name": "Molten Core prep", "rev": 1790000150, "editor": "Will-Realm" }
+      ],
+      "results": ["stale"],
+      "expect": { "clock": 1790000200, "meta": { "name": "BWL prep", "rev": 1790000200, "editor": "Bob-Realm" } }
+    },
+    {
+      "name": "same rev: the greater editor wins",
+      "board": { "clock": 1790000300, "meta": { "name": "Amy's name", "rev": 1790000300, "editor": "Amy-Realm" } },
+      "apply": [
+        { "name": "Bob's name", "rev": 1790000300, "editor": "Bob-Realm" }
+      ],
+      "results": ["stored"],
+      "expect": { "clock": 1790000300, "meta": { "name": "Bob's name", "rev": 1790000300, "editor": "Bob-Realm" } }
+    },
+    {
+      "name": "exact tie: the greater name wins, byte-wise",
+      "board": { "clock": 1790000300, "meta": { "name": "MC prep", "rev": 1790000300, "editor": "Will-Realm" } },
+      "apply": [
+        { "name": "mc prep", "rev": 1790000300, "editor": "Will-Realm" }
+      ],
+      "results": ["stored"],
+      "expect": { "clock": 1790000300, "meta": { "name": "mc prep", "rev": 1790000300, "editor": "Will-Realm" } }
+    },
+    {
+      "name": "exact tie: the lesser name loses",
+      "board": { "clock": 1790000300, "meta": { "name": "mc prep", "rev": 1790000300, "editor": "Will-Realm" } },
+      "apply": [
+        { "name": "MC prep", "rev": 1790000300, "editor": "Will-Realm" }
+      ],
+      "results": ["stale"],
+      "expect": { "clock": 1790000300, "meta": { "name": "mc prep", "rev": 1790000300, "editor": "Will-Realm" } }
+    },
+    {
+      "name": "identical copy is stale",
+      "board": { "clock": 1790000300, "meta": { "name": "MC prep", "rev": 1790000300, "editor": "Will-Realm" } },
+      "apply": [
+        { "name": "MC prep", "rev": 1790000300, "editor": "Will-Realm" }
+      ],
+      "results": ["stale"],
+      "expect": { "clock": 1790000300, "meta": { "name": "MC prep", "rev": 1790000300, "editor": "Will-Realm" } }
+    },
+    {
+      "name": "invalid name is dropped and leaves the clock alone",
+      "board": { "clock": 1790000100, "meta": { "name": "Molten Core prep", "rev": 1790000100, "editor": "Will-Realm" } },
+      "apply": [
+        { "name": "", "rev": 1790000200, "editor": "Bob-Realm" }
+      ],
+      "results": ["name"],
+      "expect": { "clock": 1790000100, "meta": { "name": "Molten Core prep", "rev": 1790000100, "editor": "Will-Realm" } }
+    },
+    {
+      "name": "renames in any order",
+      "board": { "clock": 0 },
+      "apply": [
+        { "name": "B", "rev": 1790000200, "editor": "Bob-Realm" },
+        { "name": "A", "rev": 1790000100, "editor": "Amy-Realm" },
+        { "name": "C", "rev": 1790000300, "editor": "Amy-Realm" }
+      ],
+      "results": ["stored", "stale", "stored"],
+      "expect": { "clock": 1790000300, "meta": { "name": "C", "rev": 1790000300, "editor": "Amy-Realm" } }
+    },
+    {
+      "name": "mixed batch",
+      "board": { "clock": 0 },
+      "apply": [
+        { "name": "A", "rev": 1790000100, "editor": "Amy-Realm" },
+        { "name": "X", "rev": 1790000400, "editor": "Bob" },
+        { "name": "B", "rev": 1790000200, "editor": "Bob-Realm" }
+      ],
+      "results": ["stored", "editor", "stored"],
+      "expect": { "clock": 1790000200, "meta": { "name": "B", "rev": 1790000200, "editor": "Bob-Realm" } }
+    }
   ]
 }

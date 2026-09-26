@@ -189,6 +189,65 @@ describe("digest line hash", function()
 	end)
 end)
 
+-- Board meta (the replicated name) follows the same laws --------------------------
+
+local BOARD_NAMES = { "MC", "mc", "BWL prep", "Øystein's raid" }
+
+local function randomMeta(rand)
+	local meta = { name = pick(rand, BOARD_NAMES), rev = T0 + rand(3), editor = pick(rand, NAMES) }
+	if rand(20) == 1 then
+		meta.name = "" -- invalid
+	end
+	return meta
+end
+
+describe("merge laws (random board meta)", function()
+	it("compareMeta is a total order that only ties on identical records", function()
+		local rand = prng(2)
+		for _ = 1, 5000 do
+			local a, b, c = randomMeta(rand), randomMeta(rand), randomMeta(rand)
+			local ab, ba = Merge.compareMeta(a, b), Merge.compareMeta(b, a)
+			check(-sign(ab) == sign(ba), "antisymmetric")
+			check(Merge.compareMeta(a, a) == 0, "reflexive")
+			if ab == 0 then
+				assert.are.same(a, b)
+			end
+			if ab <= 0 and Merge.compareMeta(b, c) <= 0 then
+				check(Merge.compareMeta(a, c) <= 0, "transitive")
+			end
+		end
+	end)
+
+	it("any order, with duplicates, keeps the greatest valid meta", function()
+		for seed = 1, 1000 do
+			local rand = prng(seed)
+			local records = {}
+			for i = 1, rand(6) do
+				records[i] = randomMeta(rand)
+			end
+			local expected, clock = nil, T0
+			for _, record in ipairs(records) do
+				if record.name ~= "" then
+					if not expected or Merge.compareMeta(record, expected) > 0 then
+						expected = record
+					end
+					clock = math.max(clock, record.rev)
+				end
+			end
+			local noisy = shuffled(rand, records)
+			noisy[#noisy + 1] = records[rand(#records)]
+			for _, order in ipairs({ records, noisy }) do
+				local board = { clock = T0 }
+				for _, record in ipairs(order) do
+					Merge.applyMeta(board, record)
+				end
+				assert.are.same(expected, board.meta, "seed " .. seed)
+				assert.are.equal(clock, board.clock, "seed " .. seed)
+			end
+		end
+	end)
+end)
+
 -- Simulated network -----------------------------------------------------------------
 -- Nodes make random local changes and broadcast them as PUTs. The network drops,
 -- duplicates and reorders deliveries; nodes also sync through a server. After a
@@ -212,6 +271,24 @@ local function simulate(seed, options)
 	local server = { board = { clock = 0 } }
 	local inflight = {}
 	local produced = {}
+	local renames = {}
+
+	-- Notes and board meta travel the same way; a meta record has no id.
+	local function apply(board, record)
+		if record.id then
+			return Merge.applyNote(board, record)
+		end
+		return Merge.applyMeta(board, record)
+	end
+
+	local function exchangeMeta(a, b)
+		if a.meta then
+			Merge.applyMeta(b, a.meta)
+		end
+		if b.meta then
+			Merge.applyMeta(a, b.meta)
+		end
+	end
 	local now = T0
 	local context = ("seed %d"):format(seed)
 
@@ -228,7 +305,7 @@ local function simulate(seed, options)
 			end
 		end
 		if rand(3) == 1 then
-			Merge.applyNote(server.board, record)
+			apply(server.board, record)
 		end
 	end
 
@@ -247,7 +324,10 @@ local function simulate(seed, options)
 		local t = now + node.skew
 		local ids = liveIds(node.board)
 		local record
-		if #ids == 0 or rand(4) == 1 then
+		if rand(10) == 1 then
+			record = assert(Merge.setMeta(node.board, pick(rand, BOARD_NAMES), node.editor, t))
+			renames[#renames + 1] = record
+		elseif #ids == 0 or rand(4) == 1 then
 			node.counter = node.counter + 1
 			local fields = { id = node.prefix .. "-" .. node.counter, author = node.editor, text = "new " .. t }
 			record = assert(Merge.createNote(node.board, fields, t))
@@ -259,17 +339,22 @@ local function simulate(seed, options)
 		end
 		check(record.rev > node.lastRev, context .. ": local revs must increase")
 		node.lastRev = record.rev
-		produced[#produced + 1] = record
+		if record.id then
+			produced[#produced + 1] = record
+		end
 		send(node, record)
 	end
 
 	local function syncWithServer(node)
 		Merge.applyNotes(server.board, node.board.notes or {})
 		Merge.applyNotes(node.board, server.board.notes or {})
+		exchangeMeta(node.board, server.board)
 	end
 
-	-- HELLO -> IDX for mismatched buckets -> both sides send what differs.
+	-- HELLO (with the board meta piggybacked) -> IDX for mismatched buckets ->
+	-- both sides send what differs.
 	local function antiEntropy(a, b)
+		exchangeMeta(a, b)
 		local mismatched = {}
 		local da, db = Digest.compute(a.notes or {}), Digest.compute(b.notes or {})
 		for _, bucket in ipairs(Digest.mismatched(da.buckets, db.buckets)) do
@@ -295,7 +380,7 @@ local function simulate(seed, options)
 			localChange(pick(rand, nodes))
 		elseif r <= 85 and #inflight > 0 then
 			local message = table.remove(inflight, rand(#inflight))
-			Merge.applyNote(message.to.board, message.record)
+			apply(message.to.board, message.record)
 		elseif r <= 93 then
 			syncWithServer(pick(rand, nodes))
 		else
@@ -313,7 +398,7 @@ local function simulate(seed, options)
 
 	-- Catch-up: deliver what's still in flight, then reconcile.
 	for _, message in ipairs(inflight) do
-		Merge.applyNote(message.to.board, message.record)
+		apply(message.to.board, message.record)
 	end
 	local replicas = { server.board }
 	for _, node in ipairs(nodes) do
@@ -334,16 +419,24 @@ local function simulate(seed, options)
 			expected[record.id] = record
 		end
 	end
+	local expectedMeta
+	for _, record in ipairs(renames) do
+		if not expectedMeta or Merge.compareMeta(record, expectedMeta) > 0 then
+			expectedMeta = record
+		end
+	end
 	local digest = Digest.compute(expected).digest
 	for i, board in ipairs(replicas) do
 		assert.are.same(expected, board.notes or {}, ("%s: replica %d"):format(context, i))
 		assert.are.equal(digest, Digest.compute(board.notes or {}).digest, context)
+		assert.are.same(expectedMeta, board.meta, ("%s: replica %d meta"):format(context, i))
 	end
 	return #produced
 end
 
 describe("convergence (simulated nodes)", function()
 	it("3-5 members with skewed clocks converge through bucketed anti-entropy", function()
+		-- Renames ride along: the board meta is piggybacked on every HELLO.
 		local total = 0
 		for seed = 1, 150 do
 			local count = 3 + seed % 3
@@ -373,6 +466,12 @@ describe("convergence (simulated nodes)", function()
 				reconcile = function(_, a, b)
 					Merge.applyNotes(b, copy(a.notes or {}))
 					Merge.applyNotes(a, copy(b.notes or {}))
+					if a.meta then
+						Merge.applyMeta(b, a.meta)
+					end
+					if b.meta then
+						Merge.applyMeta(a, b.meta)
+					end
 				end,
 			})
 		end

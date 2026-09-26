@@ -79,7 +79,7 @@ The same **merge core** (§4.3) runs in the addon (Lua 5.1) and in the companion
 ```lua
 CorkboardDB.boards[boardId] = {
   id       = "k3f9x2m7q1pz8c4w",   -- 16 chars, random base36
-  name     = "Molten Core prep",
+  meta     = BoardMeta,            -- the board's name, replicated LWW (below)
   secret   = "…24 chars…",         -- shared by members: channel password + cloud credential
   owner    = "Will-Realm",
   created  = 1790000000,           -- GetServerTime()
@@ -109,11 +109,13 @@ Note = {
 
 `MemberRecord = { name, role = "owner"|"member", rev, editor, removed }` uses the same last-write-wins (LWW) rules as notes.
 
+`BoardMeta = { name = "Molten Core prep", rev, editor }` is the board's name. The invite string carries only the id, secret and owner (§9), so the name has to replicate like any other record, and a rename is an LWW edit on the same board clock. A board holds one BoardMeta, not a map.
+
 ### 4.3 Merge rules
 
 - **Clock:** on a local change, `rev = max(GetServerTime(), board.clock + 1)`, then `board.clock = rev`. On receiving a record that passes the sanitiser, `board.clock = max(board.clock, rev)`. `rev` and `created` are integers from 0 to 2^53 − 1 (`rev` from 1), the largest a Lua number holds exactly.
 - **Winner:** the record with the greater `(rev, editor)`, compared lexicographically. `rev` compares as a number. `editor` compares byte by byte, not with Lua's `<`, whose order depends on the C locale. That way Lua and Python always agree.
-- **Exact ties:** honest clients only produce two different records with the same `(rev, editor)` when one character edits on two installs. The tie then breaks on content: a tombstone beats a live note, then the greater `text`, `color`, `author` and `created`, in that order. MemberRecords break ties on `removed`, then `role`. The digest can't see such a tie, so it resolves wherever both records meet (live `PUT`s or the cloud), not through anti-entropy.
+- **Exact ties:** honest clients only produce two different records with the same `(rev, editor)` when one character edits on two installs. The tie then breaks on content: a tombstone beats a live note, then the greater `text`, `color`, `author` and `created`, in that order. MemberRecords break ties on `removed`, then `role`. BoardMeta breaks ties on the greater `name`, byte-wise. The digest can't see such a tie, so it resolves wherever both records meet (live `PUT`s or the cloud), not through anti-entropy.
 - **Delete** is an edit with `deleted = true, text = ""`. Tombstones are kept (not GC'd in v1). A stale copy can never bring a deleted note back. A later edit from someone who hadn't seen the delete still wins, like any later edit.
 - **Board state** is the union of all notes by `id`, with the winner rule applied per id. Merging is commutative, associative and idempotent, so relaying order and duplicates don't matter.
 
@@ -163,6 +165,7 @@ The engine reads the `SendAddonMessage` result code, re-queues on a throttle res
 | `NEED` | `{ id, … }` | Requester: ids where the peer's copy is newer. |
 | `PUT` | `{ Note, … }`, packed to fit about 1–2 messages | Live on local edit (broadcast); in reply to `NEED`; pushing our newer notes after an `IDX` diff. |
 | `MEMBERS` | `{ MemberRecord, … }` | Piggybacked on HELLO when the member list changed. |
+| `META` | `BoardMeta` | Piggybacked on HELLO when the board was renamed. The digest doesn't cover it, so it rides on every HELLO; it's under 100 bytes. |
 | `CLOUD` | `cursor` | Piggybacked on HELLO. Tells peers "I'm cloud-synced to X", used by the bulk rule (§5.6). |
 
 ### 5.4 Catch-up flow
@@ -209,7 +212,7 @@ At about 255 bytes/sec per prefix, and with other traffic sharing that budget, P
 
   Any other `|` escape fails, including `|T`, `|A`, `|K` and `|n`. Text must also be strict UTF-8, with no control characters other than `\n`.
 
-  Records are checked as well. Note ids must be `<8 lower-case hex>-<digits>`, 18 bytes at most. Names must look like `Name-Realm`, 64 bytes at most, with no `|` or control characters. `color` must be 1–8 (the UI uses 1–5), `deleted` must be a boolean, and a tombstone's text must be empty. Unknown fields are ignored, so notes from a newer client still load.
+  Records are checked as well. Note ids must be `<8 lower-case hex>-<digits>`, 18 bytes at most. Names must look like `Name-Realm`, 64 bytes at most, with no `|` or control characters. Board names (BoardMeta) must be 1–64 bytes of strict UTF-8 with at least one non-space character, and no `|` or control characters at all. `color` must be 1–8 (the UI uses 1–5), `deleted` must be a boolean, and a tombstone's text must be empty. Unknown fields are ignored, so notes from a newer client still load.
 
   `shared/test-vectors/sanitise.json` fixes the rules and the reason codes.
 - Item and quest IDs are the ones valid on Forever. Links are built by the client, so no ID tables are needed.
@@ -240,12 +243,13 @@ At `PLAYER_LOGIN`, merge `CorkboardCloudData` into `CorkboardDB` using the §4.3
 | Method | Path | Purpose |
 |---|---|---|
 | `POST` | `/v1/boards` | Register `{id, secret}`. 409 if it exists. |
-| `POST` | `/v1/boards/{id}/sync` | `{cursor, notes[], members[]}` → merge, then return rows changed since `cursor`, plus the new cursor. |
+| `POST` | `/v1/boards/{id}/sync` | `{cursor, notes[], members[], meta}` → merge, then return rows changed since `cursor`, plus the new cursor. `meta` is returned when it changed since `cursor`. |
 | `POST` | `/v1/boards/{id}/rotate` | Owner rotates the secret: body contains the new secret; auth uses the old one. |
 | `GET` | `/v1/health` | Liveness and DB check. |
 
 ```sql
-boards  (id TEXT PK, secret_hash BLOB, created_at INT, seq INT NOT NULL DEFAULT 0);
+boards  (id TEXT PK, secret_hash BLOB, created_at INT, seq INT NOT NULL DEFAULT 0,
+         name TEXT, name_rev INT, name_editor TEXT, name_seq INT);   -- BoardMeta
 notes   (board_id TEXT, note_id TEXT, author TEXT, created INT, rev INT, editor TEXT,
          text TEXT, color INT, deleted INT, seq INT, PRIMARY KEY (board_id, note_id));
 members (board_id TEXT, name TEXT, role TEXT, rev INT, editor TEXT, removed INT, seq INT,

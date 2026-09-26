@@ -175,5 +175,51 @@
       { "name": "bad editor", "patch": { "editor": "Will|r-Realm" }, "ok": false, "reason": "editor" },
       { "name": "missing removed", "remove": ["removed"], "ok": false, "reason": "removed" }
     ]
+  },
+  "board_name": [
+    { "name": "plain", "input": "Molten Core prep", "ok": true },
+    { "name": "utf8 and punctuation", "input": "Øystein's raid – week 3", "ok": true },
+    { "name": "one character", "input": "x", "ok": true },
+    { "name": "surrounding spaces are allowed", "input": " MC ", "ok": true },
+    { "name": "64 bytes", "input": "x", "repeat": 64, "ok": true },
+    { "name": "65 bytes", "input": "x", "repeat": 65, "ok": false },
+    { "name": "64 bytes of two-byte characters", "input": "ø", "repeat": 32, "ok": true },
+    { "name": "one byte over in a multi-byte character", "input": "ø", "repeat": 32, "append": "x", "ok": false },
+    { "name": "empty", "input": "", "ok": false },
+    { "name": "only spaces", "input": "   ", "ok": false },
+    { "name": "pipe", "input": "MC|BWL", "ok": false },
+    { "name": "escaped pipe", "input": "MC||BWL", "ok": false },
+    { "name": "colour escape", "input": "|cffff0000MC|r", "ok": false },
+    { "name": "newline", "input": "MC\nprep", "ok": false },
+    { "name": "tab", "input": "MC\tprep", "ok": false },
+    { "name": "NUL", "input_hex": "4d4300", "ok": false },
+    { "name": "DEL", "input_hex": "4d437f", "ok": false },
+    { "name": "invalid UTF-8", "input_hex": "4d43c328", "ok": false },
+    { "name": "not a string", "input": 42, "ok": false }
+  ],
+  "meta": {
+    "base": { "name": "Molten Core prep", "rev": 1790000500, "editor": "Will-Realm" },
+    "cases": [
+      { "name": "valid meta", "ok": true },
+      { "name": "largest rev", "patch": { "rev": 9007199254740991 }, "ok": true },
+      {
+        "name": "unknown fields are ignored",
+        "patch": { "topic": "raid" },
+        "ok": true,
+        "output": { "name": "Molten Core prep", "rev": 1790000500, "editor": "Will-Realm" }
+      },
+      { "name": "not an object", "input": "Molten Core prep", "ok": false, "reason": "type" },
+      { "name": "bad name", "patch": { "name": "MC|r" }, "ok": false, "reason": "name" },
+      { "name": "empty name", "patch": { "name": "" }, "ok": false, "reason": "name" },
+      { "name": "missing name", "remove": ["name"], "ok": false, "reason": "name" },
+      { "name": "rev 0", "patch": { "rev": 0 }, "ok": false, "reason": "rev" },
+      { "name": "fractional rev", "patch": { "rev": 1790000500.5 }, "ok": false, "reason": "rev" },
+      { "name": "rev above 2^53 - 1", "patch": { "rev": 9007199254740992 }, "ok": false, "reason": "rev" },
+      { "name": "rev as a string", "patch": { "rev": "1790000500" }, "ok": false, "reason": "rev" },
+      { "name": "rev as a boolean", "patch": { "rev": true }, "ok": false, "reason": "rev" },
+      { "name": "bad editor", "patch": { "editor": "Will" }, "ok": false, "reason": "editor" },
+      { "name": "missing editor", "remove": ["editor"], "ok": false, "reason": "editor" },
+      { "name": "first failing field wins", "patch": { "name": "", "rev": 0 }, "ok": false, "reason": "name" }
+    ]
   }
 }

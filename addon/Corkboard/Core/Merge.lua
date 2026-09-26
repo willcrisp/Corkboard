@@ -1,8 +1,9 @@
 -- Merge rules (docs/design.md §4.3): last-writer-wins on (rev, editor),
 -- tombstones for deletes, and the HLC-lite board clock. Pure Lua 5.1.
 --
--- A board here is any table with `clock`, `notes` (id -> Note) and `members`
--- (name -> MemberRecord). Missing fields are created on first write.
+-- A board here is any table with `clock`, `notes` (id -> Note), `members`
+-- (name -> MemberRecord) and `meta` (one BoardMeta: the board's name). Missing
+-- fields are created on first write.
 
 local _, ns = ...
 ns = type(ns) == "table" and ns or {}
@@ -79,6 +80,15 @@ function Merge.compareMember(a, b)
 	return compareBytes(a.role, b.role)
 end
 
+-- And for BoardMeta: the greater name wins the tie.
+function Merge.compareMeta(a, b)
+	local c = Merge.compareVersion(a, b)
+	if c ~= 0 then
+		return c
+	end
+	return compareBytes(a.name, b.name)
+end
+
 -- Clock -------------------------------------------------------------------
 
 -- On receiving a record: clock = max(clock, rev).
@@ -135,6 +145,20 @@ function Merge.applyMember(board, member)
 		return false, reason
 	end
 	return store(board, "members", clean.name, clean, Merge.compareMember)
+end
+
+-- The board holds one BoardMeta rather than a map, so it merges on its own.
+function Merge.applyMeta(board, meta)
+	local clean, reason = Sanitise.meta(meta)
+	if not clean then
+		return false, reason
+	end
+	Merge.observe(board, clean.rev)
+	if board.meta and Merge.compareMeta(clean, board.meta) <= 0 then
+		return false, "stale"
+	end
+	board.meta = clean
+	return true
 end
 
 local function applyAll(board, list, apply, key)
@@ -255,6 +279,21 @@ function Merge.setMember(board, name, role, removed, editor, now)
 		editor = editor,
 		removed = removed,
 	}, Sanitise.member)
+end
+
+-- Names or renames the board.
+function Merge.setMeta(board, name, editor, now)
+	local clean, reason = Sanitise.meta({
+		name = name,
+		rev = Merge.nextRev(board, now),
+		editor = editor,
+	})
+	if not clean then
+		return nil, reason
+	end
+	Merge.observe(board, clean.rev)
+	board.meta = clean
+	return clean
 end
 
 ns.Merge = Merge

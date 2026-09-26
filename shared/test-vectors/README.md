@@ -23,22 +23,26 @@ Expected FNV-1a and digest values were computed with a short Python reference im
 
 - `text[]`: `{ name, input | input_hex, repeat?, append?, ok, reason? }` for `Sanitise.text`. When `ok` is false, `reason` is the first check that failed, in this order: `text` (not a string), `too_long`, `utf8`, `control`, then a left-to-right scan of `|` escapes that gives `escape`, `link` or `link_type`.
 - `name[]`: `{ name, input | input_hex, append?, ok }` for character names (`Name-Realm`).
-- `note` and `member`: `{ base, cases[] }`. Each case's record is `input` if present. Otherwise it's `base` with `patch` merged over it and the fields in `remove` deleted. When `ok` is true, the sanitiser returns a copy equal to `output` (default: the record itself), with unknown fields dropped. When `ok` is false it returns `reason`. Fields are checked in this order:
+- `board_name[]`: `{ name, input | input_hex, repeat?, append?, ok }` for board names: 1–64 bytes of strict UTF-8 with at least one non-space, and no control characters or `|` at all (not even `||`).
+- `note`, `member` and `meta`: `{ base, cases[] }`. Each case's record is `input` if present. Otherwise it's `base` with `patch` merged over it and the fields in `remove` deleted. When `ok` is true, the sanitiser returns a copy equal to `output` (default: the record itself), with unknown fields dropped. When `ok` is false it returns `reason`. Fields are checked in this order:
   - notes: `id`, `author`, `created`, `rev`, `editor`, `color`, `deleted`, then the text reasons, then `tombstone_text`;
-  - members: `name`, `role`, `rev`, `editor`, `removed`.
+  - members: `name`, `role`, `rev`, `editor`, `removed`;
+  - meta (the board's name record): `name`, `rev`, `editor`.
 
   Anything that isn't an object gives `type`.
 
 ### `merge.json`
 
-`notes[]` and `members[]`: `{ name, board, apply[], results[], expect }`.
+`notes[]`, `members[]` and `meta[]`: `{ name, board, apply[], results[], expect }`.
 
-1. Start from `board`: a `clock` and a list of records, which are stored as they are.
+1. Start from `board`: a `clock` and a list of records, which are stored as they are. A board holds a single meta record, so in `meta[]` cases `board.meta` and `expect.meta` are one record (absent when the board has none) instead of a list.
 2. Apply each record in `apply` in order.
 3. `results[i]` is the outcome of `apply[i]`: `stored`, `stale` (valid, but not newer than what the board holds), or the sanitiser's reason for dropping it.
 4. At the end, the board must equal `expect`: its `clock` and its records, with nothing extra. Only valid records move the clock.
 
 The final board must be the same for every order of `apply`, and when `apply` runs twice.
+
+Meta records win on `(rev, editor)` like the others. On an exact tie the greater `name`, compared byte-wise, wins.
 
 ### `digest.json`
 

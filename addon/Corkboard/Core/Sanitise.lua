@@ -14,6 +14,7 @@ local Sanitise = {}
 
 Sanitise.MAX_TEXT = 2000 -- bytes per note
 Sanitise.MAX_NAME = 64 -- bytes per "Name-Realm"
+Sanitise.MAX_BOARD_NAME = 64 -- bytes per board name
 Sanitise.MAX_ID = 18 -- "a1b2c3d4-" plus up to 9 digits
 Sanitise.COLOR_MAX = 8 -- the UI uses 1-5; 6-8 are reserved
 
@@ -111,6 +112,17 @@ function Sanitise.name(s)
 		and Util.isUtf8(s)
 end
 
+-- A board name: 1-64 bytes of strict UTF-8 with at least one non-space, and
+-- no controls or "|". It's plain text everywhere it's shown.
+function Sanitise.boardName(s)
+	return type(s) == "string"
+		and #s <= Sanitise.MAX_BOARD_NAME
+		and find(s, "%S") ~= nil
+		and not find(s, "|", 1, true)
+		and not find(s, CONTROL)
+		and Util.isUtf8(s)
+end
+
 -- Returns a clean copy holding only the known fields, or nil and a reason.
 -- Unknown fields are ignored so a newer client's notes still load here.
 function Sanitise.note(t)
@@ -184,6 +196,27 @@ function Sanitise.member(t)
 		rev = t.rev,
 		editor = t.editor,
 		removed = t.removed,
+	}
+end
+
+-- BoardMeta (§4.1): the board's replicated name. Same contract as Sanitise.note.
+function Sanitise.meta(t)
+	if type(t) ~= "table" then
+		return nil, "type"
+	end
+	if not Sanitise.boardName(t.name) then
+		return nil, "name"
+	end
+	if not Util.isInteger(t.rev, 1, INT_MAX) then
+		return nil, "rev"
+	end
+	if not Sanitise.name(t.editor) then
+		return nil, "editor"
+	end
+	return {
+		name = t.name,
+		rev = t.rev,
+		editor = t.editor,
 	}
 end
 

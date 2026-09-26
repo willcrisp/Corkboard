@@ -21,6 +21,14 @@ describe("Sanitise.name vectors", function()
 	end
 end)
 
+describe("Sanitise.boardName vectors", function()
+	for _, case in ipairs(vectors.board_name) do
+		it(case.name, function()
+			assert.are.equal(case.ok, Sanitise.boardName(Vectors.input(case)))
+		end)
+	end
+end)
+
 local function recordVectors(kind, check)
 	describe(("Sanitise.%s vectors"):format(kind), function()
 		local section = vectors[kind]
@@ -43,6 +51,7 @@ end
 
 recordVectors("note", Sanitise.note)
 recordVectors("member", Sanitise.member)
+recordVectors("meta", Sanitise.meta)
 
 describe("Sanitise", function()
 	it("allows every link type in the spec", function()

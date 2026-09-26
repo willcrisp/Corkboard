@@ -75,6 +75,39 @@ for field, section in pairs(SECTIONS) do
 	end)
 end
 
+describe("Merge vectors (meta)", function()
+	local function metaBoard(spec)
+		return { clock = spec.clock, meta = spec.meta and Vectors.copy(spec.meta) }
+	end
+
+	for _, case in ipairs(vectors.meta) do
+		it(case.name, function()
+			local board = metaBoard(case.board)
+			local results = {}
+			for i, record in ipairs(case.apply) do
+				local ok, reason = Merge.applyMeta(board, record)
+				results[i] = ok and "stored" or reason
+			end
+			assert.are.same(case.results, results)
+			assert.are.equal(case.expect.clock, board.clock)
+			assert.are.same(case.expect.meta, board.meta)
+		end)
+
+		it(case.name .. " (every order, applied twice)", function()
+			for _, order in ipairs(permutations(case.apply)) do
+				local board = metaBoard(case.board)
+				for _ = 1, 2 do
+					for _, record in ipairs(order) do
+						Merge.applyMeta(board, record)
+					end
+				end
+				assert.are.equal(case.expect.clock, board.clock)
+				assert.are.same(case.expect.meta, board.meta)
+			end
+		end)
+	end
+end)
+
 -- Local changes ----------------------------------------------------------------
 
 local T0 = 1790000000
@@ -238,6 +271,43 @@ describe("Merge.setMember", function()
 		local board = {}
 		assert.are.same({ nil, "role" }, { Merge.setMember(board, "Bob-Realm", "admin", false, "Will-Realm", T0) })
 		assert.is_nil(board.members)
+	end)
+end)
+
+describe("Merge.setMeta", function()
+	it("names the board, then renames it with a later rev", function()
+		local board = {}
+		local named = Merge.setMeta(board, "Molten Core prep", "Will-Realm", T0)
+		assert.are.same({ name = "Molten Core prep", rev = T0, editor = "Will-Realm" }, named)
+		assert.are.equal(named, board.meta)
+		local renamed = Merge.setMeta(board, "BWL prep", "Bob-Realm", T0) -- same second
+		assert.are.same({ name = "BWL prep", rev = T0 + 1, editor = "Bob-Realm" }, renamed)
+		assert.are.equal(1, Merge.compareMeta(renamed, named))
+		assert.are.equal(T0 + 1, board.clock)
+	end)
+
+	it("shares the board clock with notes", function()
+		local board = newBoard()
+		local meta = Merge.setMeta(board, "MC", "Will-Realm", T0)
+		assert.are.equal(T0 + 1, meta.rev)
+		local note = Merge.editNote(board, ID, { text = "x" }, "Will-Realm", T0)
+		assert.are.equal(T0 + 2, note.rev)
+	end)
+
+	it("refuses a name the sanitiser rejects and leaves the board alone", function()
+		local board = { clock = 5 }
+		assert.are.same({ nil, "name" }, { Merge.setMeta(board, "MC|r", "Will-Realm", T0) })
+		assert.are.same({ nil, "name" }, { Merge.setMeta(board, "   ", "Will-Realm", T0) })
+		assert.are.same({ nil, "editor" }, { Merge.setMeta(board, "MC", "Will", T0) })
+		assert.are.same({ clock = 5 }, board)
+	end)
+
+	it("stores a copy of a received meta", function()
+		local board = {}
+		local meta = { name = "MC", rev = T0, editor = "Will-Realm" }
+		assert.is_true(Merge.applyMeta(board, meta))
+		meta.name = "changed"
+		assert.are.equal("MC", board.meta.name)
 	end)
 end)
 
