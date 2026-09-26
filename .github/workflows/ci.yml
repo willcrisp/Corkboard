@@ -50,3 +50,31 @@ jobs:
           name: luacov-report
           path: luacov.report.out
           if-no-files-found: ignore
+
+  python:
+    name: Python (corkcore, API, companion)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install
+        run: |
+          pip install -e shared/python -e "api[test]" -e "companion[test]"
+
+      - name: Merge core (shared vectors, Hypothesis)
+        run: pytest shared/python
+
+      - name: The fuzz corpus is up to date
+        run: |
+          python3 shared/test-vectors/tools/gen_sanitise_fuzz.py
+          git diff --exit-code shared/test-vectors/sanitise_fuzz.json
+
+      - name: API
+        run: pytest api
+
+      - name: Companion
+        run: pytest companion

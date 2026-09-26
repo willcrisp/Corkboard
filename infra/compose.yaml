@@ -1,8 +1,8 @@
 # Corkboard sync API, deployed as an Arcane project.
-# See docs/design.md §8. Replace <you> and set TAG.
+# See docs/design.md §8 and infra/README.md. Set OWNER (the GHCR owner) and TAG.
 services:
   api:
-    image: ghcr.io/<you>/corkboard-api:${TAG:-latest}
+    image: ghcr.io/${OWNER:?set OWNER to the GHCR owner}/corkboard-api:${TAG:-latest}
     restart: unless-stopped
     environment:
       CORK_DB: /data/corkboard.db
@@ -25,7 +25,8 @@ services:
 
   backup:
     image: alpine
-    command: ["sh", "-c", "apk add sqlite && while true; do sqlite3 /data/corkboard.db \".backup /data/backup-$$(date +%a).db\"; sleep 86400; done"]
+    restart: unless-stopped
+    command: ["sh", "-c", "apk add --no-cache sqlite && while true; do sqlite3 /data/corkboard.db \".backup /data/backup-$$(date +%a).db\"; sleep 86400; done"]
     volumes: [corkboard-data:/data]
 
 volumes:
