@@ -30,20 +30,28 @@ Last updated: 2026-09-26.
   - Note ids use the board-derived counter (§4.2).
   - `Core/Commands.lua` is the `/cork` interface: `boards`, `create`, `use`, `rename`, `deleteboard`, `list`, `add`, `edit`, `color` and `delete` (§9).
   - `Corkboard.lua` is the thin WoW wrapper.
-- **Tests:** `busted` runs 386 tests. Among them:
+- **Done: first UI** (commit `7d8800a`), but **not yet run in game.**
+  - `UI/Main.lua` is the board window: board list with New, Rename and Delete; a two-column card grid in a ScrollBox; search; New Note; and a status line.
+  - `UI/Editor.lua` is the note editor: multi-line input, byte counter, tag picker, and Delete, Cancel and Save. It won't save text the sanitiser rejects.
+  - `UI/Links.lua` handles tooltips, click-through and shift-click insertion. `UI/Popups.lua` has the StaticPopups.
+  - The logic behind them is pure Lua in `Core/View.lua`.
+  - A blank `/cork` toggles the window. So do the addon compartment and an LDB launcher.
+  - `ui-style.md` "Phase 1 build notes" lists where it departs from the mockups: no tabs until Phase 2, Rename and Delete in the board-list footer, and no "No tag" swatch.
+- **Tests:** `busted` runs 427 tests. Among them:
   - `addon_spec` loads the real TOC and libraries in a fake client (`addon/spec/helpers/client.lua`), drives `/cork` through the real slash handler, and checks state survives a simulated `/reload`;
+  - `ui_spec` clicks through the window and editor in the same fake client, including UI-made changes across a `/reload`. About 95% of the UI code runs in it.
   - `purity_spec` sandboxes all of Core.
   - Line coverage of Core is 99.6%, and the merge core is at 100%. `luacheck .` is clean.
 - **Spec changes this session**, each explained in its commit:
   - §4.4 (`ed64eb6`): the digest uses **FNV-1a instead of Adler-32**. Adler-32 collides on revs 81 apart (and 810, 891, …) with the same editor, so anti-entropy would never repair those notes. The convergence property test found it. `fnv1a32.json` replaces `adler32.json`, and `digest.json` was recomputed.
   - §4.1, §4.3, §5.3, §6, §7.3 (`74c9a56`): **BoardMeta**, `{ name, rev, editor }`. The board name is a replicated LWW record so renames sync, with new vectors and property tests.
   - §4.1, §4.2, §9, §14 (`b38964c`): the AceDB layout, local-only board delete, the note-id rule and the `/cork` commands.
-- **Not started:** the UI (board view, editor, link insertion, tooltips, minimap button).
+- **Not started:** the minimap button (waits for LibDBIcon).
 
 Phase 1 checklist in design.md §12:
 - "Coverage ≥ 95% and all vectors pass in Lua": met.
-- "State survives `/reload`": passes in the fake client. It needs Will's in-game check (below) before it's ticked.
-- "Create, rename, delete…": the store side works through `/cork`, but the item also needs the UI, tooltips and click-through.
+- "Create, rename, delete…, tooltips, click opens": built, and passes in the fake client. It needs Will's in-game check (below).
+- "State survives `/reload`": passes in the fake client, for `/cork` and UI changes. It also needs the in-game check.
 
 Nothing is ticked yet.
 
@@ -51,26 +59,32 @@ Nothing is ticked yet.
 
 Do these in order unless Will says otherwise. Keep one step per branch or PR.
 
-1. **Will: check the skeleton in game.**
-   1. Close the game. Delete any old `_classic_beta_/Interface/AddOns/Corkboard`. Copy the repo's `addon/Corkboard` folder there (copy it, don't symlink it).
-   2. Launch, and make sure Corkboard is enabled on the character screen. Log in.
-   3. `/cork create Molten Core prep`, then `/cork add Need 4x ` followed by a shift-clicked item from your bags. Then `/cork add Bring fire resistance` and `/cork add Summon at the stone`.
-   4. `/cork edit 2 Bring fire resistance gear`, `/cork color 2 4`, `/cork delete 3`, then `/cork create Scratch`, `/cork rename Scratch board` and `/cork use molten`.
-   5. `/cork list` and `/cork boards`. Note the output.
-   6. `/reload`, then `/cork boards` and `/cork list` again. They should match step 5 (ages aside). Hover and click the item link in chat.
-   7. `/cork add after reload` should say `Added #4`, because the id counter continues past the deleted #3.
+1. **Will: check Phase 1 in game.** The fake client only proves the Lua runs; frame templates, ScrollBox, the link hook and the look need the real client.
+   1. Close the game. Delete any old `_classic_beta_/Interface/AddOns/Corkboard`. Copy the repo's `addon/Corkboard` folder there (copy it, don't symlink it). Launch, check Corkboard is enabled, log in, and run `/console scriptErrors 1`.
+   2. `/cork` opens the window. Click **New**, name the board `Molten Core prep`, and press Enter.
+   3. Click **New Note**. Type `Need 4x `, then shift-click an item in your bags; the link should appear in the editor. Pick the blue tag and Save. Add two more notes: `Bring fire resistance` and one long enough to wrap several lines.
+   4. Hover the item link on its card: the item tooltip should show. Click it: the item pops up like a chat link. Hover a card: Edit and Delete replace its age.
+   5. Edit the second note to `Bring fire resistance gear` and Save. Delete the third, confirming the popup. Type `fire` in Search, check only the matching note shows, then clear it.
+   6. Try to save `|T` in a new note: Save should stay greyed, with a yellow message. Cancel.
+   7. Click **New** again and make `Scratch`; click **Rename** to call it `Scratch board`; select `Molten Core prep` in the list.
+   8. `/reload`, then `/cork`. Both boards and both remaining notes (with links, tag and edit) should be there. `/cork list` should agree.
+   9. Also check: Escape closes the editor, then the window; the window drags; the addon compartment (the minimap dropdown) lists Corkboard, if Forever has one.
 
-   Record the result (a screenshot or pasted chat) and any Lua errors (`/console scriptErrors 1` first). Don't tick "survives /reload" yet: that item also covers changes made through the UI, so check again after step 4.
+   Send a screenshot of the window and the editor, and any Lua errors. Things most likely to need fixing, because they couldn't be checked here:
+   - whether `ChatFrameUtil.InsertLink` or `ChatEdit_InsertLink` is what Forever calls on shift-click;
+   - quest-log shift-clicks only link while a chat box is open (the same limit AceGUI has);
+   - the ScrollBox calls (`CreateScrollBoxListLinearView`, `SetElementInitializer("Button", …)`, `MinimalScrollBar`);
+   - `PortraitFrameTemplate`'s `SetTitle` and `SetPortraitToAsset`;
+   - the StaticPopup edit box field name;
+   - text measurement for card heights.
+
+   Tick the Phase 1 items in design.md §12 once this passes.
 2. **Process the spike 01/02 results** once Will has pasted them into `docs/spikes/`.
    - Fill in "Design impact".
    - Update `docs/design.md`: the real restriction-check name and restricted result code (§5.5), and the measured throttle (§2, §5.6, and the §11 simulator's burst).
    - If the report shows CorkSpike misbehaving on the real client, fix it. Re-check with `lua5.1 spikes/mock/smoke.lua spikes/CorkSpike/CorkSpike.lua`.
 3. **Vendor LibDBIcon-1.0** once Will supplies a current build (see above). Add it to the TOC after LibDataBroker, and to the library list in `addon_spec`.
-4. **Phase 1: UI.**
-   - Build the board view, note editor, link insertion and tooltips, per `docs/ui-style.md` and `docs/mockups/`. The UI calls `Store` methods, the same ones `/cork` uses.
-   - Links: shift-click inserts through a `hooksecurefunc` post-hook. `OnHyperlinkEnter` shows the tooltip and `OnHyperlinkClick` calls `SetItemRef`.
-   - The editor must refuse text that `Sanitise.text` rejects. Otherwise peers will drop the note. `Commands` already maps each sanitiser reason to a message the editor can reuse.
-   - Minimap button via LibDataBroker and LibDBIcon (step 3).
+4. **Phase 1 fixes from Will's in-game check** (step 1), then the minimap button once step 3 is done: register the existing LDB launcher (`Corkboard.launcher`) with LibDBIcon, saving its position in `CorkboardDB.global`.
 5. **Spike tooling for 03–06.** This can run alongside steps 3 and 4.
    - Spike 04 can now use the vendored LibDeflate.
    - Spike 05 can extend `/cspike bnet` with payload-size cases.
