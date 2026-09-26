@@ -953,6 +953,52 @@ function Client:slash(text)
 	error("no slash command " .. command)
 end
 
+-- Store shortcuts, standing in for what the board window does: each change
+-- goes through the addon's store, then the window redraws.
+function Client:store()
+	return self.ns.Corkboard.store
+end
+
+function Client:board()
+	return self:store():current()
+end
+
+local function changed(self, ...)
+	self.ns.Corkboard:Changed()
+	self:check()
+	return ...
+end
+
+function Client:createBoard(name)
+	return changed(self, assert(self:store():createBoard(name)))
+end
+
+function Client:addNote(text)
+	return changed(self, assert(self:store():addNote(self:board().id, text)))
+end
+
+-- The i-th live note on the current board, oldest first.
+function Client:note(i)
+	return self.ns.Store.notes(self:board())[i]
+end
+
+function Client:editNote(i, changes)
+	return changed(self, assert(self:store():editNote(self:board().id, self:note(i).id, changes)))
+end
+
+function Client:deleteNote(i)
+	return changed(self, assert(self:store():deleteNote(self:board().id, self:note(i).id)))
+end
+
+-- The current board's live note texts, oldest first, joined by "\n".
+function Client:noteTexts()
+	local texts = {}
+	for _, note in ipairs(self.ns.Store.notes(self:board())) do
+		texts[#texts + 1] = note.text
+	end
+	return table.concat(texts, "\n"), #texts
+end
+
 -- Logs out and returns the SavedVariables text the client would write.
 function Client:logout()
 	self.fire("PLAYER_LOGOUT")

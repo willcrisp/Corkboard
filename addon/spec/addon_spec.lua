@@ -103,13 +103,12 @@ describe("Corkboard in a fake client", function()
 	it("loads, registers its libraries and logs in without errors", function()
 		local client = Client.new():login()
 		local LibStub = client.env.LibStub
-		for _, lib in ipairs({
-			"CallbackHandler-1.0", "AceAddon-3.0", "AceEvent-3.0", "AceTimer-3.0", "AceDB-3.0", "AceConsole-3.0",
-			"AceComm-3.0", "LibSerialize", "LibDeflate", "LibDataBroker-1.1",
-		}) do
+		for _, lib in ipairs({ "CallbackHandler-1.0", "AceDB-3.0", "LibSerialize", "LibDeflate", "LibDataBroker-1.1" }) do
 			assert.is_table(LibStub(lib, true), lib)
 		end
+		assert.is_table(client.env.ChatThrottleLib)
 		local addon = client.ns.Corkboard
+		assert.are.equal(addon, client.env.Corkboard)
 		assert.are.equal("Will-MirageRaceway", addon.env.me)
 		assert.are.equal("6f97d8db", addon.env.prefix)
 		assert.is_table(client.env.CorkboardDB)
@@ -122,68 +121,64 @@ describe("Corkboard in a fake client", function()
 		end
 	end)
 
-	it("exercises the store through /cork", function()
+	it("answers /cork through the slash command list", function()
 		local client = Client.new():login()
 		has(client:slash("/cork help"), "Commands:")
-		has(client:slash("/cork create Molten Core prep"), "|cffffd100Corkboard:|r Created board Molten Core prep")
-		has(client:slash("/cork add Need 4x " .. LINK), "Added #1")
-		has(client:slash("/cork list"), "#1 Need 4x " .. LINK .. " |cff808080(Will-MirageRaceway, just now)|r")
-		has(client:slash("/CORK boards"), "Molten Core prep (current)")
+		client:createBoard("Molten Core prep")
+		has(client:slash("/CORK invite"), "|cffffd100Corkboard:|r Invite for Molten Core prep.")
 	end)
 
 	it("keeps boards and notes across a /reload", function()
 		local client = Client.new():login()
-		client:slash("/cork create Molten Core prep")
-		client:slash("/cork add Need 4x " .. LINK)
-		client:slash("/cork add Bring fire resistance")
-		client:slash("/cork add Summon at the stone")
+		local mc = client:createBoard("Molten Core prep")
+		client:addNote("Need 4x " .. LINK)
+		client:addNote("Bring fire resistance")
+		client:addNote("Summon at the stone")
 		client:advance(120)
-		client:slash("/cork edit 2 Bring fire resistance gear")
-		client:slash("/cork color 2 4")
-		client:slash("/cork delete 3")
-		client:slash("/cork create BWL")
-		client:slash("/cork rename BWL prep")
-		client:slash("/cork use molten core prep")
+		client:editNote(2, { text = "Bring fire resistance gear", color = 4 })
+		client:deleteNote(3)
+		local bwl = client:createBoard("BWL")
+		client:store():renameBoard(bwl.id, "BWL prep")
+		client:store():select(mc.id)
 		local before = client.env.CorkboardDB.global.boards
 
 		local reloaded = client:reload()
 		local after = reloaded.env.CorkboardDB.global.boards
 		assert.are.same(before, after)
 
-		local list = reloaded:slash("/cork list")
-		has(list, "Molten Core prep: 2 notes")
-		has(list, "#1 Need 4x " .. LINK .. " |cff808080(Will-MirageRaceway, 1m ago)|r")
-		has(list, "#2 Bring fire resistance gear |cff808080(Will-MirageRaceway, just now, colour 4)|r") -- edited
-		has(reloaded:slash("/cork boards"), "BWL prep |cff808080- 0 notes")
+		assert.are.equal(mc.id, reloaded:board().id)
+		assert.are.equal("Need 4x " .. LINK .. "\nBring fire resistance gear", reloaded:noteTexts())
+		assert.are.equal(4, reloaded:note(2).color)
+		assert.are.equal("BWL prep", reloaded.ns.Store.name(reloaded:store():board(bwl.id)))
 
 		-- Ids keep counting past the tombstone that survived the reload.
-		has(reloaded:slash("/cork add After the reload"), "Added #4")
+		assert.are.equal("6f97d8db-0004", reloaded:addNote("After the reload").id)
 	end)
 
 	it("forgets a deleted board across a /reload", function()
 		local client = Client.new():login()
-		client:slash("/cork create Scratch")
-		client:slash("/cork add temp")
-		client:slash("/cork deleteboard Scratch")
+		local board = client:createBoard("Scratch")
+		client:addNote("temp")
+		client:store():deleteBoard(board.id)
 		local reloaded = client:reload()
-		has(reloaded:slash("/cork boards"), "No boards yet")
+		assert.is_nil(next(reloaded:store():all()))
 	end)
 
 	it("shares boards between characters on the account but keeps the selection per character", function()
 		local will = Client.new():login()
-		will:slash("/cork create MC")
+		local mc = will:createBoard("MC")
 		local saved = will:logout()
 		local alt = Client.new({ saved = saved, name = "Alt", guid = "Player-4372-0ABCDEF1" }):login()
-		has(alt:slash("/cork boards"), "MC |cff808080")
-		has(alt:slash("/cork list"), "No board selected")
-		alt:slash("/cork use MC")
-		has(alt:slash("/cork add from the alt"), "Added #1")
-		assert.are.equal("6e97d748-0001", next(alt.ns.Corkboard.store:current().notes))
+		assert.are.equal(1, #alt:store():boards())
+		assert.is_nil(alt:board())
+		alt:store():select(mc.id)
+		alt:addNote("from the alt")
+		assert.are.equal("6e97d748-0001", next(alt:board().notes))
 	end)
 
 	it("writes nothing but board data and AceDB bookkeeping", function()
 		local client = Client.new():login()
-		client:slash("/cork create MC")
+		client:createBoard("MC")
 		local saved = client:logout()
 		local env = {}
 		setfenv(assert(loadstring(saved)), env)()

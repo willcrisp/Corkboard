@@ -61,7 +61,7 @@ end
 local function shared(specs)
 	local network, clients = party(specs)
 	local a = clients[1]
-	a:slash("/cork create Molten Core prep")
+	a:createBoard("Molten Core prep")
 	local code = invite(a)
 	for i = 2, #clients do
 		if not specs[i].outside then
@@ -88,11 +88,9 @@ describe("Corkboard between fake clients (Phase 2) #slow", function()
 	it("round-trips an invite, and a joiner gets the board", function()
 		local network, clients, id = shared({ { name = "Will" }, { name = "Bob" } })
 		local a, b = clients[1], clients[2]
-		a:slash("/cork add Need 4x " .. LINK)
+		a:addNote("Need 4x " .. LINK)
 		run(network, clients, 5)
-		local list = b:slash("/cork list")
-		has(list, "Molten Core prep: 1 note")
-		has(list, "Need 4x " .. LINK)
+		assert.are.same({ "Need 4x " .. LINK, 1 }, { b:noteTexts() })
 		has(b:slash("/cork members"), "Will-MirageRaceway")
 		assert(within(network, clients, 30, function()
 			return boards(a)[id].members["Bob-MirageRaceway"] ~= nil
@@ -103,17 +101,17 @@ describe("Corkboard between fake clients (Phase 2) #slow", function()
 	it("an edit appears on the other client within 5 s", function()
 		local network, clients, id = shared({ { name = "Will" }, { name = "Bob" } })
 		local a, b = clients[1], clients[2]
-		a:slash("/cork add Bring fire resistance")
+		a:addNote("Bring fire resistance")
 		assert.is_truthy(within(network, clients, 5, function()
-			return b:slash("/cork list"):find("Bring fire resistance", 1, true) ~= nil
+			return b:noteTexts() == "Bring fire resistance"
 		end))
-		b:slash("/cork edit 1 Bring fire resistance gear")
+		b:editNote(1, { text = "Bring fire resistance gear" })
 		assert.is_truthy(within(network, clients, 5, function()
-			return a:slash("/cork list"):find("Bring fire resistance gear", 1, true) ~= nil
+			return a:noteTexts() == "Bring fire resistance gear"
 		end))
-		a:slash("/cork delete 1")
+		a:deleteNote(1)
 		assert.is_truthy(within(network, clients, 5, function()
-			return b:slash("/cork list"):find("0 notes", 1, true) ~= nil
+			return b:noteTexts() == ""
 		end))
 		assert.are.equal(boards(a)[id].clock, boards(b)[id].clock)
 	end)
@@ -164,9 +162,9 @@ describe("Corkboard between fake clients (Phase 2) #slow", function()
 		local network, clients, id = shared({ { name = "Will" }, { name = "Bob" } })
 		clients[2] = clients[2]:reload()
 		run(network, clients, 10)
-		clients[1]:slash("/cork add after the reload")
+		clients[1]:addNote("after the reload")
 		assert.is_truthy(within(network, clients, 5, function()
-			return clients[2]:slash("/cork list"):find("after the reload", 1, true) ~= nil
+			return clients[2]:noteTexts() == "after the reload"
 		end))
 		assert.is_truthy(boards(clients[2])[id])
 	end)
@@ -181,9 +179,9 @@ describe("Corkboard between fake clients (Phase 2) #slow", function()
 			local name = client.ns.Store.channelName(boards(client)[id])
 			assert.is_nil(client:channelNumber(name), "still in the channel")
 		end
-		clients[1]:slash("/cork add over guild chat")
+		clients[1]:addNote("over guild chat")
 		assert.is_truthy(within(network, clients, 5, function()
-			return clients[2]:slash("/cork list"):find("over guild chat", 1, true) ~= nil
+			return clients[2]:noteTexts() == "over guild chat"
 		end))
 		local guildSends = 0
 		for _, sent in ipairs(clients[1].sentAddon) do
@@ -201,14 +199,14 @@ describe("Corkboard between fake clients (Phase 4) #slow", function()
 		local a, b = clients[1], clients[2]
 		a.locked = true
 		for i = 1, 3 do
-			a:slash("/cork add pull " .. i)
+			a:addNote("pull " .. i)
 		end
 		run(network, clients, 20)
-		has(b:slash("/cork list"), "0 notes")
+		assert.are.equal("", b:noteTexts())
 		assert.is_false(a.ns.Corkboard.outbox.gate.open)
 		a.locked = false
 		assert.is_truthy(within(network, clients, 10, function()
-			return b:slash("/cork list"):find("3 notes", 1, true) ~= nil
+			return select(2, b:noteTexts()) == 3
 		end))
 		assert.are.equal(3, #store(b).notes(boards(b)[id]))
 	end)
@@ -217,7 +215,7 @@ describe("Corkboard between fake clients (Phase 4) #slow", function()
 		local network, clients, id = shared({ { name = "Will" }, { name = "Bob" } })
 		local a, b = clients[1], clients[2]
 		for i = 1, 60 do
-			a:slash(("/cork add note number %d with a little text to fill it out"):format(i))
+			a:addNote(("note number %d with a little text to fill it out"):format(i))
 		end
 		assert.is_truthy(within(network, clients, 180, function()
 			return #store(b).notes(boards(b)[id]) == 60
@@ -230,7 +228,7 @@ describe("Corkboard between fake clients (Phase 4) #slow", function()
 	it("stays quiet in chat and error-free through a sync", function()
 		local network, clients = shared({ { name = "Will" }, { name = "Bob" }, { name = "Cara" } })
 		for i = 1, 5 do
-			clients[1 + i % 3]:slash("/cork add chatter " .. i)
+			clients[1 + i % 3]:addNote("chatter " .. i)
 		end
 		run(network, clients, 30)
 		for _, client in ipairs(clients) do
@@ -263,7 +261,7 @@ describe("the Members tab and sharing UI #slow", function()
 		local members = a.ns.Members.Widgets()
 		-- The panel sits in the note area's inset, not over the whole window.
 		assert.are.equal("InsetFrameTemplate", members.list:GetParent():GetParent().template)
-		assert.are.equal(a.ns.Store.invite(boards(a)[id]), members.invite.text)
+		assert.are.equal(a.ns.Invite.encode(boards(a)[id]), members.invite.text)
 		assert.is_true(members.cloud:GetChecked())
 		local rows = {}
 		for _, row in ipairs(members.list.elements) do
@@ -280,7 +278,7 @@ describe("the Members tab and sharing UI #slow", function()
 		-- Typing in the invite box puts the invite back.
 		members.invite:Insert("junk")
 		members.invite:Run("OnTextChanged", true)
-		assert.are.equal(a.ns.Store.invite(boards(a)[id]), members.invite.text)
+		assert.are.equal(a.ns.Invite.encode(boards(a)[id]), members.invite.text)
 		local secret = boards(a)[id].secret
 		rows[2].remove:Click()
 		has(a.popup.text, "Remove Bob from Molten Core prep?")
@@ -297,7 +295,7 @@ describe("the Members tab and sharing UI #slow", function()
 	it("joins from the Join button", function()
 		local network, clients = party({ { name = "Will" }, { name = "Bob" } })
 		local a, b = clients[1], clients[2]
-		a:slash("/cork create Raid")
+		a:createBoard("Raid")
 		local code = invite(a)
 		b:slash("/cork")
 		buttonNamed(b, "Join"):Click()

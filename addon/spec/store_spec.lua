@@ -1,6 +1,7 @@
 local Store = require("Core.Store")
 local Merge = require("Core.Merge")
 local Sanitise = require("Core.Sanitise")
+local Invite = require("Core.Invite")
 
 local T0 = 1790000000
 local ME = "Will-Realm"
@@ -234,44 +235,6 @@ describe("Store boards", function()
 		assert.is_nil(store:current())
 	end)
 
-	describe("findBoard", function()
-		local store, db
-		local function add(id, name)
-			db.global.boards[id] = { id = id, meta = { name = name, rev = T0, editor = ME } }
-			return db.global.boards[id]
-		end
-		before_each(function()
-			store, db = newStore()
-			add("k3f9x2m7q1pz8c4w", "Molten Core")
-			add("k3f9aaaaaaaaaaaa", "molten core")
-			add("zzzzzzzzzzzzzzzz", "BWL")
-		end)
-
-		it("matches an exact id first", function()
-			local board = add("bwl", "something else")
-			assert.are.equal(board, store:findBoard("bwl"))
-		end)
-
-		it("matches a name, ignoring ASCII case", function()
-			assert.are.equal(db.global.boards.zzzzzzzzzzzzzzzz, store:findBoard("bwl"))
-			assert.are.same({ nil, "ambiguous" }, { store:findBoard("MOLTEN CORE") })
-		end)
-
-		it("matches an id prefix", function()
-			assert.are.equal(db.global.boards.k3f9x2m7q1pz8c4w, store:findBoard("k3f9x"))
-			assert.are.same({ nil, "ambiguous" }, { store:findBoard("k3f9") })
-		end)
-
-		it("prefers a name match over an id prefix", function()
-			local board = add("aaaaaaaaaaaaaaaa", "zzz")
-			assert.are.equal(board, store:findBoard("zzz"))
-		end)
-
-		it("reports a miss", function()
-			assert.are.same({ nil, "missing" }, { store:findBoard("AQ40") })
-			assert.are.same({ nil, "missing" }, { store:findBoard("") })
-		end)
-	end)
 end)
 
 describe("Store notes", function()
@@ -369,42 +332,6 @@ describe("Store notes", function()
 		assert.are.same({}, Store.notes({}))
 	end)
 
-	describe("refs", function()
-		local mine, theirs, other
-		before_each(function()
-			mine = assert(store:addNote(board.id, "mine")) -- a1b2c3d4-0001
-			assert(Merge.applyNote(board, note("ffffffff-0001", { author = "Bob-Realm", editor = "Bob-Realm" })))
-			theirs = board.notes["ffffffff-0001"]
-			other = assert(store:addNote(board.id, "two")) -- a1b2c3d4-0002
-		end)
-
-		it("uses #counter when it's unique, the full id otherwise", function()
-			assert.are.equal("#2", Store.noteRef(board, other))
-			assert.are.equal("a1b2c3d4-0001", Store.noteRef(board, mine))
-			assert.are.equal("ffffffff-0001", Store.noteRef(board, theirs))
-			assert(store:deleteNote(board.id, mine.id))
-			assert.are.equal("#1", Store.noteRef(board, theirs))
-		end)
-
-		it("finds a note by full id or unique counter", function()
-			assert.are.equal(mine, Store.findNote(board, "a1b2c3d4-0001"))
-			assert.are.equal(other, Store.findNote(board, "2"))
-			assert.are.equal(other, Store.findNote(board, "#2"))
-			assert.are.equal(other, Store.findNote(board, "#0002"))
-			assert.are.same({ nil, "ambiguous" }, { Store.findNote(board, "#1") })
-			assert.are.same({ nil, "missing" }, { Store.findNote(board, "#9") })
-			assert.are.same({ nil, "missing" }, { Store.findNote(board, "a1b2c3d4-0009") })
-			assert.are.same({ nil, "missing" }, { Store.findNote(board, "flasks") })
-			assert.are.same({ nil, "missing" }, { Store.findNote({}, "#1") })
-		end)
-
-		it("skips deleted notes", function()
-			assert(store:deleteNote(board.id, mine.id))
-			assert.are.same({ nil, "deleted" }, { Store.findNote(board, mine.id) })
-			assert.are.equal(theirs, Store.findNote(board, "#1"))
-		end)
-	end)
-
 	it("only ever stores records a peer would accept", function()
 		local rand = prng(42)
 		local ids = {}
@@ -431,8 +358,6 @@ describe("Store notes", function()
 end)
 
 describe("Store sharing", function()
-	local Invite = require("Core.Invite")
-
 	local function owned()
 		local store, db, env = newStore()
 		local changes = {}
@@ -465,7 +390,7 @@ describe("Store sharing", function()
 
 	it("makes an invite and joins from it", function()
 		local _, board = owned()
-		local invite = Store.invite(board)
+		local invite = Invite.encode(board)
 		assert.are.same({ id = board.id, secret = board.secret, owner = ME }, Invite.decode(invite))
 
 		local other, db = newStore({ me = "Bob-Realm", prefix = "b0b0b0b0" })
@@ -484,7 +409,7 @@ describe("Store sharing", function()
 
 	it("joining again changes nothing, unless the secret changed", function()
 		local store, board = owned()
-		local invite = Store.invite(board)
+		local invite = Invite.encode(board)
 		local other = newStore({ me = "Bob-Realm", prefix = "b0b0b0b0" })
 		local joined = other:joinBoard(invite)
 		local rev = joined.members["Bob-Realm"].rev
@@ -493,7 +418,7 @@ describe("Store sharing", function()
 		assert.is_false(new)
 		assert.are.equal(rev, joined.members["Bob-Realm"].rev)
 		assert(store:rotateSecret(board.id))
-		other:joinBoard(Store.invite(board))
+		other:joinBoard(Invite.encode(board))
 		assert.are.equal(board.secret, joined.secret)
 		assert.are.same({ Invite.decode(invite).secret }, joined.oldSecrets)
 	end)
@@ -501,7 +426,7 @@ describe("Store sharing", function()
 	it("the owner rejoining keeps the owner role", function()
 		local store, board = owned()
 		board.members[ME] = nil
-		store:joinBoard(Store.invite(board))
+		store:joinBoard(Invite.encode(board))
 		assert.are.equal("owner", board.members[ME].role)
 	end)
 
@@ -527,7 +452,7 @@ describe("Store sharing", function()
 		Store.retire(board, board.oldSecrets[3])
 		assert.are.equal(5, #board.oldSecrets)
 		local other = newStore({ me = "Bob-Realm", prefix = "b0b0b0b0" })
-		local joined = other:joinBoard(Store.invite(board))
+		local joined = other:joinBoard(Invite.encode(board))
 		assert.are.same({ nil, "not_owner" }, { other:rotateSecret(joined.id) })
 		assert.are.same({ nil, "missing" }, { store:rotateSecret("nope") })
 	end)
@@ -545,7 +470,7 @@ describe("Store sharing", function()
 		assert.are.same({ nil, "remove_self" }, { store:removeMember(board.id, ME) })
 		assert.are.same({ nil, "missing" }, { store:removeMember("nope", "Bob-Realm") })
 		local other = newStore({ me = "Bob-Realm", prefix = "b0b0b0b0" })
-		local joined = other:joinBoard(Store.invite(board))
+		local joined = other:joinBoard(Invite.encode(board))
 		assert.are.same({ nil, "not_owner" }, { other:removeMember(joined.id, ME) })
 		assert.are.same({ nil, "identity" }, { newStore({ me = false }):removeMember(board.id, "Bob-Realm") })
 	end)

@@ -7,7 +7,7 @@
 --   opts.encode(envelope)         the wire text (Wire:encode)
 --   opts.send(dest, text, prio, done)
 --                                 hands one message to the transport, which
---                                 calls done(outcome, code) once: outcome is
+--                                 calls done(outcome) once: outcome is
 --                                 "ok", "lockdown", "wait" (not connected
 --                                 yet) or "error"
 --   opts.ready(dest)              optional: false while the transport can't
@@ -232,18 +232,17 @@ function Outbox:dispatch(item, text, label)
 	-- not the builder, so nothing is built twice.
 	local sent = { prio = item.prio, dest = item.dest, board = item.board, text = text, label = label }
 	local done = false
-	self.opts.send(item.dest, text, item.prio, function(outcome, code)
+	self.opts.send(item.dest, text, item.prio, function(outcome)
 		if done then
 			return
 		end
 		done = true
-		self:result(sent, outcome, code)
+		self:result(sent, outcome)
 	end)
 end
 
-function Outbox:result(sent, outcome, code)
+function Outbox:result(sent, outcome)
 	local now = self.opts.now()
-	self.lastResult = { outcome = outcome, code = code, at = now }
 	if outcome == "lockdown" then
 		self.stats.lockdowns = self.stats.lockdowns + 1
 		self:push(sent, true)

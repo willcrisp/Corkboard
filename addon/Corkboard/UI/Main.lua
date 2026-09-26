@@ -71,12 +71,15 @@ local function retain()
 	return ScrollBoxConstants and ScrollBoxConstants.RetainScrollPosition
 end
 
-local function button(parent, text, width)
+-- A standard panel button, 22 pixels high. Members and Editor use it too.
+function Main.Button(parent, text, width)
 	local b = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
 	b:SetSize(width, 22)
 	b:SetText(text)
 	return b
 end
+
+local button = Main.Button
 
 local function tooltip(owner, text)
 	owner:SetScript("OnEnter", function(self)

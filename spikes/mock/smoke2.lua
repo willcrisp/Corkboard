@@ -9,8 +9,7 @@ dofile("addon/Corkboard/Libs/LibStub/LibStub.lua")
 dofile("addon/Corkboard/Libs/LibDeflate/LibDeflate.lua")
 dofile("addon/Corkboard/Libs/LibSerialize/LibSerialize.lua")
 local Sanitise = require("Core.Sanitise")
-local ace = LibStub:NewLibrary("AceAddon-3.0", 1)
-function ace.GetAddon(_, name) return name == "Corkboard" and { Sanitise = Sanitise } or nil end
+_G.Corkboard = { Sanitise = Sanitise }
 _G.CorkSpike2DB = nil
 
 local chunk = assert(loadfile(arg[1]))

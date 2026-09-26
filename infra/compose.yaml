@@ -6,7 +6,6 @@ services:
     restart: unless-stopped
     environment:
       CORK_DB: /data/corkboard.db
-      CORK_MAX_BODY: "65536"
       CORK_TRUSTED_PROXY: caddy
     volumes: [corkboard-data:/data]
     healthcheck:

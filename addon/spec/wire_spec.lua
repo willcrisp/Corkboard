@@ -105,7 +105,7 @@ describe("Wire.split and the reassembler", function()
 		local other = Wire.split(text(300))
 		r:add("A", chunks[1], 0)
 		assert.is_nil(r:add("A", other[2], 0)) -- another message's count
-		assert.is_true(r.dropped >= 3)
+		assert.are.equal(0, r.count)
 	end)
 
 	it("restarts on a new first chunk", function()

@@ -4,12 +4,12 @@ The libraries from docs/design.md §13, copied unmodified from each project's la
 
 | Library | Source | Release | Commit |
 |---|---|---|---|
-| LibStub, CallbackHandler-1.0, AceAddon-3.0, AceEvent-3.0, AceTimer-3.0, AceDB-3.0, AceConsole-3.0, AceComm-3.0 (with ChatThrottleLib) | github.com/WoWUIDev/Ace3 | `Release-r1403` (2026-08-12) | `d295b12` |
+| LibStub, CallbackHandler-1.0, AceDB-3.0, ChatThrottleLib (from `AceComm-3.0/`) | github.com/WoWUIDev/Ace3 | `Release-r1403` (2026-08-12) | `d295b12` |
 | LibSerialize | github.com/rossnichols/LibSerialize | `v1.2.2` (2026-07-15) | `40d96aa` |
 | LibDeflate | github.com/SafeteeWoW/LibDeflate | `1.0.2-release` | `6831edc` |
 | LibDataBroker-1.1 | github.com/tekkub/libdatabroker-1-1 | `v1.1.4` (minor 4, unchanged since 2008) | `1a63ede` |
 
-Ace3 r1403 includes the ChatThrottleLib fix for secret values during chat lockdown (WoW 12.x), which matters on Forever's Midnight-style restrictions (§2).
+Only these files from Ace3 are carried: the addon uses its own frame, slash command and `C_Timer` in place of AceAddon, AceConsole, AceEvent and AceTimer, and frames its own messages instead of using AceComm (§5.2). Ace3 r1403 includes the ChatThrottleLib fix for secret values during chat lockdown (WoW 12.x), which matters on Forever's Midnight-style restrictions (§2).
 
 ## Not vendored yet
 

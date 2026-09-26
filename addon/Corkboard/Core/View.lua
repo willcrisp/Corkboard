@@ -7,6 +7,7 @@ ns = type(ns) == "table" and ns or {}
 local Util = ns.Util or require("Core.Util")
 local Sanitise = ns.Sanitise or require("Core.Sanitise")
 local Commands = ns.Commands or require("Core.Commands")
+local plural = Commands.plural
 
 local find, format, gsub, lower, match = string.find, string.format, string.gsub, string.lower, string.match
 local floor = math.floor
@@ -39,16 +40,7 @@ function View.tag(color)
 end
 
 -- "now", "5m", "2h", "3d": the card corner (docs/mockups/Main).
-function View.shortAge(seconds)
-	if seconds < 60 then
-		return "now"
-	elseif seconds < 3600 then
-		return floor(seconds / 60) .. "m"
-	elseif seconds < 86400 then
-		return floor(seconds / 3600) .. "h"
-	end
-	return floor(seconds / 86400) .. "d"
-end
+View.shortAge = Commands.shortAge
 
 -- A character name without the realm when it's the player's own realm.
 function View.shortName(name, myRealm)
@@ -166,10 +158,8 @@ end
 
 -- The note count on the right of the status line.
 function View.count(noteCount, shownCount)
-	if noteCount == 1 and shownCount == 1 then
-		return "1 note"
-	elseif noteCount == shownCount then
-		return format("%d notes", noteCount)
+	if noteCount == shownCount then
+		return plural(noteCount, "note")
 	end
 	return format("%d of %d notes", shownCount, noteCount)
 end
@@ -182,10 +172,6 @@ View.DOTS = {
 	behind = rgb("b8663a"),
 	idle = rgb("7a7a7a"),
 }
-
-local function plural(n, word)
-	return format("%d %s%s", n, word, n == 1 and "" or "s")
-end
 
 local function cloudDetail(status, now)
 	if not status.cloud then
@@ -229,7 +215,7 @@ end
 
 -- The line under a board's name in the board list.
 function View.boardDetail(noteCount, online)
-	local notes = noteCount == 1 and "1 note" or format("%d notes", noteCount)
+	local notes = plural(noteCount, "note")
 	if online and online > 0 then
 		return format("%s · %d online", notes, online)
 	end
