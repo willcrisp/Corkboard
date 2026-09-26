@@ -32,12 +32,8 @@ jobs:
         run: |
           busted --run=coverage
           luacov
-          sed -n '/^Summary/,$p' luacov.report.out
           # §12 Phase 1: merge-core coverage of at least 95%.
-          awk '/^addon\/Corkboard\/Core\/(Util|Sanitise|Merge|Digest)\.lua/ || /^Total/ {
-            pct = $NF; sub("%", "", pct)
-            if (pct + 0 < 95) { print "coverage below 95%: " $0; bad = 1 }
-          } END { exit bad }' luacov.report.out
+          python3 .github/scripts/coverage_gate.py luacov.report.out
 
       - name: Spike smoke tests
         run: |
