@@ -20,6 +20,7 @@ Current status and the ordered next steps are in `docs/next-steps.md`. Read it a
 | `spikes/` | Throwaway Phase 0 spike addons (not shipped). They may break the hard rules below on purpose, for example by calling `SendAddonMessage` directly. |
 | `infra/` | Docker Compose + Caddy for Will's Arcane host, public DNS `corkboard.<domain>`. |
 | `shared/test-vectors/` | JSON fixtures run by both the Lua and Python test suites. |
+| `shared/python/` | `corkcore`, the Python port of the merge core, installed by both `api/` and `companion/`. |
 | `docs/design.md` | Spec v0.2: architecture, protocol, phases and acceptance criteria. |
 | `docs/ui-style.md` | In-game UI look (Blizzard templates, colours, fonts). |
 | `docs/mockups/` | Design-canvas sources for the UI mockups (reference only; they need the canvas runtime to render). |
@@ -63,4 +64,6 @@ Run these from the repo root. They need Lua 5.1 with busted, luacheck, dkjson an
 - **Test:** `busted` runs every spec, including the property tests.
 - **Coverage:** `busted --run=coverage && luacov` writes `luacov.report.out`. This run leaves out the property tests, which are too slow under the coverage hook.
 - **Lint:** `luacheck .`
+- **Python core:** `pip install -e shared/python && pytest shared/python` runs the shared vectors and the Hypothesis property tests.
+- **Fuzz corpus:** `python3 shared/test-vectors/tools/gen_sanitise_fuzz.py` regenerates `sanitise_fuzz.json` after a sanitiser change.
 - **Spike smoke tests:** `lua5.1 spikes/mock/smoke.lua spikes/CorkSpike/CorkSpike.lua` runs CorkSpike against a fake client, and `lua5.1 spikes/mock/smoke2.lua spikes/CorkSpike2/CorkSpike2.lua` does the same for CorkSpike2.

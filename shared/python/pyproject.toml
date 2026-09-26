@@ -1,0 +1,15 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "corkcore"
+version = "0.1.0"
+description = "Corkboard's merge core in Python: sanitiser, LWW merge, digests and invites (docs/design.md §4, §6)"
+requires-python = ">=3.11"
+
+[tool.setuptools]
+packages = ["corkcore"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

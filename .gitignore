@@ -26,3 +26,4 @@ Thumbs.db
 # Lua coverage
 luacov.stats.out
 luacov.report.out
+*.egg-info/
