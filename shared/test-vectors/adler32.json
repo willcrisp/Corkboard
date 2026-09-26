@@ -1,0 +1,16 @@
+{
+  "description": "Adler-32 as in zlib and LibDeflate:Adler32. input is UTF-8 text; input_hex is raw bytes. repeat (default 1) repeats the input.",
+  "cases": [
+    { "input": "", "adler32": 1 },
+    { "input": "a", "adler32": 6422626 },
+    { "input": "abc", "adler32": 38600999 },
+    { "input": "Wikipedia", "adler32": 300286872 },
+    { "input": "a1b2c3d4-0007", "adler32": 423560009 },
+    { "input": "Björn-Realm", "adler32": 585893156 },
+    { "input": "|cffff8000|Hitem:19019::::::::60:::::::::|h[Thunderfury, Blessed Blade of the Windseeker]|h|r", "adler32": 1341464268 },
+    { "input_hex": "00", "repeat": 16, "adler32": 1048577 },
+    { "input_hex": "ff", "repeat": 5552, "note": "zlib's NMAX: the longest run a 32-bit implementation can sum before reducing", "adler32": 4052720524 },
+    { "input_hex": "ff", "repeat": 12000, "note": "crosses several of the Lua implementation's 4,000-byte reduction blocks", "adler32": 162640851 },
+    { "input": "x", "repeat": 65521, "adler32": 1 }
+  ]
+}

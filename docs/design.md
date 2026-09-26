@@ -111,9 +111,10 @@ Note = {
 
 ### 4.3 Merge rules
 
-- **Clock:** on a local change, `rev = max(GetServerTime(), board.clock + 1)`, then `board.clock = rev`. On receiving a record, `board.clock = max(board.clock, rev)`.
-- **Winner:** the record with the greater `(rev, editor)`, compared lexicographically.
-- **Delete** is an edit with `deleted = true, text = ""`. Tombstones are kept (not GC'd in v1).
+- **Clock:** on a local change, `rev = max(GetServerTime(), board.clock + 1)`, then `board.clock = rev`. On receiving a record that passes the sanitiser, `board.clock = max(board.clock, rev)`. `rev` and `created` are integers from 0 to 2^53 − 1 (`rev` from 1), the largest a Lua number holds exactly.
+- **Winner:** the record with the greater `(rev, editor)`, compared lexicographically. `rev` compares as a number. `editor` compares byte by byte, not with Lua's `<`, whose order depends on the C locale. That way Lua and Python always agree.
+- **Exact ties:** honest clients only produce two different records with the same `(rev, editor)` when one character edits on two installs. The tie then breaks on content: a tombstone beats a live note, then the greater `text`, `color`, `author` and `created`, in that order. MemberRecords break ties on `removed`, then `role`. The digest can't see such a tie, so it resolves wherever both records meet (live `PUT`s or the cloud), not through anti-entropy.
+- **Delete** is an edit with `deleted = true, text = ""`. Tombstones are kept (not GC'd in v1). A stale copy can never bring a deleted note back. A later edit from someone who hadn't seen the delete still wins, like any later edit.
 - **Board state** is the union of all notes by `id`, with the winner rule applied per id. Merging is commutative, associative and idempotent, so relaying order and duplicates don't matter.
 
 ### 4.4 Digests (bucketed)
@@ -121,6 +122,13 @@ Note = {
 - `bucket(id) = LibDeflate:Adler32(id) % 32`
 - `bucketHash[i] = Adler32(sorted "id=rev;editor\n" lines in bucket i)`
 - `boardDigest = Adler32(concat(bucketHash[0..31]))`
+
+The details, pinned by `shared/test-vectors/digest.json`:
+
+- Adler-32 is zlib's, which `LibDeflate:Adler32` matches. The merge core carries its own copy so it stays pure Lua.
+- `rev` is written in plain decimal, never in exponent form.
+- Lines sort byte-wise. Tombstones are included. An empty bucket hashes to 1.
+- `concat` joins each bucket hash as 4 big-endian bytes.
 
 The 32 bucket hashes are 128 bytes raw, about one addon message after compression. Only the notes in mismatched buckets are ever exchanged as indexes.
 
@@ -188,10 +196,21 @@ At about 255 bytes/sec per prefix, and with other traffic sharing that budget, P
 - Notes render in a hyperlink-enabled frame: `OnHyperlinkEnter` shows `GameTooltip:SetHyperlink`, and `OnHyperlinkClick` calls `SetItemRef`.
 - **Sanitise on receipt, identically in Lua and Python:**
   - Allowed hyperlink types: `item, quest, spell, achievement, currency, mount, battlepet, journal`.
-  - Strip `|T`/`|A` textures and `|K` tokens.
+  - Reject `|T`/`|A` textures and `|K` tokens.
   - Allow `|c…|r` colours.
   - Maximum 2,000 bytes per note.
   - A note that fails is dropped, not repaired.
+
+  The sanitiser is a yes/no check, never a rewrite. A client that repaired a note would store different bytes under the same `(rev, editor)`, and the digest can't see that. The escape grammar is a whitelist:
+  - `||`;
+  - `|cAARRGGBB`, `|cnNAME:` (named colours such as `|cnIQ4:`, which modern item links may use; confirm in spike 04) and `|r`;
+  - `|H<type>:<data>|h<text>|h`, where `<type>` is an allowed type and neither part contains `|`.
+
+  Any other `|` escape fails, including `|T`, `|A`, `|K` and `|n`. Text must also be strict UTF-8, with no control characters other than `\n`.
+
+  Records are checked as well. Note ids must be `<8 lower-case hex>-<digits>`, 18 bytes at most. Names must look like `Name-Realm`, 64 bytes at most, with no `|` or control characters. `color` must be 1–8 (the UI uses 1–5), `deleted` must be a boolean, and a tombstone's text must be empty. Unknown fields are ignored, so notes from a newer client still load.
+
+  `shared/test-vectors/sanitise.json` fixes the rules and the reason codes.
 - Item and quest IDs are the ones valid on Forever. Links are built by the client, so no ID tables are needed.
 
 ---
@@ -233,7 +252,7 @@ members (board_id TEXT, name TEXT, role TEXT, rev INT, editor TEXT, removed INT,
 CREATE INDEX notes_seq ON notes(board_id, seq);
 ```
 
-- **Merge:** in one transaction, upsert when `(rev, editor)` is greater than the stored pair, and assign `seq = ++boards.seq` to each accepted row.
+- **Merge:** in one transaction, upsert when the incoming record wins under §4.3 (`(rev, editor)`, then the exact-tie rule), and assign `seq = ++boards.seq` to each accepted row.
 - **Limits:** 1,000 notes per board, 2,000 bytes per note, 64 KB per request, 60 requests/min per board, 20 board registrations/hour per IP.
 
 ---

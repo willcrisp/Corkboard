@@ -22,3 +22,7 @@ addon/Corkboard_Cloud/Data.lua
 .idea/
 .DS_Store
 Thumbs.db
+
+# Lua coverage
+luacov.stats.out
+luacov.report.out

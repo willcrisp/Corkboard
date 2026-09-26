@@ -10,7 +10,8 @@ The full spec is in `docs/design.md`. Read it before changing behaviour. Section
 
 | Path | What lives here |
 |---|---|
-| `addon/Corkboard/` | The in-game addon (Lua 5.1, Ace3). |
+| `addon/Corkboard/` | The in-game addon (Lua 5.1, Ace3). The pure merge core is in `Core/`. |
+| `addon/spec/` | busted specs for the merge core. Kept outside the addon folder so they never ship. |
 | `addon/Corkboard_Cloud/` | Tiny data-only addon. The companion writes its `Data.lua`. Never hand-edit it. |
 | `companion/` | Desktop companion (Python 3.12, PyInstaller). Reads SavedVariables and talks to the API. |
 | `api/` | Sync API (FastAPI + SQLite). |
@@ -53,3 +54,9 @@ The API ships as a container from GHCR and runs as an Arcane project on Will's h
 ## Commands
 
 Add commands here as they're created (lint, test, package, run API locally).
+
+Run these from the repo root. They need Lua 5.1 with busted, luacheck, dkjson and luacov: `luarocks --lua-version=5.1 install busted luacheck dkjson luacov`, or on Ubuntu `apt install lua5.1 lua-busted lua-check lua-dkjson` plus `luacov` from luarocks.
+
+- **Test:** `busted` runs every spec, including the property tests.
+- **Coverage:** `busted --run=coverage && luacov` writes `luacov.report.out`. This run leaves out the property tests, which are too slow under the coverage hook.
+- **Lint:** `luacheck .`

@@ -1,0 +1,15 @@
+-- busted config. From the repo root:
+--   busted                            all specs, including the property tests
+--   busted --run=coverage && luacov   coverage of the merge core (luacov.report.out)
+return {
+	_all = {
+		lpath = "addon/Corkboard/?.lua;addon/spec/?.lua",
+		ROOT = { "addon/spec" },
+	},
+	coverage = {
+		coverage = true,
+		-- The property tests run for minutes under the coverage hook, and the
+		-- unit and vector specs must reach the coverage target on their own.
+		["exclude-pattern"] = "property_spec",
+	},
+}

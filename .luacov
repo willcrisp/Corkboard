@@ -1,0 +1,6 @@
+-- luacov config: `busted --coverage && luacov`, report in luacov.report.out.
+return {
+	include = { "addon/Corkboard/Core/" },
+	statsfile = "luacov.stats.out",
+	reportfile = "luacov.report.out",
+}

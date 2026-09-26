@@ -1,0 +1,546 @@
+{
+  "description": "Merge cases (docs/design.md §4.3). See README.md for the fields.",
+  "notes": [
+    {
+      "name": "into an empty board",
+      "board": { "clock": 0, "notes": [] },
+      "apply": [
+        { "id": "a1b2c3d4-0007", "author": "Will-Realm", "created": 1790000000, "rev": 1790000100, "editor": "Bob-Realm", "text": "note", "color": 1, "deleted": false }
+      ],
+      "results": ["stored"],
+      "expect": {
+        "clock": 1790000100,
+        "notes": [
+          { "id": "a1b2c3d4-0007", "author": "Will-Realm", "created": 1790000000, "rev": 1790000100, "editor": "Bob-Realm", "text": "note", "color": 1, "deleted": false }
+        ]
+      }
+    },
+    {
+      "name": "newer rev wins",
+      "board": {
+        "clock": 1790000200,
+        "notes": [
+          { "id": "a1b2c3d4-0007", "author": "Will-Realm", "created": 1790000000, "rev": 1790000200, "editor": "Zed-Realm", "text": "old", "color": 1, "deleted": false }
+        ]
+      },
+      "apply": [
+        { "id": "a1b2c3d4-0007", "author": "Will-Realm", "created": 1790000000, "rev": 1790000300, "editor": "Amy-Realm", "text": "new", "color": 1, "deleted": false }
+      ],
+      "results": ["stored"],
+      "expect": {
+        "clock": 1790000300,
+        "notes": [
+          { "id": "a1b2c3d4-0007", "author": "Will-Realm", "created": 1790000000, "rev": 1790000300, "editor": "Amy-Realm", "text": "new", "color": 1, "deleted": false }
+        ]
+      }
+    },
+    {
+      "name": "older rev loses",
+      "board": {
+        "clock": 1790000300,
+        "notes": [
+          { "id": "a1b2c3d4-0007", "author": "Will-Realm", "created": 1790000000, "rev": 1790000300, "editor": "Amy-Realm", "text": "new", "color": 1, "deleted": false }
+        ]
+      },
+      "apply": [
+        { "id": "a1b2c3d4-0007", "author": "Will-Realm", "created": 1790000000, "rev": 1790000200, "editor": "Zed-Realm", "text": "old", "color": 1, "deleted": false }
+      ],
+      "results": ["stale"],
+      "expect": {
+        "clock": 1790000300,
+        "notes": [
+          { "id": "a1b2c3d4-0007", "author": "Will-Realm", "created": 1790000000, "rev": 1790000300, "editor": "Amy-Realm", "text": "new", "color": 1, "deleted": false }
+        ]
+      }
+    },
+    {
+      "name": "rev compares as a number",
+      "board": {
+        "clock": 10,
+        "notes": [
+          { "id": "a1b2c3d4-0007", "author": "Will-Realm", "created": 1790000000, "rev": 9, "editor": "Zed-Realm", "text": "note", "color": 1, "deleted": false }
+        ]
+      },
+      "apply": [
+        { "id": "a1b2c3d4-0007", "author": "Will-Realm", "created": 1790000000, "rev": 10, "editor": "Amy-Realm", "text": "note", "color": 1, "deleted": false }
+      ],
+      "results": ["stored"],
+      "expect": {
+        "clock": 10,
+        "notes": [
+          { "id": "a1b2c3d4-0007", "author": "Will-Realm", "created": 1790000000, "rev": 10, "editor": "Amy-Realm", "text": "note", "color": 1, "deleted": false }
+        ]
+      }
+    },
+    {
+      "name": "same rev: greater editor wins",
+      "board": {
+        "clock": 1790000300,
+        "notes": [
+          { "id": "a1b2c3d4-0007", "author": "Will-Realm", "created": 1790000000, "rev": 1790000300, "editor": "Amy-Realm", "text": "amy", "color": 1, "deleted": false }
+        ]
+      },
+      "apply": [
+        { "id": "a1b2c3d4-0007", "author": "Will-Realm", "created": 1790000000, "rev": 1790000300, "editor": "Bob-Realm", "text": "bob", "color": 1, "deleted": false }
+      ],
+      "results": ["stored"],
+      "expect": {
+        "clock": 1790000300,
+        "notes": [
+          { "id": "a1b2c3d4-0007", "author": "Will-Realm", "created": 1790000000, "rev": 1790000300, "editor": "Bob-Realm", "text": "bob", "color": 1, "deleted": false }
+        ]
+      }
+    },
+    {
+      "name": "same rev: lesser editor loses",
+      "board": {
+        "clock": 1790000300,
+        "notes": [
+          { "id": "a1b2c3d4-0007", "author": "Will-Realm", "created": 1790000000, "rev": 1790000300, "editor": "Bob-Realm", "text": "bob", "color": 1, "deleted": false }
+        ]
+      },
+      "apply": [
+        { "id": "a1b2c3d4-0007", "author": "Will-Realm", "created": 1790000000, "rev": 1790000300, "editor": "Amy-Realm", "text": "amy", "color": 1, "deleted": false }
+      ],
+      "results": ["stale"],
+      "expect": {
+        "clock": 1790000300,
+        "notes": [
+          { "id": "a1b2c3d4-0007", "author": "Will-Realm", "created": 1790000000, "rev": 1790000300, "editor": "Bob-Realm", "text": "bob", "color": 1, "deleted": false }
+        ]
+      }
+    },
+    {
+      "name": "editor compares by byte, so lower case beats upper case",
+      "board": {
+        "clock": 1790000300,
+        "notes": [
+          { "id": "a1b2c3d4-0007", "author": "Will-Realm", "created": 1790000000, "rev": 1790000300, "editor": "Bob-Realm", "text": "upper", "color": 1, "deleted": false }
+        ]
+      },
+      "apply": [
+        { "id": "a1b2c3d4-0007", "author": "Will-Realm", "created": 1790000000, "rev": 1790000300, "editor": "bob-Realm", "text": "lower", "color": 1, "deleted": false }
+      ],
+      "results": ["stored"],
+      "expect": {
+        "clock": 1790000300,
+        "notes": [
+          { "id": "a1b2c3d4-0007", "author": "Will-Realm", "created": 1790000000, "rev": 1790000300, "editor": "bob-Realm", "text": "lower", "color": 1, "deleted": false }
+        ]
+      }
+    },
+    {
+      "name": "editor compares by byte, so non-ASCII beats ASCII",
+      "board": {
+        "clock": 1790000300,
+        "notes": [
+          { "id": "a1b2c3d4-0007", "author": "Will-Realm", "created": 1790000000, "rev": 1790000300, "editor": "Zed-Realm", "text": "zed", "color": 1, "deleted": false }
+        ]
+      },
+      "apply": [
+        { "id": "a1b2c3d4-0007", "author": "Will-Realm", "created": 1790000000, "rev": 1790000300, "editor": "Øystein-Realm", "text": "oystein", "color": 1, "deleted": false }
+      ],
+      "results": ["stored"],
+      "expect": {
+        "clock": 1790000300,
+        "notes": [
+          { "id": "a1b2c3d4-0007", "author": "Will-Realm", "created": 1790000000, "rev": 1790000300, "editor": "Øystein-Realm", "text": "oystein", "color": 1, "deleted": false }
+        ]
+      }
+    },
+    {
+      "name": "tombstone beats an older edit",
+      "board": {
+        "clock": 1790000400,
+        "notes": [
+          { "id": "a1b2c3d4-0007", "author": "Will-Realm", "created": 1790000000, "rev": 1790000400, "editor": "Amy-Realm", "text": "", "color": 1, "deleted": true }
+        ]
+      },
+      "apply": [
+        { "id": "a1b2c3d4-0007", "author": "Will-Realm", "created": 1790000000, "rev": 1790000350, "editor": "Bob-Realm", "text": "stale edit", "color": 1, "deleted": false }
+      ],
+      "results": ["stale"],
+      "expect": {
+        "clock": 1790000400,
+        "notes": [
+          { "id": "a1b2c3d4-0007", "author": "Will-Realm", "created": 1790000000, "rev": 1790000400, "editor": "Amy-Realm", "text": "", "color": 1, "deleted": true }
+        ]
+      }
+    },
+    {
+      "name": "a later edit beats a tombstone (plain LWW)",
+      "board": {
+        "clock": 1790000400,
+        "notes": [
+          { "id": "a1b2c3d4-0007", "author": "Will-Realm", "created": 1790000000, "rev": 1790000400, "editor": "Amy-Realm", "text": "", "color": 1, "deleted": true }
+        ]
+      },
+      "apply": [
+        { "id": "a1b2c3d4-0007", "author": "Will-Realm", "created": 1790000000, "rev": 1790000450, "editor": "Bob-Realm", "text": "edited", "color": 1, "deleted": false }
+      ],
+      "results": ["stored"],
+      "expect": {
+        "clock": 1790000450,
+        "notes": [
+          { "id": "a1b2c3d4-0007", "author": "Will-Realm", "created": 1790000000, "rev": 1790000450, "editor": "Bob-Realm", "text": "edited", "color": 1, "deleted": false }
+        ]
+      }
+    },
+    {
+      "name": "exact tie: tombstone beats live note",
+      "board": {
+        "clock": 1790000500,
+        "notes": [
+          { "id": "a1b2c3d4-0007", "author": "Will-Realm", "created": 1790000000, "rev": 1790000500, "editor": "Bob-Realm", "text": "note", "color": 1, "deleted": false }
+        ]
+      },
+      "apply": [
+        { "id": "a1b2c3d4-0007", "author": "Will-Realm", "created": 1790000000, "rev": 1790000500, "editor": "Bob-Realm", "text": "", "color": 1, "deleted": true }
+      ],
+      "results": ["stored"],
+      "expect": {
+        "clock": 1790000500,
+        "notes": [
+          { "id": "a1b2c3d4-0007", "author": "Will-Realm", "created": 1790000000, "rev": 1790000500, "editor": "Bob-Realm", "text": "", "color": 1, "deleted": true }
+        ]
+      }
+    },
+    {
+      "name": "exact tie: live note loses to tombstone",
+      "board": {
+        "clock": 1790000500,
+        "notes": [
+          { "id": "a1b2c3d4-0007", "author": "Will-Realm", "created": 1790000000, "rev": 1790000500, "editor": "Bob-Realm", "text": "", "color": 1, "deleted": true }
+        ]
+      },
+      "apply": [
+        { "id": "a1b2c3d4-0007", "author": "Will-Realm", "created": 1790000000, "rev": 1790000500, "editor": "Bob-Realm", "text": "note", "color": 1, "deleted": false }
+      ],
+      "results": ["stale"],
+      "expect": {
+        "clock": 1790000500,
+        "notes": [
+          { "id": "a1b2c3d4-0007", "author": "Will-Realm", "created": 1790000000, "rev": 1790000500, "editor": "Bob-Realm", "text": "", "color": 1, "deleted": true }
+        ]
+      }
+    },
+    {
+      "name": "exact tie: greater text wins",
+      "board": {
+        "clock": 1790000500,
+        "notes": [
+          { "id": "a1b2c3d4-0007", "author": "Will-Realm", "created": 1790000000, "rev": 1790000500, "editor": "Bob-Realm", "text": "apple", "color": 1, "deleted": false }
+        ]
+      },
+      "apply": [
+        { "id": "a1b2c3d4-0007", "author": "Will-Realm", "created": 1790000000, "rev": 1790000500, "editor": "Bob-Realm", "text": "banana", "color": 1, "deleted": false }
+      ],
+      "results": ["stored"],
+      "expect": {
+        "clock": 1790000500,
+        "notes": [
+          { "id": "a1b2c3d4-0007", "author": "Will-Realm", "created": 1790000000, "rev": 1790000500, "editor": "Bob-Realm", "text": "banana", "color": 1, "deleted": false }
+        ]
+      }
+    },
+    {
+      "name": "exact tie: lesser text loses",
+      "board": {
+        "clock": 1790000500,
+        "notes": [
+          { "id": "a1b2c3d4-0007", "author": "Will-Realm", "created": 1790000000, "rev": 1790000500, "editor": "Bob-Realm", "text": "banana", "color": 1, "deleted": false }
+        ]
+      },
+      "apply": [
+        { "id": "a1b2c3d4-0007", "author": "Will-Realm", "created": 1790000000, "rev": 1790000500, "editor": "Bob-Realm", "text": "apple", "color": 1, "deleted": false }
+      ],
+      "results": ["stale"],
+      "expect": {
+        "clock": 1790000500,
+        "notes": [
+          { "id": "a1b2c3d4-0007", "author": "Will-Realm", "created": 1790000000, "rev": 1790000500, "editor": "Bob-Realm", "text": "banana", "color": 1, "deleted": false }
+        ]
+      }
+    },
+    {
+      "name": "exact tie: greater colour wins",
+      "board": {
+        "clock": 1790000500,
+        "notes": [
+          { "id": "a1b2c3d4-0007", "author": "Will-Realm", "created": 1790000000, "rev": 1790000500, "editor": "Bob-Realm", "text": "note", "color": 2, "deleted": false }
+        ]
+      },
+      "apply": [
+        { "id": "a1b2c3d4-0007", "author": "Will-Realm", "created": 1790000000, "rev": 1790000500, "editor": "Bob-Realm", "text": "note", "color": 3, "deleted": false }
+      ],
+      "results": ["stored"],
+      "expect": {
+        "clock": 1790000500,
+        "notes": [
+          { "id": "a1b2c3d4-0007", "author": "Will-Realm", "created": 1790000000, "rev": 1790000500, "editor": "Bob-Realm", "text": "note", "color": 3, "deleted": false }
+        ]
+      }
+    },
+    {
+      "name": "exact tie: greater author wins",
+      "board": {
+        "clock": 1790000500,
+        "notes": [
+          { "id": "a1b2c3d4-0007", "author": "Amy-Realm", "created": 1790000000, "rev": 1790000500, "editor": "Bob-Realm", "text": "note", "color": 1, "deleted": false }
+        ]
+      },
+      "apply": [
+        { "id": "a1b2c3d4-0007", "author": "Will-Realm", "created": 1790000000, "rev": 1790000500, "editor": "Bob-Realm", "text": "note", "color": 1, "deleted": false }
+      ],
+      "results": ["stored"],
+      "expect": {
+        "clock": 1790000500,
+        "notes": [
+          { "id": "a1b2c3d4-0007", "author": "Will-Realm", "created": 1790000000, "rev": 1790000500, "editor": "Bob-Realm", "text": "note", "color": 1, "deleted": false }
+        ]
+      }
+    },
+    {
+      "name": "exact tie: greater created wins",
+      "board": {
+        "clock": 1790000500,
+        "notes": [
+          { "id": "a1b2c3d4-0007", "author": "Will-Realm", "created": 1790000001, "rev": 1790000500, "editor": "Bob-Realm", "text": "note", "color": 1, "deleted": false }
+        ]
+      },
+      "apply": [
+        { "id": "a1b2c3d4-0007", "author": "Will-Realm", "created": 1790000002, "rev": 1790000500, "editor": "Bob-Realm", "text": "note", "color": 1, "deleted": false }
+      ],
+      "results": ["stored"],
+      "expect": {
+        "clock": 1790000500,
+        "notes": [
+          { "id": "a1b2c3d4-0007", "author": "Will-Realm", "created": 1790000002, "rev": 1790000500, "editor": "Bob-Realm", "text": "note", "color": 1, "deleted": false }
+        ]
+      }
+    },
+    {
+      "name": "identical record is stale",
+      "board": {
+        "clock": 1790000500,
+        "notes": [
+          { "id": "a1b2c3d4-0007", "author": "Will-Realm", "created": 1790000000, "rev": 1790000500, "editor": "Bob-Realm", "text": "note", "color": 1, "deleted": false }
+        ]
+      },
+      "apply": [
+        { "id": "a1b2c3d4-0007", "author": "Will-Realm", "created": 1790000000, "rev": 1790000500, "editor": "Bob-Realm", "text": "note", "color": 1, "deleted": false }
+      ],
+      "results": ["stale"],
+      "expect": {
+        "clock": 1790000500,
+        "notes": [
+          { "id": "a1b2c3d4-0007", "author": "Will-Realm", "created": 1790000000, "rev": 1790000500, "editor": "Bob-Realm", "text": "note", "color": 1, "deleted": false }
+        ]
+      }
+    },
+    {
+      "name": "invalid record is dropped and doesn't move the clock",
+      "board": {
+        "clock": 1790000100,
+        "notes": [
+          { "id": "a1b2c3d4-0007", "author": "Will-Realm", "created": 1790000000, "rev": 1790000100, "editor": "Bob-Realm", "text": "note", "color": 1, "deleted": false }
+        ]
+      },
+      "apply": [
+        { "id": "a1b2c3d4-0007", "author": "Will-Realm", "created": 1790000000, "rev": 1790000900, "editor": "Bob-Realm", "text": "|Tx|t", "color": 1, "deleted": false }
+      ],
+      "results": ["escape"],
+      "expect": {
+        "clock": 1790000100,
+        "notes": [
+          { "id": "a1b2c3d4-0007", "author": "Will-Realm", "created": 1790000000, "rev": 1790000100, "editor": "Bob-Realm", "text": "note", "color": 1, "deleted": false }
+        ]
+      }
+    },
+    {
+      "name": "clock follows a newer rev on another note",
+      "board": {
+        "clock": 1790001000,
+        "notes": [
+          { "id": "a1b2c3d4-0007", "author": "Will-Realm", "created": 1790000000, "rev": 1790000900, "editor": "Bob-Realm", "text": "note", "color": 1, "deleted": false }
+        ]
+      },
+      "apply": [
+        { "id": "b0b0b0b0-0001", "author": "Will-Realm", "created": 1790000000, "rev": 1790002000, "editor": "Bob-Realm", "text": "note", "color": 1, "deleted": false }
+      ],
+      "results": ["stored"],
+      "expect": {
+        "clock": 1790002000,
+        "notes": [
+          { "id": "a1b2c3d4-0007", "author": "Will-Realm", "created": 1790000000, "rev": 1790000900, "editor": "Bob-Realm", "text": "note", "color": 1, "deleted": false },
+          { "id": "b0b0b0b0-0001", "author": "Will-Realm", "created": 1790000000, "rev": 1790002000, "editor": "Bob-Realm", "text": "note", "color": 1, "deleted": false }
+        ]
+      }
+    },
+    {
+      "name": "clock never goes backwards",
+      "board": {
+        "clock": 1790005000,
+        "notes": [
+          { "id": "a1b2c3d4-0007", "author": "Will-Realm", "created": 1790000000, "rev": 1790000900, "editor": "Bob-Realm", "text": "note", "color": 1, "deleted": false }
+        ]
+      },
+      "apply": [
+        { "id": "b0b0b0b0-0001", "author": "Will-Realm", "created": 1790000000, "rev": 1790001000, "editor": "Bob-Realm", "text": "note", "color": 1, "deleted": false }
+      ],
+      "results": ["stored"],
+      "expect": {
+        "clock": 1790005000,
+        "notes": [
+          { "id": "a1b2c3d4-0007", "author": "Will-Realm", "created": 1790000000, "rev": 1790000900, "editor": "Bob-Realm", "text": "note", "color": 1, "deleted": false },
+          { "id": "b0b0b0b0-0001", "author": "Will-Realm", "created": 1790000000, "rev": 1790001000, "editor": "Bob-Realm", "text": "note", "color": 1, "deleted": false }
+        ]
+      }
+    },
+    {
+      "name": "unknown fields are not stored",
+      "board": { "clock": 0, "notes": [] },
+      "apply": [
+        { "id": "a1b2c3d4-0007", "author": "Will-Realm", "created": 1790000000, "rev": 1790000100, "editor": "Bob-Realm", "text": "note", "color": 1, "deleted": false, "pinned": true }
+      ],
+      "results": ["stored"],
+      "expect": {
+        "clock": 1790000100,
+        "notes": [
+          { "id": "a1b2c3d4-0007", "author": "Will-Realm", "created": 1790000000, "rev": 1790000100, "editor": "Bob-Realm", "text": "note", "color": 1, "deleted": false }
+        ]
+      }
+    },
+    {
+      "name": "batch with duplicates, stale and invalid records",
+      "board": { "clock": 0, "notes": [] },
+      "apply": [
+        { "id": "a1b2c3d4-0007", "author": "Will-Realm", "created": 1790000000, "rev": 1790000100, "editor": "Bob-Realm", "text": "note", "color": 1, "deleted": false },
+        { "id": "a1b2c3d4-0007", "author": "Will-Realm", "created": 1790000000, "rev": 1790000300, "editor": "Amy-Realm", "text": "note", "color": 1, "deleted": false },
+        { "id": "a1b2c3d4-0007", "author": "Will-Realm", "created": 1790000000, "rev": 1790000200, "editor": "Bob-Realm", "text": "note", "color": 1, "deleted": false },
+        { "id": "b0b0b0b0-0001", "author": "Will-Realm", "created": 1790000000, "rev": 0, "editor": "Bob-Realm", "text": "note", "color": 1, "deleted": false },
+        { "id": "a1b2c3d4-0007", "author": "Will-Realm", "created": 1790000000, "rev": 1790000300, "editor": "Amy-Realm", "text": "note", "color": 1, "deleted": false },
+        { "id": "b0b0b0b0-0001", "author": "Will-Realm", "created": 1790000000, "rev": 1790000010, "editor": "Bob-Realm", "text": "", "color": 1, "deleted": true }
+      ],
+      "results": ["stored", "stored", "stale", "rev", "stale", "stored"],
+      "expect": {
+        "clock": 1790000300,
+        "notes": [
+          { "id": "a1b2c3d4-0007", "author": "Will-Realm", "created": 1790000000, "rev": 1790000300, "editor": "Amy-Realm", "text": "note", "color": 1, "deleted": false },
+          { "id": "b0b0b0b0-0001", "author": "Will-Realm", "created": 1790000000, "rev": 1790000010, "editor": "Bob-Realm", "text": "", "color": 1, "deleted": true }
+        ]
+      }
+    }
+  ],
+  "members": [
+    {
+      "name": "into an empty board",
+      "board": { "clock": 0, "members": [] },
+      "apply": [
+        { "name": "Bob-Realm", "role": "member", "rev": 1790000100, "editor": "Will-Realm", "removed": false }
+      ],
+      "results": ["stored"],
+      "expect": {
+        "clock": 1790000100,
+        "members": [
+          { "name": "Bob-Realm", "role": "member", "rev": 1790000100, "editor": "Will-Realm", "removed": false }
+        ]
+      }
+    },
+    {
+      "name": "newer removal wins",
+      "board": {
+        "clock": 1790000100,
+        "members": [
+          { "name": "Bob-Realm", "role": "member", "rev": 1790000100, "editor": "Will-Realm", "removed": false }
+        ]
+      },
+      "apply": [
+        { "name": "Bob-Realm", "role": "member", "rev": 1790000200, "editor": "Will-Realm", "removed": true }
+      ],
+      "results": ["stored"],
+      "expect": {
+        "clock": 1790000200,
+        "members": [
+          { "name": "Bob-Realm", "role": "member", "rev": 1790000200, "editor": "Will-Realm", "removed": true }
+        ]
+      }
+    },
+    {
+      "name": "stale re-add loses",
+      "board": {
+        "clock": 1790000200,
+        "members": [
+          { "name": "Bob-Realm", "role": "member", "rev": 1790000200, "editor": "Will-Realm", "removed": true }
+        ]
+      },
+      "apply": [
+        { "name": "Bob-Realm", "role": "member", "rev": 1790000150, "editor": "Amy-Realm", "removed": false }
+      ],
+      "results": ["stale"],
+      "expect": {
+        "clock": 1790000200,
+        "members": [
+          { "name": "Bob-Realm", "role": "member", "rev": 1790000200, "editor": "Will-Realm", "removed": true }
+        ]
+      }
+    },
+    {
+      "name": "exact tie: removal wins",
+      "board": {
+        "clock": 1790000300,
+        "members": [
+          { "name": "Bob-Realm", "role": "member", "rev": 1790000300, "editor": "Will-Realm", "removed": false }
+        ]
+      },
+      "apply": [
+        { "name": "Bob-Realm", "role": "member", "rev": 1790000300, "editor": "Will-Realm", "removed": true }
+      ],
+      "results": ["stored"],
+      "expect": {
+        "clock": 1790000300,
+        "members": [
+          { "name": "Bob-Realm", "role": "member", "rev": 1790000300, "editor": "Will-Realm", "removed": true }
+        ]
+      }
+    },
+    {
+      "name": "exact tie: owner beats member",
+      "board": {
+        "clock": 1790000300,
+        "members": [
+          { "name": "Bob-Realm", "role": "member", "rev": 1790000300, "editor": "Will-Realm", "removed": false }
+        ]
+      },
+      "apply": [
+        { "name": "Bob-Realm", "role": "owner", "rev": 1790000300, "editor": "Will-Realm", "removed": false }
+      ],
+      "results": ["stored"],
+      "expect": {
+        "clock": 1790000300,
+        "members": [
+          { "name": "Bob-Realm", "role": "owner", "rev": 1790000300, "editor": "Will-Realm", "removed": false }
+        ]
+      }
+    },
+    {
+      "name": "invalid role is dropped",
+      "board": {
+        "clock": 1790000100,
+        "members": [
+          { "name": "Bob-Realm", "role": "member", "rev": 1790000100, "editor": "Will-Realm", "removed": false }
+        ]
+      },
+      "apply": [
+        { "name": "Bob-Realm", "role": "admin", "rev": 1790000200, "editor": "Will-Realm", "removed": false }
+      ],
+      "results": ["role"],
+      "expect": {
+        "clock": 1790000100,
+        "members": [
+          { "name": "Bob-Realm", "role": "member", "rev": 1790000100, "editor": "Will-Realm", "removed": false }
+        ]
+      }
+    }
+  ]
+}
