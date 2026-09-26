@@ -253,16 +253,20 @@ describe("the board window", function()
 
 	it("keeps card ages current while open", function()
 		local client = openWindow()
-		assert.are.equal(1, #client.tickers)
-		assert.are.equal(30, client.tickers[1].seconds)
+		local ticker
+		for _, t in ipairs(client.tickers) do
+			if t.seconds == 30 then
+				ticker = t
+			end
+		end
+		assert.is_table(ticker)
 		client:slash("/cork create MC")
 		client:slash("/cork add x")
 		assert.are.equal("now", cards(client)[1].age.text)
 		client:advance(660) -- the note's rev is a couple of seconds ahead: board creation used two
-		client.tickers[1].fn()
 		assert.are.equal("10m", cards(client)[1].age.text)
 		client:slash("/cork")
-		assert.is_true(client.tickers[1].cancelled)
+		assert.is_true(ticker.cancelled)
 	end)
 end)
 

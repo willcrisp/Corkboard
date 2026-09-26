@@ -12,15 +12,25 @@ files["addon/Corkboard/Corkboard.lua"] = {
 	self = false, -- methods like Corkboard:Changed() needn't use self
 	globals = { "CorkboardCompartment_OnClick" },
 	read_globals = {
-		"DEFAULT_CHAT_FRAME", "GetNormalizedRealmName", "GetServerTime", "LibStub", "NORMAL_FONT_COLOR_CODE",
-		"UnitFullName", "UnitGUID", "issecretvalue",
+		"C_Timer", "DEFAULT_CHAT_FRAME", "GetNormalizedRealmName", "GetServerTime", "GetTime", "LibStub",
+		"NORMAL_FONT_COLOR_CODE", "UnitClass", "UnitFullName", "UnitGUID", "issecretvalue",
+	},
+}
+files["addon/Corkboard/Net.lua"] = {
+	self = false,
+	read_globals = {
+		"C_ChatInfo", "ChatFrameUtil", "ChatFrame_AddMessageEventFilter", "ChatFrame_RemoveChannel", "ChatThrottleLib",
+		"CreateFrame", "GetChannelName", "GetNormalizedRealmName", "GetTime", "IsInGuild", "JoinTemporaryChannel",
+		"LeaveChannelByName", "NUM_CHAT_WINDOWS", "issecretvalue",
 	},
 }
 files["addon/Corkboard/UI/**"] = {
 	self = false,
 	globals = { "StaticPopupDialogs", "UISpecialFrames" },
 	read_globals = {
-		"ButtonFrameTemplate_HideButtonBar", "ButtonFrameTemplate_HidePortrait", "C_Timer", "CANCEL",
+		"ButtonFrameTemplate_HideButtonBar", "ButtonFrameTemplate_HidePortrait", "C_ClassColor", "C_Timer", "CANCEL",
+		"OKAY", "PanelTemplates_SetNumTabs", "PanelTemplates_SetTab", "PanelTemplates_TabResize", "RAID_CLASS_COLORS",
+		"ReloadUI", "date",
 		"ChatEdit_InsertLink", "ChatFontNormal", "ChatFrameUtil", "ClearCursor", "CreateDataProvider", "CreateFrame",
 		"CreateScrollBoxListLinearView", "DEFAULT_CHAT_FRAME", "DELETE", "GameTooltip", "GetCursorInfo", "SAVE",
 		"ScrollBoxConstants", "ScrollUtil", "ScrollingEdit_OnCursorChanged", "ScrollingEdit_OnUpdate", "SetItemRef",

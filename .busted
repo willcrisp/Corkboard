@@ -8,8 +8,10 @@ return {
 	},
 	coverage = {
 		coverage = true,
-		-- The property tests run for minutes under the coverage hook, and the
-		-- unit and vector specs must reach the coverage target on their own.
+		-- The property tests and the #slow network simulations run for minutes
+		-- under the coverage hook, and the unit and vector specs must reach the
+		-- coverage target on their own.
 		["exclude-pattern"] = "property_spec",
+		["exclude-tags"] = "slow",
 	},
 }

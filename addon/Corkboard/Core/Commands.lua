@@ -30,6 +30,13 @@ local USAGE = {
 	"  /cork edit <note> <text> - replace a note's text",
 	"  /cork color <note> <1-" .. Commands.MAX_COLOR .. "> - change a note's colour",
 	"  /cork delete <note> - delete a note",
+	"  /cork invite - show the current board's invite string",
+	"  /cork join <invite> - join a board from an invite string",
+	"  /cork members - list the current board's members",
+	"  /cork remove <name> - remove a member (owner only; rotates the secret)",
+	"  /cork rotate - give the current board a new secret (owner only)",
+	"  /cork cloud on|off, /cork guild on|off - the current board's sync options",
+	"  /cork sync - ask members for changes now; /cork debug - the sync panel",
 	"A <note> is its #number from /cork list, or its full id.",
 }
 
@@ -49,6 +56,13 @@ local REASONS = {
 	id_space = "You've run out of note ids on this board.",
 	deleted = "That note has been deleted.",
 	missing = "That board or note no longer exists.",
+	invite = "That isn't a Corkboard invite. It starts with CORK1:",
+	invite_version = "That invite is from a newer version of Corkboard. Update the addon to join.",
+	invite_corrupt = "That invite is damaged. Copy the whole string again.",
+	not_owner = "Only the board's owner can do that.",
+	not_member = "They aren't a member of this board.",
+	remove_self = "You can't remove yourself. Delete the board from this account instead.",
+	option = "Unknown option.",
 }
 
 local function warn(text)
@@ -298,6 +312,96 @@ function handlers.delete(store, ref)
 	end
 	return { format("Deleted %s from %s.", label, Store.name(board)) }
 end
+
+function handlers.invite(store)
+	local board, problem = current(store)
+	if not board then
+		return problem
+	end
+	return {
+		format("Invite for %s. Anyone with it can read and edit the board:", Store.name(board)),
+		Store.invite(board),
+		GREY .. "Addons can't copy to the clipboard: open the Members tab in /cork to copy it.|r",
+	}
+end
+
+function handlers.join(store, text)
+	if text == "" then
+		return { "Usage: /cork join <invite>" }
+	end
+	local board, new = store:joinBoard(text)
+	if not board then
+		return failure(new)
+	end
+	if not new then
+		return { format("You're already on %s. Its invite is up to date.", Store.name(board)) }
+	end
+	return { format("Joined %s. Its notes arrive when another member is online.", Store.name(board)) }
+end
+
+function handlers.members(store)
+	local board, problem = current(store)
+	if not board then
+		return problem
+	end
+	local members = Store.members(board)
+	local out = { format("%s: %s", Store.name(board), plural(#members, "member")) }
+	local now = store.env.now()
+	for _, m in ipairs(members) do
+		local seen = board.seen and board.seen[m.name]
+		out[#out + 1] = format("  %s %s(%s%s)|r", m.name, GREY, m.role,
+			seen and ", seen " .. Commands.age(now - seen.at) or "")
+	end
+	return out
+end
+
+function handlers.remove(store, name)
+	if name == "" then
+		return { "Usage: /cork remove <Name-Realm>" }
+	end
+	local board, problem = current(store)
+	if not board then
+		return problem
+	end
+	local record, reason = store:removeMember(board.id, name)
+	if not record then
+		return failure(reason)
+	end
+	return {
+		format("Removed %s from %s and changed its secret.", name, Store.name(board)),
+		"Everyone you keep needs the new invite: /cork invite.",
+	}
+end
+
+function handlers.rotate(store)
+	local board, problem = current(store)
+	if not board then
+		return problem
+	end
+	local ok, reason = store:rotateSecret(board.id)
+	if not ok then
+		return failure(reason)
+	end
+	return { format("%s has a new secret. Every member needs the new invite: /cork invite.", Store.name(board)) }
+end
+
+local function option(name, label)
+	return function(store, value)
+		value = lower(value)
+		if value ~= "on" and value ~= "off" then
+			return { format("Usage: /cork %s on|off", name) }
+		end
+		local board, problem = current(store)
+		if not board then
+			return problem
+		end
+		store:setOption(board.id, name, value == "on")
+		return { format("%s for %s is %s.", label, Store.name(board), value) }
+	end
+end
+
+handlers.cloud = option("cloud", "Cloud sync")
+handlers.guild = option("guild", "Guild sync")
 
 local ALIASES = { new = "create", del = "delete", colour = "color", ["?"] = "help", [""] = "help" }
 

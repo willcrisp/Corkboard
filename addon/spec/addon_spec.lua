@@ -55,9 +55,15 @@ describe("Corkboard.toc", function()
 			"Core/Sanitise.lua",
 			"Core/Merge.lua",
 			"Core/Digest.lua",
+			"Core/Invite.lua",
 			"Core/Store.lua",
 			"Core/Commands.lua",
 			"Core/View.lua",
+			"Core/Wire.lua",
+			"Core/Gate.lua",
+			"Core/Outbox.lua",
+			"Core/Sync.lua",
+			"Core/Cloud.lua",
 		}, core)
 		local wrapper
 		for i, file in ipairs(files) do

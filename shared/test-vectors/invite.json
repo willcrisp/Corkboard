@@ -1,0 +1,149 @@
+{
+  "encode": [
+    {
+      "name": "basic",
+      "board": {
+        "id": "k3f9x2m7q1pz8c4w",
+        "secret": "a1b2c3d4e5f6g7h8i9j0k1l2",
+        "owner": "Will-Mirage Raceway"
+      },
+      "invite": "CORK1:azNmOXgybTdxMXB6OGM0d3xhMWIyYzNkNGU1ZjZnN2g4aTlqMGsxbDJ8V2lsbC1NaXJhZ2UgUmFjZXdheQ=="
+    },
+    {
+      "name": "owner with accents",
+      "board": {
+        "id": "0123456789abcdef",
+        "secret": "zzzzzzzzzzzzzzzzzzzzzzzz",
+        "owner": "Kaelthrá-Stormscale"
+      },
+      "invite": "CORK1:MDEyMzQ1Njc4OWFiY2RlZnx6enp6enp6enp6enp6enp6enp6enp6enp8S2FlbHRocsOhLVN0b3Jtc2NhbGU="
+    },
+    {
+      "name": "mixed-case secret, 20 chars",
+      "board": {
+        "id": "k3f9x2m7q1pz8c4w",
+        "secret": "fS9vKerR2tBXp7qGmLzx",
+        "owner": "Will-Realm"
+      },
+      "invite": "CORK1:azNmOXgybTdxMXB6OGM0d3xmUzl2S2VyUjJ0QlhwN3FHbUx6eHxXaWxsLVJlYWxt"
+    }
+  ],
+  "decode": [
+    {
+      "name": "basic",
+      "input": "CORK1:azNmOXgybTdxMXB6OGM0d3xhMWIyYzNkNGU1ZjZnN2g4aTlqMGsxbDJ8V2lsbC1NaXJhZ2UgUmFjZXdheQ==",
+      "ok": true,
+      "output": {
+        "id": "k3f9x2m7q1pz8c4w",
+        "secret": "a1b2c3d4e5f6g7h8i9j0k1l2",
+        "owner": "Will-Mirage Raceway"
+      }
+    },
+    {
+      "name": "owner with accents",
+      "input": "CORK1:MDEyMzQ1Njc4OWFiY2RlZnx6enp6enp6enp6enp6enp6enp6enp6enp8S2FlbHRocsOhLVN0b3Jtc2NhbGU=",
+      "ok": true,
+      "output": {
+        "id": "0123456789abcdef",
+        "secret": "zzzzzzzzzzzzzzzzzzzzzzzz",
+        "owner": "Kaelthrá-Stormscale"
+      }
+    },
+    {
+      "name": "mixed-case secret, 20 chars",
+      "input": "CORK1:azNmOXgybTdxMXB6OGM0d3xmUzl2S2VyUjJ0QlhwN3FHbUx6eHxXaWxsLVJlYWxt",
+      "ok": true,
+      "output": {
+        "id": "k3f9x2m7q1pz8c4w",
+        "secret": "fS9vKerR2tBXp7qGmLzx",
+        "owner": "Will-Realm"
+      }
+    },
+    {
+      "name": "surrounding spaces and a lower-case prefix",
+      "input": "  cork1:azNmOXgybTdxMXB6OGM0d3xhMWIyYzNkNGU1ZjZnN2g4aTlqMGsxbDJ8V2lsbC1SZWFsbQ==\n",
+      "ok": true,
+      "output": {
+        "id": "k3f9x2m7q1pz8c4w",
+        "secret": "a1b2c3d4e5f6g7h8i9j0k1l2",
+        "owner": "Will-Realm"
+      }
+    },
+    {
+      "name": "padding dropped",
+      "input": "CORK1:azNmOXgybTdxMXB6OGM0d3xhMWIyYzNkNGU1ZjZnN2g4aTlqMGsxbDJ8V2lsbC1SZWFsbXg",
+      "ok": true,
+      "output": {
+        "id": "k3f9x2m7q1pz8c4w",
+        "secret": "a1b2c3d4e5f6g7h8i9j0k1l2",
+        "owner": "Will-Realmx"
+      }
+    },
+    {
+      "name": "not an invite",
+      "input": "hello there",
+      "ok": false,
+      "reason": "invite"
+    },
+    {
+      "name": "empty",
+      "input": "",
+      "ok": false,
+      "reason": "invite"
+    },
+    {
+      "name": "newer version",
+      "input": "CORK2:azNmOXgybTdxMXB6OGM0d3xhMWIyYzNkNGU1ZjZnN2g4aTlqMGsxbDJ8V2lsbC1SZWFsbQ==",
+      "ok": false,
+      "reason": "invite_version"
+    },
+    {
+      "name": "not base64",
+      "input": "CORK1:not*base64",
+      "ok": false,
+      "reason": "invite_corrupt"
+    },
+    {
+      "name": "truncated",
+      "input": "CORK1:azNmOXgybTdxMXB6OGM0d3xhMWIyYzNkNGU1ZjZnN2g4aTlqMGsxbDJ8V2lsbC1",
+      "ok": false,
+      "reason": "invite_corrupt"
+    },
+    {
+      "name": "id too short",
+      "input": "CORK1:azNmOXgybTd8YTFiMmMzZDRlNWY2ZzdoOGk5ajBrMWwyfFdpbGwtUmVhbG0=",
+      "ok": false,
+      "reason": "invite_corrupt"
+    },
+    {
+      "name": "upper-case id",
+      "input": "CORK1:SzNGOVgyTTdRMVBaOEM0V3xhMWIyYzNkNGU1ZjZnN2g4aTlqMGsxbDJ8V2lsbC1SZWFsbQ==",
+      "ok": false,
+      "reason": "invite_corrupt"
+    },
+    {
+      "name": "secret too short",
+      "input": "CORK1:azNmOXgybTdxMXB6OGM0d3xzaG9ydHxXaWxsLVJlYWxt",
+      "ok": false,
+      "reason": "invite_corrupt"
+    },
+    {
+      "name": "secret with a dot",
+      "input": "CORK1:azNmOXgybTdxMXB6OGM0d3xhMWIyYzNkNGU1ZjZnN2g4LjlqMGsxbDJ8V2lsbC1SZWFsbQ==",
+      "ok": false,
+      "reason": "invite_corrupt"
+    },
+    {
+      "name": "owner without a realm",
+      "input": "CORK1:azNmOXgybTdxMXB6OGM0d3xhMWIyYzNkNGU1ZjZnN2g4aTlqMGsxbDJ8V2lsbA==",
+      "ok": false,
+      "reason": "invite_corrupt"
+    },
+    {
+      "name": "owner with a pipe",
+      "input": "CORK1:azNmOXgybTdxMXB6OGM0d3xhMWIyYzNkNGU1ZjZnN2g4aTlqMGsxbDJ8V2lsbC1SZWFsbXx4",
+      "ok": false,
+      "reason": "invite_corrupt"
+    }
+  ]
+}

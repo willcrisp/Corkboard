@@ -148,11 +148,161 @@ describe("View", function()
 	end)
 
 	it("writes the status line and board detail", function()
-		assert.are.same({ "Local only: sync arrives with invites", "6 notes" }, { View.status(6, 6) })
-		assert.are.same({ "Local only: sync arrives with invites", "1 note" }, { View.status(1, 1) })
-		assert.are.same({ "Local only: sync arrives with invites", "0 notes" }, { View.status(0, 0) })
-		assert.are.same({ "Local only: sync arrives with invites", "2 of 6 notes" }, { View.status(6, 2) })
+		assert.are.equal("6 notes", View.count(6, 6))
+		assert.are.equal("1 note", View.count(1, 1))
+		assert.are.equal("0 notes", View.count(0, 0))
+		assert.are.equal("2 of 6 notes", View.count(6, 2))
 		assert.are.equal("1 note", View.boardDetail(1))
+		assert.are.equal("1 note", View.boardDetail(1, 0))
+		assert.are.equal("3 notes · 2 online", View.boardDetail(3, 2))
 		assert.are.equal("3 notes", View.boardDetail(3))
+	end)
+end)
+
+describe("View sync status", function()
+	local NOW = 1790010000
+	local function status(fields)
+		local s = { online = {}, queued = 0, paused = false, cloud = true }
+		for k, v in pairs(fields or {}) do
+			s[k] = v
+		end
+		return s
+	end
+
+	it("puts the most urgent state first", function()
+		local s = status({ paused = true, queued = 3, behind = 142, online = { "Bob-Realm" } })
+		assert.are.same({ label = "Invite out of date", detail = "· ask the owner for a new one", dot = "behind" },
+			View.syncStatus(s, "expired", NOW, "Realm"))
+		assert.are.same({ label = "Paused", detail = "· 3 messages queued", dot = "paused" },
+			View.syncStatus(s, "joined", NOW, "Realm"))
+		assert.are.equal("· sends when allowed", View.syncStatus(status({ paused = true }), "joined", NOW).detail)
+		assert.are.same({ label = "142 notes behind", detail = "· /reload after cloud sync", dot = "behind" },
+			View.syncStatus(status({ behind = 142 }), "joined", NOW, "Realm"))
+		assert.are.same({ label = "Syncing", detail = "· 12 notes from Kael", dot = "syncing", hollow = true },
+			View.syncStatus(status({ syncing = { from = "Kael-Realm", left = 12 } }), "joined", NOW, "Realm"))
+	end)
+
+	it("says when a board isn't connected", function()
+		assert.are.equal("Not connected", View.syncStatus(status(), "limit", NOW).label)
+		local joining = View.syncStatus(status(), "joining", NOW)
+		assert.are.equal("Connecting", joining.label)
+		assert.is_true(joining.hollow)
+	end)
+
+	it("names the last member synced with, and the cloud", function()
+		local s = status({ online = { "Bob-Realm" }, lastPeer = "Bob-Realm", lastPeerAt = NOW - 180,
+			lastCloudAt = NOW - 7200 })
+		assert.are.same({ label = "Synced with Bob 3m ago", detail = "· Cloud 2h ago", dot = "synced" },
+			View.syncStatus(s, "joined", NOW, "Realm"))
+		s.lastPeer = nil
+		assert.are.equal("1 online", View.syncStatus(s, "joined", NOW, "Realm").label)
+		s.lastCloudAt = nil
+		assert.are.equal("· cloud not synced yet", View.syncStatus(s, "joined", NOW, "Realm").detail)
+		s.cloud = false
+		assert.are.equal("· cloud off", View.syncStatus(s, "guild", NOW, "Realm").detail)
+	end)
+
+	it("covers nobody online, with and without the cloud", function()
+		assert.are.same({ label = "Nobody online", detail = "· Cloud 1d ago", dot = "idle", hollow = true, dim = true },
+			View.syncStatus(status({ lastCloudAt = NOW - 90000 }), "joined", NOW))
+		assert.are.same({ label = "In-game sync only", detail = "· cloud off", dot = "idle", dim = true },
+			View.syncStatus(status({ cloud = false }), "joined", NOW))
+	end)
+
+	it("has a colour for every dot", function()
+		for _, dot in ipairs({ "synced", "syncing", "paused", "behind", "idle" }) do
+			assert.are.equal(3, #View.DOTS[dot])
+		end
+	end)
+end)
+
+describe("View roster, tooltip and debug", function()
+	local NOW = 1790010000
+
+	it("says how long ago a member was seen", function()
+		assert.are.equal("1 minute", View.seen(5))
+		assert.are.equal("5 minutes", View.seen(300))
+		assert.are.equal("3 hours", View.seen(3 * 3600 + 5))
+		assert.are.equal("2 days", View.seen(2 * 86400))
+	end)
+
+	it("builds roster rows", function()
+		local board = { owner = "Will-Realm", seen = {
+			["Bob-Realm"] = { at = NOW - 60, class = "PRIEST" },
+			["Mira-Other"] = { at = NOW - 3 * 3600 },
+		} }
+		local members = {
+			{ name = "Will-Realm", role = "owner" },
+			{ name = "Bob-Realm", role = "member" },
+			{ name = "Mira-Other", role = "member" },
+			{ name = "Dorn-Realm", role = "member" },
+		}
+		local peers = { ["Bob-Realm"] = { state = "match" }, ["Mira-Other"] = { cloud = NOW - 7200 } }
+		local rows = View.memberRows(board, members, peers, { "Bob-Realm" }, "Will-Realm", NOW, "Realm")
+		assert.are.same({ name = "Will-Realm", label = "Will", role = "Owner", online = true, removable = false,
+			seen = "You", sync = "-" }, rows[1])
+		assert.are.same({ name = "Bob-Realm", label = "Bob", role = "Member", class = "PRIEST", online = true,
+			removable = true, seen = "Online", sync = "Up to date" }, rows[2])
+		assert.are.same({ name = "Mira-Other", label = "Mira-Other", role = "Member", online = false,
+			removable = true, seen = "3 hours", sync = "Cloud 2h ago" }, rows[3])
+		assert.are.equal("Never", rows[4].seen)
+		assert.are.equal("-", rows[4].sync)
+		peers["Bob-Realm"].state = "differs"
+		assert.are.equal("Syncing", View.memberRows(board, members, peers, { "Bob-Realm" }, "Will-Realm", NOW)[2].sync)
+		assert.is_false(View.memberRows(board, members, nil, {}, "Bob-Realm", NOW)[1].removable)
+	end)
+
+	it("lists boards in the broker tooltip", function()
+		local list = {}
+		for i = 1, 9 do
+			list[i] = { id = "board" .. i, meta = i ~= 2 and { name = "Board " .. i } or nil }
+		end
+		local store = { boards = function()
+			return list
+		end }
+		local sync = { status = function(_, id)
+			if id == "board1" then
+				return { online = { "a", "b", "c" }, queued = 0 }
+			elseif id == "board2" then
+				return { online = {}, queued = 2, paused = true }
+			end
+			return { online = {}, queued = 0 }
+		end }
+		local lines = View.tooltipLines(store, sync)
+		assert.are.equal("Board 1", lines[1][1])
+		assert.are.equal("  3 online", lines[2][1])
+		assert.are.equal("board2", lines[3][1])
+		assert.are.equal("  2 queued", lines[4][1])
+		assert.are.equal("  Nobody online", lines[6][1])
+		assert.are.equal("and 1 more", lines[#lines][1])
+	end)
+
+	it("writes the debug stats", function()
+		local outbox = {
+			stats = { stalls = 2, lastStall = 100, envelopes = 3, messages = 5, bytes = 900, lockdowns = 1, errors = 0,
+				dropped = 0 },
+			gate = { open = true },
+			lastClosed = { at = 40, reason = "encounter" },
+			tokens = 4.25,
+			burst = 8,
+			depth = function()
+				return 0
+			end,
+		}
+		local stats = View.debugStats(outbox, "C_ChatInfo.InChatMessagingLockdown", { clock = 1790004412 }, 158)
+		assert.are.same({ "Send gate", "Open · C_ChatInfo.InChatMessagingLockdown" }, stats[1])
+		assert.are.same({ "Last closed", "1m ago (encounter)" }, stats[2])
+		assert.are.same({ "Throttle stalls", "2 (now ago)" }, stats[4])
+		assert.are.same({ "Budget", "4.2 / 8 messages" }, stats[7])
+		assert.are.same({ "Board clock", "1790004412" }, stats[8])
+		outbox.gate = { open = false, reason = "encounter" }
+		outbox.lastClosed, outbox.stats.lastStall = nil, nil
+		stats = View.debugStats(outbox, "none", nil, 158)
+		assert.are.equal("Closed (encounter) · none", stats[1][2])
+		assert.are.equal("never", stats[2][2])
+		assert.are.equal("0", stats[4][2])
+		assert.are.equal("-", stats[8][2])
+		assert.are.equal("45:1790004412:9f3a01c2", View.digestLabel(45, 1790004412, 0x9f3a01c2))
+		assert.are.equal("0:0:00000000", View.digestLabel())
 	end)
 end)

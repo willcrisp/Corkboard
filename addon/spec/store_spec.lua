@@ -429,3 +429,179 @@ describe("Store notes", function()
 		assert.are.same(board.meta, Sanitise.meta(board.meta))
 	end)
 end)
+
+describe("Store sharing", function()
+	local Invite = require("Core.Invite")
+
+	local function owned()
+		local store, db, env = newStore()
+		local changes = {}
+		store:listen(function(change)
+			changes[#changes + 1] = change
+		end)
+		local board = assert(store:createBoard("MC"))
+		return store, board, changes, db, env
+	end
+
+	local function kinds(changes)
+		local out = {}
+		for i, c in ipairs(changes) do
+			out[i] = c.kind .. (c.remote and "*" or "")
+		end
+		return out
+	end
+
+	it("notifies listeners of every local change", function()
+		local store, board, changes = owned()
+		local added = assert(store:addNote(board.id, "hi"))
+		assert(store:editNote(board.id, added.id, { text = "there" }))
+		assert(store:deleteNote(board.id, added.id))
+		assert(store:renameBoard(board.id, "MC2"))
+		assert.is_nil(store:editNote(board.id, added.id, { text = "gone" }))
+		store:deleteBoard(board.id)
+		assert.are.same({ "board", "note", "note", "note", "meta", "deleted" }, kinds(changes))
+		assert.are.same({ added.id }, changes[2].keys)
+	end)
+
+	it("makes an invite and joins from it", function()
+		local _, board = owned()
+		local invite = Store.invite(board)
+		assert.are.same({ id = board.id, secret = board.secret, owner = ME }, Invite.decode(invite))
+
+		local other, db = newStore({ me = "Bob-Realm", prefix = "b0b0b0b0" })
+		local joined, new = other:joinBoard("  " .. invite .. "  ")
+		assert.is_true(new)
+		assert.are.equal(board.id, joined.id)
+		assert.are.equal(board.secret, joined.secret)
+		assert.are.equal(ME, joined.owner)
+		assert.are.equal(board.id, db.char.current)
+		assert.is_true(joined.cloud)
+		assert.is_false(joined.guild)
+		assert.are.same({ name = "Bob-Realm", role = "member", rev = T0, editor = "Bob-Realm", removed = false },
+			joined.members["Bob-Realm"])
+		assert.are.equal(board.id, Store.name(joined)) -- the name arrives with the first HELLO
+	end)
+
+	it("joining again changes nothing, unless the secret changed", function()
+		local store, board = owned()
+		local invite = Store.invite(board)
+		local other = newStore({ me = "Bob-Realm", prefix = "b0b0b0b0" })
+		local joined = other:joinBoard(invite)
+		local rev = joined.members["Bob-Realm"].rev
+		local again, new = other:joinBoard(invite)
+		assert.are.equal(joined, again)
+		assert.is_false(new)
+		assert.are.equal(rev, joined.members["Bob-Realm"].rev)
+		assert(store:rotateSecret(board.id))
+		other:joinBoard(Store.invite(board))
+		assert.are.equal(board.secret, joined.secret)
+		assert.are.same({ Invite.decode(invite).secret }, joined.oldSecrets)
+	end)
+
+	it("the owner rejoining keeps the owner role", function()
+		local store, board = owned()
+		board.members[ME] = nil
+		store:joinBoard(Store.invite(board))
+		assert.are.equal("owner", board.members[ME].role)
+	end)
+
+	it("refuses bad invites, and joins before the character is known", function()
+		local store = newStore()
+		assert.are.same({ nil, "invite" }, { store:joinBoard("nope") })
+		local nobody = newStore({ me = false })
+		assert.are.same({ nil, "identity" }, { nobody:joinBoard("CORK1:x") })
+	end)
+
+	it("lets only the owner rotate the secret, and keeps the old ones", function()
+		local store, board, changes = owned()
+		local first = board.secret
+		assert(store:rotateSecret(board.id))
+		assert.are_not.equal(first, board.secret)
+		assert.are.equal(24, #board.secret)
+		assert.are.same({ first }, board.oldSecrets)
+		assert.are.equal("board", changes[#changes].kind)
+		for _ = 1, 6 do
+			store:rotateSecret(board.id)
+		end
+		assert.are.equal(5, #board.oldSecrets)
+		Store.retire(board, board.oldSecrets[3])
+		assert.are.equal(5, #board.oldSecrets)
+		local other = newStore({ me = "Bob-Realm", prefix = "b0b0b0b0" })
+		local joined = other:joinBoard(Store.invite(board))
+		assert.are.same({ nil, "not_owner" }, { other:rotateSecret(joined.id) })
+		assert.are.same({ nil, "missing" }, { store:rotateSecret("nope") })
+	end)
+
+	it("removes a member and rotates the secret", function()
+		local store, board, changes = owned()
+		Merge.applyMember(board, { name = "Bob-Realm", role = "member", rev = T0, editor = "Bob-Realm", removed = false })
+		local secret = board.secret
+		local record = assert(store:removeMember(board.id, "Bob-Realm"))
+		assert.is_true(record.removed)
+		assert.are_not.equal(secret, board.secret)
+		assert.are.same({ "board", "member", "board" }, kinds(changes))
+		assert.are.same({ nil, "not_member" }, { store:removeMember(board.id, "Bob-Realm") })
+		assert.are.same({ nil, "not_member" }, { store:removeMember(board.id, "Nobody-Realm") })
+		assert.are.same({ nil, "remove_self" }, { store:removeMember(board.id, ME) })
+		assert.are.same({ nil, "missing" }, { store:removeMember("nope", "Bob-Realm") })
+		local other = newStore({ me = "Bob-Realm", prefix = "b0b0b0b0" })
+		local joined = other:joinBoard(Store.invite(board))
+		assert.are.same({ nil, "not_owner" }, { other:removeMember(joined.id, ME) })
+		assert.are.same({ nil, "identity" }, { newStore({ me = false }):removeMember(board.id, "Bob-Realm") })
+	end)
+
+	it("lists members, owners first, without removed ones", function()
+		local store, board = owned()
+		for _, name in ipairs({ "Zed-Realm", "Amy-Realm", "Gone-Realm" }) do
+			Merge.applyMember(board, { name = name, role = "member", rev = T0, editor = ME, removed = name == "Gone-Realm" })
+		end
+		local names = {}
+		for i, m in ipairs(Store.members(board)) do
+			names[i] = m.name
+		end
+		assert.are.same({ ME, "Amy-Realm", "Zed-Realm" }, names)
+		assert.are.same({}, Store.members({}))
+		assert.is_true(store:isOwner(board))
+	end)
+
+	it("sets the cloud and guild options", function()
+		local store, board, changes = owned()
+		assert(store:setOption(board.id, "cloud", false))
+		assert.is_false(board.cloud)
+		assert(store:setOption(board.id, "guild", 1))
+		assert.is_true(board.guild)
+		assert.are.equal("board", changes[#changes].kind)
+		assert.are.same({ nil, "option" }, { store:setOption(board.id, "secret", "x") })
+		assert.are.same({ nil, "missing" }, { store:setOption("nope", "cloud", true) })
+	end)
+
+	it("records when members were last seen, locally", function()
+		local board = {}
+		Store.markSeen(board, "Bob-Realm", "MAGE", 5)
+		Store.markSeen(board, "Bob-Realm", "not a class", 9)
+		assert.are.same({ at = 9, class = "MAGE" }, board.seen["Bob-Realm"])
+	end)
+
+	it("applies records from peers and reports what it stored", function()
+		local store, board, changes = owned()
+		local n = note("a1b2c3d4-0009", { rev = T0 + 5 })
+		local result = store:applyRemote(board.id, {
+			notes = { n, note("bad"), n },
+			members = { { name = "Bob-Realm", role = "member", rev = T0 + 1, editor = "Bob-Realm", removed = false },
+				{ name = "x" } },
+			meta = { name = "Renamed", rev = T0 + 9, editor = "Bob-Realm" },
+		})
+		assert.are.same({ "a1b2c3d4-0009" }, result.notes)
+		assert.are.same({ "Bob-Realm" }, result.members)
+		assert.is_true(result.meta)
+		assert.are.same({ "id", "name" }, result.dropped)
+		assert.are.same({ "board", "note*", "member*", "meta*" }, kinds(changes))
+		assert.are.equal("Renamed", Store.name(board))
+		result = store:applyRemote(board.id, { meta = { name = "Old", rev = 1, editor = "Bob-Realm" } })
+		assert.is_false(result.meta)
+		assert.are.same({}, result.dropped)
+		result = store:applyRemote(board.id, { meta = { name = "" } })
+		assert.are.same({ "name" }, result.dropped)
+		assert.are.same({ nil, "missing" }, { store:applyRemote("nope", {}) })
+	end)
+end)

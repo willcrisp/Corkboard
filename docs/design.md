@@ -86,14 +86,17 @@ CorkboardDB.global.boards[boardId] = {
   members  = { ["Name-Realm"] = MemberRecord, … },
   notes    = { [noteId] = Note, … },
   clock    = 0,                    -- highest rev seen (HLC-lite, §4.3)
-  sync     = { lastPeer, lastPeerAt, lastCloudAt, cloudCursor },
+  sync     = { lastPeer, lastPeerAt, lastCloudAt, cloudCursor, lastUsed, expired },
   cloud    = true,                 -- companion sync on by default now the API exists
-  guild    = false,                -- also use the GUILD transport
+  guild    = false,                -- sync over GUILD instead of a channel (§5.1)
+  oldSecrets = { … },              -- up to 5 retired secrets, newest first (§7.3 rotate)
+  seen     = { ["Name-Realm"] = { at, class } },  -- local roster bookkeeping, never replicated
 }
 ```
 
 - **Storage.** `CorkboardDB` is an AceDB database. Boards live in its account-wide `global` section, so every character on the account sees the same boards. The selected board is per character (`CorkboardDB.char["Name - Realm"].current`). AceDB also writes its own `profileKeys`. The companion reads boards from `CorkboardDB.global.boards`.
 - **Every change goes through the merge core.** Creating a board names it with `Merge.setMeta` and adds the creator as owner with `Merge.setMember`. Renaming is `Merge.setMeta`. Note changes are `Merge.createNote`, `editNote` and `deleteNote`.
+- **Local-only fields.** `sync`, `seen` and `oldSecrets` never replicate. `sync.lastUsed` orders boards for the channel cap (§5.1), and `sync.expired` marks a board whose channel refused our password.
 - **Deleting a board is local.** It removes the board from this account and isn't replicated. Other members keep their copies, and without the secret this client never hears the board again unless someone re-invites it. Closing a board for everyone is an open question (§14).
 
 ### 4.2 Note
@@ -153,53 +156,64 @@ The 32 bucket hashes are 128 bytes raw, about one addon message after compressio
 
 | Transport | Use | Notes |
 |---|---|---|
-| **Board channel** | Primary broadcast | Hidden custom channel `Cork<first 10 of boardId>`, joined with `JoinTemporaryChannel(name, secret)` and removed from every chat frame. Cap of 3 active channel-backed boards per character. Forever's reach across realms is verified in Phase 0. |
-| **GUILD** | Guild boards (`board.guild = true`) | Doesn't use a channel slot. |
-| **WHISPER** | Targeted replies (IDX / PUT / NEED) | Only sent to members seen via HELLO in the last 10 min, to avoid "No player named…" spam. |
-| **BNet** (`BNSendGameData` / `BN_CHAT_MSG_ADDON`) | Members who are BNet friends | Larger payload per message. Its throttle behaviour is measured in Phase 0; if it's better, it's the preferred route for bulk P2P. |
+| **Board channel** | Primary broadcast | Hidden custom channel `Cork` + `%08x` of FNV1a32(`boardId .. "\|" .. secret`), joined with `JoinTemporaryChannel(name, secret)`, removed from every chat frame, and with its notices and text filtered out by a chat message filter. Cap of 3 active channel-backed boards per character: the current board, then the most recently used. Forever's reach across realms is verified in Phase 0. |
+| **GUILD** | Guild boards (`board.guild = true`) | Used instead of a channel, so it doesn't take a slot. |
+| **WHISPER** | Not used in v1 | Targeted replies (IDX, NEED) ride the board's own transport with a `to` field instead (§5.3). |
+| **BNet** (`BNSendGameData` / `BN_CHAT_MSG_ADDON`) | Members who are BNet friends | Not built yet: waits for spike 05. If its throttle is better, it becomes the preferred route for bulk P2P. |
+
+**Why the channel name includes the secret** (changed from `Cork<first 10 of boardId>`): a rotation (§10) must move the board to a channel the removed member can't reach. With an id-only name, a removed member who stays in the channel keeps it alive under the old password, and every member rejoining with the new secret is refused. A secret-derived name gives each secret its own channel. The cost: a member who missed a rotation sits alone in the old channel and sees "Nobody online" until they get the new invite; the "wrong password" notice (and the out-of-date invite popup) only fires if someone else is using the name.
+
+**Why replies don't whisper:** responder suppression (§5.4) needs every member to see the winner's `IDX`, and the per-prefix throttle is shared across chat types (§2), so a whisper saves no budget. Broadcasting replies also lets other stale members pick up the `PUT`s. It removes the "No player named…" risk entirely.
 
 ### 5.2 Envelope
 
-`{ v = 1, t = <type>, b = boardId, … }` goes through LibSerialize → LibDeflate `CompressDeflate` → `EncodeForWoWAddonChannel` → AceComm (prefix `CORK`).
+`{ v = 1, t = <type>, b = boardId, … }` goes through LibSerialize → LibDeflate `CompressDeflate` → `EncodeForWoWAddonChannel`, is split into chunks of at most 255 bytes, and each chunk goes to ChatThrottleLib (prefix `CORK`).
+
+- **Chunks:** each addon message starts with two bytes, its index and the chunk count (both 1–32), then up to 253 bytes of the encoded text. A receiver keeps one buffer per sender and transport, and drops the buffer on any gap, repeat or count mismatch, so a lost chunk costs the whole message rather than corrupting it (raw deflate has no checksum). An envelope that needs more than 32 chunks (about 8 KB) is never sent. `Core/Wire.lua` implements this.
+- **Why not AceComm** (the v0.2 plan): the `issecretvalue` check (§2) has to run before any code compares or slices the payload, and AceComm handles `CHAT_MSG_ADDON` itself; its multipart framing also can't detect a missing middle chunk. Corkboard's own framing is 40 lines, and ChatThrottleLib still does the pacing.
 
 ChatThrottleLib priorities: live `PUT` = `"ALERT"`, handshake = `"NORMAL"`, bulk = `"BULK"`.
 
-The engine reads the `SendAddonMessage` result code, re-queues on a throttle result, and backs off.
+The outbox (§5.5) classifies each chunk's `SendAddonMessage` result by the client's own `Enum.SendAddonMessageResult` names: a throttle result is left to ChatThrottleLib, which re-queues it; a "lockdown" or "restricted" result puts the whole message back at the front of the outbox and closes the gate; anything else is counted as a failure.
 
 ### 5.3 Messages
 
 | Type | Payload | When |
 |---|---|---|
-| `HELLO` | `digest, count, clock, buckets[32]` | Login, joining a board, when lockdown clears, and every 5 min ± 60 s (skipped if a HELLO for this board was seen < 2 min ago). |
-| `IDX` | `{ [id] = {rev, editor} }` for mismatched buckets only | Reply to a HELLO with a differing digest. |
-| `NEED` | `{ id, … }` | Requester: ids where the peer's copy is newer. |
-| `PUT` | `{ Note, … }`, packed to fit about 1–2 messages | Live on local edit (broadcast); in reply to `NEED`; pushing our newer notes after an `IDX` diff. |
-| `MEMBERS` | `{ MemberRecord, … }` | Piggybacked on HELLO when the member list changed. |
-| `META` | `BoardMeta` | Piggybacked on HELLO when the board was renamed. The digest doesn't cover it, so it rides on every HELLO; it's under 100 bytes. |
-| `CLOUD` | `cursor` | Piggybacked on HELLO. Tells peers "I'm cloud-synced to X", used by the bulk rule (§5.6). |
+| `HELLO` | `r` nonce, `d` digest, `n` count, `c` clock, `k` buckets[32], `kc` per-bucket note counts[32], `md` members digest, `m` BoardMeta, `me` the sender's own MemberRecord, `cls` class token, `cl` when the sender's companion last synced this board (or false) | Login, joining a board, when lockdown clears, and every 5 min ± 60 s. A periodic HELLO is skipped if a HELLO for this board was seen < 2 min ago, but never twice running, so every member announces itself at least every ~12 min. |
+| `IDX` | `to`, `r`, `e` = `{ {id, rev, editor}, … }` for mismatched buckets only, `bk` the buckets it covers completely; or, for a partial catch-up (§5.6), `p = 1`, `bh` notes behind, and the sender's newest 20 entries | Reply to a HELLO with a differing digest, broadcast on the board's transport. Split across several IDX when a board is large (60 entries each). |
+| `NEED` | `to`, `ids` (up to 100) | Requester: ids where the peer's copy is newer. |
+| `PUT` | `{ Note, … }`, packed to about 600 bytes before compression | Live on local edit; in reply to `NEED`; pushing our newer notes after an `IDX` diff. Always broadcast. |
+| `MEMBERS` | `{ MemberRecord, … }`, 100 per message | After a local member change; and in reply to a HELLO whose `md` differs from ours, after a random 0.5–3 s delay that's cancelled if another member's MEMBERS arrives first. A member whose list still holds something the arrival lacked sends its own. |
+| `META` | `BoardMeta` | After a local rename; and in reply to a HELLO carrying an older name or none, with the same suppression. |
+
+Members digest: FNV1a32 of the sorted `name=rev;editor\n` lines of every MemberRecord, removed ones included, like the note buckets. The digest doesn't cover BoardMeta, so it rides on every HELLO; it's under 100 bytes. The v0.2 `CLOUD` message is the `cl` field. Receivers check every field's type and size; an envelope that fails is dropped and counted.
 
 ### 5.4 Catch-up flow
 
 1. A logs in and broadcasts `HELLO(digest, buckets)`.
-2. Each online member with a different digest schedules a reply after a random 0.5–3 s delay. The first one to reply wins. Anyone who sees another member's `IDX` aimed at A cancels their own (**responder suppression**).
+2. Each online member with a different digest schedules a reply. The first one to reply wins. Anyone who sees another member's `IDX` aimed at A cancels their own (**responder suppression**). The delay is **ranked**, not uniformly random: every member sorts the members it has heard from in the last 13 min, A excluded, by FNV1a32 of A's HELLO nonce and the member's name, and waits `0.3 s + rank × 1.0 s + random(0–0.4 s)` (rank capped at 4). Members agree on the order without talking, so the first in line normally answers and everyone else has seen its IDX before their own turn.
+
+   **Why ranked** (changed from a uniform 0.5–3 s): with 4 possible responders, a uniform delay gives two IDX whenever the first two draws land within one message latency of each other. In the simulator (`addon/spec/helpers/sim.lua`, 100 trials each), uniform delays gave exactly one IDX in 87% of HELLOs at 0.05–0.25 s latency and 54% at 0.2–0.6 s, short of the Phase 3 target of 90%. Ranked delays gave 100% at both.
 3. The winner, B, sends `IDX` covering only the mismatched buckets.
 4. A diffs: it sends `PUT` for notes where A is newer and `NEED` for notes where B is newer.
 5. B answers `NEED` with `PUT`s. The digests now match.
 
 ### 5.5 Lockdown gate
 
-- Before every send, check the client's outgoing-addon-message restriction (`AreOutgoingAddonChatMessagesRestricted()` in the modern API; confirm the exact name on 16001 in Phase 0), and also treat a "restricted" `SendAddonMessage` result as lockdown.
-- While restricted, messages go to an outbox. Live `PUT`s coalesce by note id. A 2 s ticker retries the outbox and, once the gate opens, flushes it and sends a fresh `HELLO`.
+- Before every send, check the client's outgoing-addon-message restriction, and also treat a "restricted" `SendAddonMessage` result as lockdown. Until spike 01 names the check on 16001, `Core/Gate.lua` uses the first that exists of `C_ChatInfo.InChatMessagingLockdown()`, `C_ChatInfo.AreOutgoingAddonChatMessagesRestricted()` and a global `AreOutgoingAddonChatMessagesRestricted()`. A check that raises an error counts as open; the send result still catches a real restriction.
+- While restricted, messages wait in the outbox (`Core/Outbox.lua`). Queued items coalesce by key: live `PUT`s for a board merge their note ids, and are built at send time from the board as it is then, so repeated edits to a note send once, with the newest text. The outbox is pumped every 0.5 s; a refused send holds it for 2 s. Once the gate opens it flushes, and every board sends a fresh `HELLO`.
+- The outbox also models the throttle (§5.6) as a token bucket in addon messages: 8 tokens, refilled at 0.9 per second, a little under the §2 estimate until spike 02 measures it. A message needs one token to start and spends one per chunk, possibly going into debt.
 - The gate is not driven by encounter start/end flags, so it can't get stuck closed. Local editing is never blocked.
 
 ### 5.6 Throttle budget and the bulk rule
 
 At about 255 bytes/sec per prefix, and with other traffic sharing that budget, P2P catch-up only suits small deltas.
 
-- **Estimate first.** After the bucket diff, the requester estimates the transfer size from the number of mismatched notes.
+- **Estimate first.** The responder estimates the transfer from the bucket diff: for each mismatched bucket, the larger of its own note count and the requester's (HELLO `kc`), times about 150 bytes per note. (The v0.2 plan had the requester estimate, but only the responder sees both sides' counts before any IDX is sent.) A responder that finds itself the more out of date also sends its own HELLO, so it catches up under its own cloud setting.
 - **Small deltas go P2P.** If the estimate is ≤ 8 KB (about 30 s of budget), sync peer-to-peer.
-- **Large deltas go to the cloud.** If the estimate is larger and this client is cloud-enabled, it syncs only the notes needed for the view the player has open (newest 20). It then shows a banner: "Board is N notes behind — cloud sync will catch up on next /reload". The companion handles the rest.
-- **No cloud available.** If the client isn't cloud-enabled, full P2P sync still runs, at `"BULK"` priority, spread over time.
+- **Large deltas go to the cloud.** If the estimate is larger and the requester is cloud-enabled, the responder sends a partial IDX with only its newest 20 notes in the differing buckets, and the requester pulls those. It then shows a banner: "N notes behind. The companion will fetch the rest, then /reload." The companion handles the rest. **Cloud-enabled** means the companion has actually synced this board in the last 7 days (`sync.lastCloudAt`), not just that `board.cloud` is on: a new member without the companion would otherwise never catch up.
+- **No cloud available.** If the client isn't cloud-enabled, full P2P sync still runs, at `"BULK"` priority (IDX, NEED and PUT alike), spread over time.
 - Live edits always go P2P immediately; they're tiny.
 
 ---
@@ -243,7 +257,23 @@ At about 255 bytes/sec per prefix, and with other traffic sharing that budget, P
 
 ### 7.2 Addon side
 
-At `PLAYER_LOGIN`, merge `CorkboardCloudData` into `CorkboardDB` using the §4.3 rules and record `lastCloudAt` and `cloudCursor`. Merging is idempotent, so a stale `Data.lua` is harmless.
+At `PLAYER_LOGIN`, merge `CorkboardCloudData` into `CorkboardDB` using the §4.3 rules and record `lastCloudAt` and `cloudCursor`. Merging is idempotent, so a stale `Data.lua` is harmless. Boards this account doesn't hold are ignored. `Core/Cloud.lua` implements it, and the format is:
+
+```lua
+CorkboardCloudData = {
+  version = 1,
+  written = 1790000000,            -- when the companion wrote the file (unix time)
+  boards = {
+    [boardId] = {
+      cursor   = 1234,             -- the API sequence number the companion has reached
+      syncedAt = 1790000000,       -- when (becomes sync.lastCloudAt)
+      notes    = { Note, … },      -- rows newer than (or missing from) the SavedVariables the companion last read
+      members  = { MemberRecord, … },
+      meta     = BoardMeta,        -- or nil
+    },
+  },
+}
+```
 
 ### 7.3 Sync API
 
@@ -332,7 +362,7 @@ corkboard.<domain> {
 - **Board view:** sticky-card grid (colour, author, relative time, live links).
 - **Editor:** multiline EditBox, shift-click links, character counter, colour picker. The counter counts bytes, since the sanitiser's 2,000 limit is in bytes. Save stays disabled while `Sanitise.text` would reject the text, and the editor says why. An unchanged save writes nothing, so it doesn't bump the rev and resend the note.
 - **Share:** "Copy invite" produces `CORK1:<base64(boardId|secret|ownerName)>`. "Join" takes a pasted string.
-- **Slash commands:** `/cork`, `/cork join <invite>`, `/cork sync`, `/cork debug`.
+- **Slash commands:** `/cork`, `/cork join <invite>`, `/cork invite`, `/cork members`, `/cork remove <Name-Realm>`, `/cork rotate`, `/cork cloud on|off`, `/cork guild on|off`, `/cork sync` (HELLO on every board now) and `/cork debug`.
 - **Opening the window:** `/cork` with nothing after it, the addon compartment by the minimap (`## AddonCompartmentFunc`), or the LibDataBroker launcher in a broker display. The minimap button waits for LibDBIcon.
 - **Phase 1 store commands**, kept for testing and power users: `/cork boards`, `create <name>`, `use <board>`, `rename <name>`, `deleteboard <board>`, `list`, `add <text>`, `edit <note> <text>`, `color <note> <1-5>` and `delete <note>`. A board is named by its name or id (or an unambiguous id prefix). A note is named by its `#counter` when that's unique on the board, otherwise by its full id. Output goes to the default chat frame with a gold `Corkboard:` prefix.
 - Works with Forever's modern and Classic visual presets (no reliance on retail-only art atlases; verify in Phase 1).

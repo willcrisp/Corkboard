@@ -49,3 +49,10 @@ Meta records win on `(rev, editor)` like the others. On an exact tie the greater
 - `bucket[]`: `{ id, bucket }`, where the bucket is `FNV1a32(id) % 32`.
 - `line[]`: `{ note, line }`, the digest line `id=rev;editor\n`, with `rev` in plain decimal.
 - `boards[]`: `{ name, notes[], count, buckets[32], digest }`. `buckets[0]` is bucket 0. Each bucket hash is the FNV-1a of that bucket's lines, sorted byte-wise and joined, so an empty bucket hashes to 2166136261. The digest is the FNV-1a of the 32 hashes, each written as 4 big-endian bytes. `count` includes tombstones. The "lines sort byte-wise, not by id" board catches an implementation that sorts by id instead: `a1b2c3d4-7` sorts before `a1b2c3d4-722` (chosen to share its bucket), but its line sorts after, because `=` is greater than `2`. The two "revs 81 apart" boards hold the same note at revs whose digest lines collide under Adler-32; their digests must differ.
+
+### `invite.json`
+
+Invite strings (§9): `CORK1:` then standard base64 (with `=` padding) of `boardId|secret|ownerName`.
+
+- `encode[]`: `{ name, board: { id, secret, owner }, invite }`. Encoding always writes the padding and an upper-case `CORK1:`.
+- `decode[]`: `{ name, input, ok, output?, reason? }`. Decoding ignores surrounding whitespace, the case of `CORK`, and missing padding. It fails with `invite` when the text isn't a Corkboard invite, `invite_version` for any version other than 1, and `invite_corrupt` when the base64 or its fields are bad. A valid id is 16 lower-case base36 characters, a secret is 16–64 ASCII letters and digits, and the owner must pass the character-name check from `sanitise.json`.

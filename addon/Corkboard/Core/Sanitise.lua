@@ -123,6 +123,11 @@ function Sanitise.boardName(s)
 		and Util.isUtf8(s)
 end
 
+-- A note id: "<8 lower-case hex>-<digits>", at most 18 bytes (§4.2).
+function Sanitise.noteId(id)
+	return type(id) == "string" and #id <= Sanitise.MAX_ID and find(id, NOTE_ID) ~= nil
+end
+
 -- Returns a clean copy holding only the known fields, or nil and a reason.
 -- Unknown fields are ignored so a newer client's notes still load here.
 function Sanitise.note(t)
@@ -130,7 +135,7 @@ function Sanitise.note(t)
 		return nil, "type"
 	end
 	local id = t.id
-	if type(id) ~= "string" or #id > Sanitise.MAX_ID or not find(id, NOTE_ID) then
+	if not Sanitise.noteId(id) then
 		return nil, "id"
 	end
 	if not Sanitise.name(t.author) then

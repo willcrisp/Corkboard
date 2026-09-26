@@ -191,6 +191,14 @@ function Frame:HasFocus()
 	return self.hasFocus == true
 end
 
+function Frame:SetChecked(checked)
+	self.checked = checked and true or false
+end
+
+function Frame:GetChecked()
+	return self.checked == true
+end
+
 function Frame:SetEnabled(enabled)
 	self.enabled = enabled and true or false
 end
@@ -281,10 +289,89 @@ local function serialize(value, indent)
 	error("can't save a " .. t)
 end
 
+-- The network --------------------------------------------------------------------
+-- Shared by the clients in a test: password-protected temporary channels, a
+-- guild, addon-message delivery with latency, and the server's per-sender,
+-- per-prefix throttle (a token bucket, §11's burst 10 and 1 msg/s). Players
+-- are keyed by "Name-Realm", so a /reload's fresh client takes over its
+-- channels, as the server keeps them across a reload.
+
+local Network = {}
+Network.__index = Network
+Client.Network = Network
+
+Network.LATENCY = 0.1
+Network.BURST = 10
+Network.RATE = 1
+
+function Network.new()
+	return setmetatable({ players = {}, channels = {}, queue = {}, buckets = {}, delivered = {} }, Network)
+end
+
+function Network:attach(client)
+	self.players[client:fullName()] = client
+end
+
+function Network:channel(name)
+	return self.channels[name:lower()]
+end
+
+-- Queues fn to run `delay` seconds from now on the given client's clock.
+function Network:later(client, delay, fn)
+	self.queue[#self.queue + 1] = { client = client, at = client.time + delay, fn = fn }
+end
+
+function Network:deliverDue()
+	local due = {}
+	for i = #self.queue, 1, -1 do
+		local item = self.queue[i]
+		if item.at <= item.client.time then
+			due[#due + 1] = table.remove(self.queue, i)
+		end
+	end
+	for i = #due, 1, -1 do
+		local item = due[i]
+		-- Only to the player's current session.
+		if self.players[item.client:fullName()] == item.client and item.client.loggedIn then
+			item.fn()
+		end
+	end
+end
+
+function Network:take(client, prefix)
+	local key = client:fullName() .. "\0" .. prefix
+	local b = self.buckets[key] or { tokens = Network.BURST, at = client.time }
+	self.buckets[key] = b
+	b.tokens = math.min(Network.BURST, b.tokens + (client.time - b.at) * Network.RATE)
+	b.at = client.time
+	if b.tokens < 1 then
+		return false
+	end
+	b.tokens = b.tokens - 1
+	return true
+end
+
+-- Advances every client together, in small steps.
+function Network:advance(seconds, clients)
+	local step = 0.05
+	local left = seconds
+	while left > 1e-9 do
+		local dt = math.min(step, left)
+		for _, client in ipairs(clients) do
+			client:step(dt)
+		end
+		self:deliverDue()
+		left = left - dt
+	end
+	for _, client in ipairs(clients) do
+		client:check()
+	end
+end
+
 -- The client ------------------------------------------------------------------
 
 -- options: saved (SavedVariables text from a previous session), name, realm,
--- guid, now (server time).
+-- guid, now (server time), network (shared with other clients), guild.
 function Client.new(options)
 	options = options or {}
 	local self = setmetatable({
@@ -296,14 +383,168 @@ function Client.new(options)
 		timers = {},
 		loggedIn = false,
 		now = options.now or 1790000000,
-		time = 1000,
+		time = options.time or 1000,
 		saved = options.saved,
 		name = options.name or "Will",
 		realm = options.realm or "Mirage Raceway",
 		guid = options.guid or "Player-4372-0ABCDEF0",
+		class = options.class or "MAGE",
+		guild = options.guild,
+		network = options.network or Network.new(),
+		prefixes = {},
+		myChannels = {}, -- channel number -> name
+		chatChannels = {}, -- channels ChatFrame1 shows, by lower-case name
+		filters = {},
+		secrets = {},
+		locked = false,
+		sentAddon = {},
+		received = {},
 	}, Client)
 	self.env = self:makeEnv()
 	return self
+end
+
+function Client:fullName()
+	return self.name .. "-" .. (self.realm:gsub("[%s%-]", ""))
+end
+
+-- Channel helpers -----------------------------------------------------------------------
+
+function Client:channelNumber(name)
+	for id, n in pairs(self.myChannels) do
+		if n:lower() == name:lower() then
+			return id
+		end
+	end
+end
+
+-- A chat event as the client handles it: message filters first, then the
+-- default chat frame, which prints channel text and notices for channels it
+-- shows (and every YOU_* notice about your own joins). Frames registered
+-- for the event get it too.
+function Client:chatEvent(event, ...)
+	local suppressed = false
+	for _, filter in ipairs(self.filters[event] or {}) do
+		if filter(self.env.ChatFrame1, event, ...) then
+			suppressed = true
+		end
+	end
+	local channelName = select(9, ...)
+	local notice = select(1, ...)
+	if not suppressed then
+		local shows = channelName and self.chatChannels[channelName:lower()]
+		if shows or (event == "CHAT_MSG_CHANNEL_NOTICE" and type(notice) == "string" and notice:find("^YOU_")) then
+			self.chat[#self.chat + 1] = ("[%s] %s"):format(tostring(select(4, ...)), tostring(notice))
+		end
+	end
+	self.fire(event, ...)
+end
+
+function Client:joinChannel(name, password)
+	local net = self.network
+	local channel = net:channel(name)
+	if channel and channel.password ~= (password or "") then
+		net:later(self, Network.LATENCY, function()
+			self:chatEvent("CHAT_MSG_CHANNEL_NOTICE_USER", "WRONG_PASSWORD", self:fullName(), "", "0. " .. name, "", "",
+				0, 0, name)
+		end)
+		return
+	end
+	if not channel then
+		channel = { name = name, password = password or "", members = {} }
+		net.channels[name:lower()] = channel
+	end
+	net:later(self, Network.LATENCY, function()
+		if self:channelNumber(name) then
+			return
+		end
+		channel.members[self:fullName()] = true
+		local id = 5
+		while self.myChannels[id] do
+			id = id + 1
+		end
+		self.myChannels[id] = name
+		self.chatChannels[name:lower()] = true -- new channels show in the default chat frame
+		self:chatEvent("CHAT_MSG_CHANNEL_NOTICE", "YOU_CHANGED", "", "", id .. ". " .. name, "", "", 0, id, name)
+		self.fire("CHANNEL_UI_UPDATE")
+	end)
+end
+
+function Client:leaveChannel(name)
+	local id = self:channelNumber(name)
+	if not id then
+		return
+	end
+	self.myChannels[id] = nil
+	self.chatChannels[name:lower()] = nil
+	local channel = self.network:channel(name)
+	if channel then
+		channel.members[self:fullName()] = nil
+		if next(channel.members) == nil then
+			self.network.channels[name:lower()] = nil
+		end
+	end
+	self:chatEvent("CHAT_MSG_CHANNEL_NOTICE", "YOU_LEFT", "", "", id .. ". " .. name, "", "", 0, id, name)
+end
+
+-- Delivers an addon message to one client, as CHAT_MSG_ADDON.
+function Client:receiveAddon(prefix, text, chatType, sender, channelName)
+	if not self.prefixes[prefix] then
+		return
+	end
+	local senderName = sender:gsub("%-" .. (self.realm:gsub("[%s%-]", "")) .. "$", "") -- same realm: no suffix
+	local localId = channelName and self:channelNumber(channelName) or 0
+	self.received[#self.received + 1] = { prefix = prefix, text = text, chatType = chatType, sender = sender }
+	self.fire("CHAT_MSG_ADDON", prefix, text, chatType, senderName, channelName or "", 0, localId, channelName or "", 0)
+end
+
+function Client:sendAddon(prefix, text, chatType, target)
+	assert(type(prefix) == "string" and #prefix <= 16, "bad prefix")
+	assert(type(text) == "string", "bad text")
+	if #text > 255 then
+		return 2 -- InvalidMessage
+	end
+	if self.locked then
+		return 11 -- AddOnMessageLockdown
+	end
+	local net = self.network
+	local recipients, channelName = {}, nil
+	if chatType == "CHANNEL" then
+		channelName = self.myChannels[tonumber(target)]
+		if not channelName then
+			return 7 -- InvalidChannel
+		end
+		for name in pairs(net:channel(channelName).members) do
+			recipients[#recipients + 1] = name -- including ourselves: channel messages echo
+		end
+	elseif chatType == "GUILD" then
+		if not self.guild then
+			return 10 -- NotInGuild
+		end
+		for name, client in pairs(net.players) do
+			if client.guild == self.guild then
+				recipients[#recipients + 1] = name
+			end
+		end
+	elseif chatType == "WHISPER" then
+		recipients[1] = target
+	else
+		return 4 -- InvalidChatType
+	end
+	if not net:take(self, prefix) then
+		return 3 -- AddonMessageThrottle
+	end
+	self.sentAddon[#self.sentAddon + 1] = { prefix = prefix, text = text, chatType = chatType, target = target }
+	local from = self:fullName()
+	for _, name in ipairs(recipients) do
+		local client = net.players[name]
+		if client then
+			net:later(client, Network.LATENCY, function()
+				client:receiveAddon(prefix, text, chatType, from, channelName)
+			end)
+		end
+	end
+	return 0
 end
 
 function Client:makeEnv()
@@ -343,6 +584,12 @@ function Client:makeEnv()
 		return frame
 	end
 	env.UIParent = newRegion("Frame")
+	env.ChatFrame1 = newRegion("Frame", env.UIParent, "ChatFrame1")
+	env.ChatFrame2 = newRegion("Frame", env.UIParent, "ChatFrame2")
+	env.ReloadUI = function()
+		client.reloadRequested = true
+	end
+	env.OKAY = "Okay"
 	env.UISpecialFrames = {}
 	env.ChatFontNormal = {}
 	env.CANCEL, env.DELETE, env.SAVE = "Cancel", "Delete", "Save"
@@ -442,8 +689,8 @@ function Client:makeEnv()
 			client.errors[#client.errors + 1] = tostring(err)
 		end
 	end
-	env.issecretvalue = function()
-		return false
+	env.issecretvalue = function(value)
+		return client.secrets[value] == true
 	end
 	env.IsLoggedIn = function()
 		return client.loggedIn
@@ -455,7 +702,7 @@ function Client:makeEnv()
 		return 60
 	end
 	env.GetServerTime = function()
-		return client.now
+		return math.floor(client.now)
 	end
 	env.GetLocale = function()
 		return "enUS"
@@ -482,7 +729,7 @@ function Client:makeEnv()
 		return client.guid
 	end
 	env.UnitClass = function()
-		return "Mage", "MAGE", 8
+		return "Mage", client.class, 8
 	end
 	env.UnitRace = function()
 		return "Gnome", "Gnome", 7
@@ -493,30 +740,75 @@ function Client:makeEnv()
 	env.Ambiguate = function(name)
 		return name
 	end
-	env.Enum = { SendAddonMessageResult = { Success = 0, AddonMessageThrottle = 3, AddOnMessageLockdown = 11 } }
+	env.Enum = { SendAddonMessageResult = { Success = 0, InvalidPrefix = 1, InvalidMessage = 2,
+		AddonMessageThrottle = 3, InvalidChatType = 4, NotInGroup = 5, TargetRequired = 6, InvalidChannel = 7,
+		ChannelThrottle = 8, GeneralError = 9, NotInGuild = 10, AddOnMessageLockdown = 11 } }
 	env.C_ChatInfo = {
-		RegisterAddonMessagePrefix = function()
+		RegisterAddonMessagePrefix = function(prefix)
+			client.prefixes[prefix] = true
 			return 0
 		end,
-		IsAddonMessagePrefixRegistered = function()
-			return false
+		IsAddonMessagePrefixRegistered = function(prefix)
+			return client.prefixes[prefix] == true
 		end,
 		InChatMessagingLockdown = function()
-			return false
+			return client.locked, client.locked and 1 or 0
 		end,
-		SendAddonMessage = function()
-			error("Corkboard doesn't send addon messages in Phase 1")
+		SendAddonMessage = function(prefix, text, chatType, target)
+			return client:sendAddon(prefix, text, chatType, target)
 		end,
-		SendAddonMessageLogged = function()
-			error("Corkboard doesn't send addon messages in Phase 1")
+		SendAddonMessageLogged = function(prefix, text, chatType, target)
+			return client:sendAddon(prefix, text, chatType, target)
 		end,
 	}
+	env.IsInGuild = function()
+		return client.guild ~= nil
+	end
+	env.JoinTemporaryChannel = function(name, password)
+		client:joinChannel(name, password)
+	end
+	env.LeaveChannelByName = function(name)
+		client:leaveChannel(name)
+	end
+	-- GetChannelName(name or number): number, name, 0; or 0 when not in it.
+	env.GetChannelName = function(which)
+		if type(which) == "number" then
+			local name = client.myChannels[which]
+			if name then
+				return which, name, 0
+			end
+			return 0
+		end
+		local id = client:channelNumber(which)
+		if id then
+			return id, client.myChannels[id], 0
+		end
+		return 0
+	end
+	env.NUM_CHAT_WINDOWS = 2
+	env.ChatFrame_RemoveChannel = function(frame, name)
+		if frame == env.ChatFrame1 then
+			client.chatChannels[name:lower()] = nil
+		end
+	end
+	env.ChatFrame_AddMessageEventFilter = function(event, fn)
+		client.filters[event] = client.filters[event] or {}
+		table.insert(client.filters[event], fn)
+	end
 	env.C_Timer = {
 		After = function(seconds, fn)
 			client.timers[#client.timers + 1] = { at = client.time + seconds, fn = fn }
 		end,
+		NewTimer = function(seconds, fn)
+			local timer = { at = client.time + seconds, fn = fn }
+			function timer.Cancel()
+				timer.cancelled = true
+			end
+			client.timers[#client.timers + 1] = timer
+			return timer
+		end,
 		NewTicker = function(seconds, fn)
-			local ticker = { seconds = seconds, fn = fn }
+			local ticker = { seconds = seconds, fn = fn, at = client.time + seconds }
 			function ticker.Cancel()
 				ticker.cancelled = true
 			end
@@ -570,6 +862,7 @@ end
 
 -- Loads the addon, then its SavedVariables, then logs in, like the client.
 function Client:login()
+	self.network:attach(self)
 	self.ns = {}
 	for _, file in ipairs(Client.tocFiles()) do
 		if file:find("%.xml$") then
@@ -598,10 +891,11 @@ function Client:check()
 	return self
 end
 
--- Advances the clock, running any C_Timer callbacks that come due.
-function Client:advance(seconds)
-	self.time = self.time + seconds
-	self.now = self.now + seconds
+-- One small step of the clock: C_Timer callbacks and tickers that come due,
+-- then every frame's OnUpdate.
+function Client:step(dt)
+	self.time = self.time + dt
+	self.now = self.now + dt
 	local due = {}
 	for i = #self.timers, 1, -1 do
 		if self.timers[i].at <= self.time then
@@ -609,8 +903,29 @@ function Client:advance(seconds)
 		end
 	end
 	for i = #due, 1, -1 do
-		due[i].fn()
+		if not due[i].cancelled then
+			due[i].fn()
+		end
 	end
+	for _, ticker in ipairs(self.tickers) do
+		if not ticker.cancelled and ticker.at <= self.time then
+			ticker.at = ticker.at + ticker.seconds
+			ticker.fn()
+		end
+	end
+	for _, frame in ipairs(self.frames) do
+		local onUpdate = frame.scripts.OnUpdate
+		if onUpdate and frame:IsVisible() then
+			onUpdate(frame, dt)
+		end
+	end
+end
+
+-- Advances the clock, running timers, tickers and OnUpdate as it goes, and
+-- delivering this client's network traffic.
+function Client:advance(seconds)
+	self.network:advance(seconds, { self })
+	return self
 end
 
 -- Runs "/cork ..." through the registered slash handler. Returns the chat
@@ -643,13 +958,20 @@ end
 -- A /reload: log out, then log in again as a fresh session from the saved text.
 function Client:reload()
 	local saved = self:logout()
-	return Client.new({
+	local fresh = Client.new({
 		saved = saved,
 		now = self.now,
+		time = self.time,
 		name = self.name,
 		realm = self.realm,
 		guid = self.guid,
-	}):login()
+		class = self.class,
+		guild = self.guild,
+		network = self.network,
+	})
+	-- The server keeps channel membership across a /reload.
+	fresh.myChannels = self.myChannels
+	return fresh:login()
 end
 
 -- The popup on screen: its accept button, or typing and pressing Enter.

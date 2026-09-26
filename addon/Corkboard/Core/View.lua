@@ -4,6 +4,7 @@
 
 local _, ns = ...
 ns = type(ns) == "table" and ns or {}
+local Util = ns.Util or require("Core.Util")
 local Sanitise = ns.Sanitise or require("Core.Sanitise")
 local Commands = ns.Commands or require("Core.Commands")
 
@@ -163,19 +164,167 @@ function View.changes(note, text, color)
 	return changes
 end
 
--- The status line: sync comes in Phase 2, so for now every board is local.
-function View.status(noteCount, shownCount)
-	local count = noteCount == shownCount and format("%d notes", noteCount)
-		or format("%d of %d notes", shownCount, noteCount)
+-- The note count on the right of the status line.
+function View.count(noteCount, shownCount)
 	if noteCount == 1 and shownCount == 1 then
-		count = "1 note"
+		return "1 note"
+	elseif noteCount == shownCount then
+		return format("%d notes", noteCount)
 	end
-	return "Local only: sync arrives with invites", count
+	return format("%d of %d notes", shownCount, noteCount)
+end
+
+-- Status dot colours from docs/ui-style.md.
+View.DOTS = {
+	synced = rgb("4f9a47"),
+	syncing = rgb("5a8cc0"),
+	paused = rgb("b8903a"),
+	behind = rgb("b8663a"),
+	idle = rgb("7a7a7a"),
+}
+
+local function plural(n, word)
+	return format("%d %s%s", n, word, n == 1 and "" or "s")
+end
+
+local function cloudDetail(status, now)
+	if not status.cloud then
+		return "· cloud off"
+	elseif status.lastCloudAt then
+		return "· Cloud " .. Commands.age(now - status.lastCloudAt)
+	end
+	return "· cloud not synced yet"
+end
+
+-- The status line for a board (docs/mockups/SyncStates): { label, detail,
+-- dot, hollow, dim }. `status` comes from Sync:status, `channel` from
+-- Net:ChannelState ("joined", "joining", "guild", "expired" or "limit").
+function View.syncStatus(status, channel, now, myRealm)
+	if channel == "expired" then
+		return { label = "Invite out of date", detail = "· ask the owner for a new one", dot = "behind" }
+	elseif status.paused then
+		local detail = status.queued > 0 and format("· %s queued", plural(status.queued, "message")) or "· sends when allowed"
+		return { label = "Paused", detail = detail, dot = "paused" }
+	elseif status.behind then
+		return { label = format("%s behind", plural(status.behind, "note")), detail = "· /reload after cloud sync",
+			dot = "behind" }
+	elseif status.syncing then
+		return { label = "Syncing", detail = format("· %s from %s", plural(status.syncing.left, "note"),
+			View.shortName(status.syncing.from, myRealm)), dot = "syncing", hollow = true }
+	elseif channel == "limit" then
+		return { label = "Not connected", detail = "· only 3 boards sync live at once", dot = "idle", dim = true }
+	elseif channel == "joining" then
+		return { label = "Connecting", detail = cloudDetail(status, now), dot = "idle", hollow = true, dim = true }
+	elseif #status.online > 0 then
+		if status.lastPeer and status.lastPeerAt then
+			return { label = format("Synced with %s %s", View.shortName(status.lastPeer, myRealm),
+				Commands.age(now - status.lastPeerAt)), detail = cloudDetail(status, now), dot = "synced" }
+		end
+		return { label = format("%d online", #status.online), detail = cloudDetail(status, now), dot = "synced" }
+	elseif not status.cloud then
+		return { label = "In-game sync only", detail = "· cloud off", dot = "idle", dim = true }
+	end
+	return { label = "Nobody online", detail = cloudDetail(status, now), dot = "idle", hollow = true, dim = true }
 end
 
 -- The line under a board's name in the board list.
-function View.boardDetail(noteCount)
-	return noteCount == 1 and "1 note" or format("%d notes", noteCount)
+function View.boardDetail(noteCount, online)
+	local notes = noteCount == 1 and "1 note" or format("%d notes", noteCount)
+	if online and online > 0 then
+		return format("%s · %d online", notes, online)
+	end
+	return notes
+end
+
+-- "3 hours", "2 days": how long ago a member was seen, for the roster.
+function View.seen(seconds)
+	if seconds < 3600 then
+		return plural(math.max(1, floor(seconds / 60)), "minute")
+	elseif seconds < 86400 then
+		return plural(floor(seconds / 3600), "hour")
+	end
+	return plural(floor(seconds / 86400), "day")
+end
+
+-- The Members tab roster (docs/mockups/Share): one row per member.
+function View.memberRows(board, members, peers, online, me, now, myRealm)
+	local isOnline = {}
+	for _, name in ipairs(online) do
+		isOnline[name] = true
+	end
+	local rows = {}
+	for _, m in ipairs(members) do
+		local seen = board.seen and board.seen[m.name]
+		local peer = peers and peers[m.name]
+		local row = {
+			name = m.name,
+			label = View.shortName(m.name, myRealm),
+			role = m.role == "owner" and "Owner" or "Member",
+			class = seen and seen.class,
+			online = m.name == me or isOnline[m.name] == true,
+			removable = board.owner == me and m.name ~= me,
+		}
+		if m.name == me then
+			row.seen, row.sync = "You", "-"
+		elseif row.online then
+			row.seen = "Online"
+			row.sync = peer and peer.state == "match" and "Up to date" or "Syncing"
+		else
+			row.seen = seen and View.seen(now - seen.at) or "Never"
+			row.sync = peer and peer.cloud and "Cloud " .. Commands.age(now - peer.cloud) or "-"
+		end
+		rows[#rows + 1] = row
+	end
+	return rows
+end
+
+-- The minimap / broker tooltip (docs/mockups/SyncStates): each board and
+-- its state, as { text, r, g, b } lines.
+function View.tooltipLines(store, sync)
+	local lines = {}
+	local grey = { 0.62, 0.62, 0.62 }
+	for i, board in ipairs(store:boards()) do
+		if i > 8 then
+			lines[#lines + 1] = { format("and %d more", #store:boards() - 8), grey[1], grey[2], grey[3] }
+			break
+		end
+		local status = sync:status(board.id)
+		local detail
+		if status.queued > 0 and status.paused then
+			detail = format("%d queued", status.queued)
+		elseif #status.online > 0 then
+			detail = format("%d online", #status.online)
+		else
+			detail = "Nobody online"
+		end
+		lines[#lines + 1] = { board.meta and board.meta.name or board.id, 1, 1, 1 }
+		lines[#lines + 1] = { "  " .. detail, grey[1], grey[2], grey[3] }
+	end
+	return lines
+end
+
+-- The debug panel's stats (docs/mockups/Debug): { key, value } pairs.
+function View.debugStats(outbox, gateName, board, now)
+	local stats = outbox.stats
+	local gate = outbox.gate.open and "Open" or format("Closed (%s)", tostring(outbox.gate.reason))
+	local closed = outbox.lastClosed
+	return {
+		{ "Send gate", gate .. " · " .. gateName },
+		{ "Last closed", closed and format("%s ago (%s)", View.shortAge(now - closed.at), tostring(closed.reason))
+			or "never" },
+		{ "Outbox", tostring(outbox:depth()) },
+		{ "Throttle stalls", stats.lastStall and format("%d (%s ago)", stats.stalls, View.shortAge(now - stats.lastStall))
+			or "0" },
+		{ "Sent", format("%d envelopes, %d messages, %d B", stats.envelopes, stats.messages, stats.bytes) },
+		{ "Refused", format("%d restricted, %d failed, %d too long", stats.lockdowns, stats.errors, stats.dropped) },
+		{ "Budget", format("%.1f / %d messages", outbox.tokens, outbox.burst) },
+		{ "Board clock", board and Util.formatInt(board.clock or 0) or "-" },
+	}
+end
+
+-- "45:1790004412:9f3a01c2": a peer's count, clock and digest, for the peers table.
+function View.digestLabel(count, clock, digest)
+	return format("%d:%s:%08x", count or 0, Util.formatInt(clock or 0), digest or 0)
 end
 
 ns.View = View

@@ -30,13 +30,13 @@ end
 
 -- A named prompt: on Enter or the accept button, `accept(text, data)` runs,
 -- and the dialog stays open while it returns false.
-local function namePrompt(text, acceptLabel, accept)
+local function namePrompt(text, acceptLabel, accept, maxLetters)
 	return {
 		text = text,
 		button1 = acceptLabel,
 		button2 = CANCEL or "Cancel",
 		hasEditBox = true,
-		maxLetters = 64,
+		maxLetters = maxLetters or 64,
 		OnShow = function(self, data)
 			local editBox = editBoxOf(self)
 			editBox:SetText(data and data.name or "")
@@ -106,6 +106,84 @@ StaticPopupDialogs.CORKBOARD_DELETE_NOTE = {
 	hideOnEscape = true,
 	preferredIndex = 3,
 }
+
+StaticPopupDialogs.CORKBOARD_JOIN = namePrompt("Paste a Corkboard invite to join a board.", "Join", function(text)
+	local board, new = store():joinBoard(trim(text))
+	if not board then
+		ns.Corkboard:Warn(ns.Commands.explain(new))
+		return false
+	end
+	if new then
+		ns.Corkboard:Print(("Joined %s. Its notes arrive when another member is online."):format(Store.name(board)))
+	else
+		ns.Corkboard:Print(("You're already on %s. Its invite is up to date."):format(Store.name(board)))
+	end
+	ns.Corkboard:Changed()
+	return true
+end, 200)
+
+StaticPopupDialogs.CORKBOARD_REMOVE_MEMBER = {
+	text = "Remove %s from %s?\n\nThis rotates the secret. Everyone you keep will need the new invite.",
+	button1 = "Remove",
+	button2 = CANCEL or "Cancel",
+	OnAccept = function(_, data)
+		done(store():removeMember(data.boardId, data.name))
+	end,
+	showAlert = true,
+	timeout = 0,
+	whileDead = true,
+	hideOnEscape = true,
+	preferredIndex = 3,
+}
+
+StaticPopupDialogs.CORKBOARD_ROTATE_SECRET = {
+	text = "Give %s a new secret?\n\nEveryone on the board will need the new invite, and anyone without it is cut off.",
+	button1 = "Rotate",
+	button2 = CANCEL or "Cancel",
+	OnAccept = function(_, data)
+		done(store():rotateSecret(data.boardId))
+	end,
+	showAlert = true,
+	timeout = 0,
+	whileDead = true,
+	hideOnEscape = true,
+	preferredIndex = 3,
+}
+
+StaticPopupDialogs.CORKBOARD_EXPIRED = {
+	text = "%s: that invite is out of date. Ask the board owner for a new one.",
+	button1 = OKAY or "Okay",
+	timeout = 0,
+	whileDead = true,
+	hideOnEscape = true,
+	preferredIndex = 3,
+}
+
+function Popups.Join()
+	StaticPopup_Show("CORKBOARD_JOIN")
+end
+
+function Popups.RemoveMember(boardId, name)
+	local board = store():board(boardId)
+	if board then
+		StaticPopup_Show("CORKBOARD_REMOVE_MEMBER", ns.View.shortName(name, ns.View.realmOf(store().env.me)),
+			Store.name(board), { boardId = boardId, name = name })
+	end
+end
+
+function Popups.RotateSecret(boardId)
+	local board = store():board(boardId)
+	if board then
+		StaticPopup_Show("CORKBOARD_ROTATE_SECRET", Store.name(board), nil, { boardId = boardId })
+	end
+end
+
+function Popups.Expired(boardId)
+	local board = store():board(boardId)
+	if board then
+		StaticPopup_Show("CORKBOARD_EXPIRED", Store.name(board), nil, { boardId = boardId })
+	end
+end
 
 function Popups.NewBoard()
 	StaticPopup_Show("CORKBOARD_NEW_BOARD")

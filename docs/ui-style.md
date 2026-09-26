@@ -55,6 +55,15 @@ What the first in-game build does differently from the mockups, and why:
 - **Card chrome** is a flat 1px backdrop in the note-card colours above, the one place Corkboard draws its own frame colour. Everything else is a Blizzard template.
 - **Edit and Delete** appear on a card when it's hovered, in place of its age, as in the mockup.
 
+## Phase 2 build notes
+
+- **Two bottom tabs, Notes and Members.** The mockup's Settings tab isn't built: the only settings so far are the cloud and guild checkboxes, which the Members mockup already shows. The tab template is `PanelTabButtonTemplate`, falling back to `CharacterFrameTabButtonTemplate` on clients without it.
+- **Board list footer:** two rows, New and Join, then Rename and Delete.
+- **Members tab:** it replaces the note grid in the right-hand inset, so the board list stays visible. The invite box is a read-only `InputBoxTemplate` (typing puts the invite back) that selects itself on focus for Ctrl+C. Rotate Secret shows for the owner only, and so do the remove buttons in the roster.
+- **Status line:** the dot is hollow (a 4×4 frame-coloured square over the 6×6 dot) for "Syncing", "Connecting" and "Nobody online". The label is white and its detail grey; idle states grey both.
+- **Alert strip:** yellow text on a dark strip along the bottom of the notes inset, for "N notes behind" (with a Reload button) and for paused sends with messages queued.
+- **Debug panel** (`/cork debug`): a `ButtonFrameTemplate` window with the stats list, a 8×4 bucket grid against the member most recently heard from, the peers table, and the last 12 log lines. It refreshes every second while open.
+
 ## Optional extras
 
 - **Flat skin.** An ElvUI-style variant (1px black borders, `#1a1a1a` background, narrow font) for players who run flat UIs. It's a setting, not the default.

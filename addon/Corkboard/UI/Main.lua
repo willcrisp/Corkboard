@@ -27,6 +27,7 @@ local CARD_WIDTH = (NOTES_WIDTH - CARD_GAP) / 2
 local CARD_TEXT_WIDTH = CARD_WIDTH - 2 * CARD_PAD
 local CARD_MIN = 64
 local BOARD_ROW = 34
+local FOOTER = 58 -- two rows of board-list buttons
 
 -- Colours from docs/ui-style.md: the note card (#1f1d1a, border #36322c,
 -- hover #6b624f), note text #e6e6e6, and the idle status dot #7a7a7a.
@@ -34,7 +35,10 @@ local CARD_BG = { 0x1f / 255, 0x1d / 255, 0x1a / 255 }
 local CARD_BORDER = { 0x36 / 255, 0x32 / 255, 0x2c / 255 }
 local CARD_HOVER = { 0x6b / 255, 0x62 / 255, 0x4f / 255 }
 local NOTE_TEXT = { 0.9, 0.9, 0.9 }
-local IDLE_DOT = { 0x7a / 255, 0x7a / 255, 0x7a / 255 }
+local FRAME_BG = { 0x1b / 255, 0x1a / 255, 0x18 / 255 } -- fills a hollow status dot
+local LEAD = { 0.9, 0.9, 0.9 }
+local DIM = { 0x9d / 255, 0x9d / 255, 0x9d / 255 }
+local WARNING = { 1, 1, 0 }
 local CARD_BACKDROP = {
 	bgFile = "Interface\\Buttons\\WHITE8X8",
 	edgeFile = "Interface\\Buttons\\WHITE8X8",
@@ -57,6 +61,10 @@ end
 
 local function now()
 	return store().env.now()
+end
+
+local function sync()
+	return addon().sync
 end
 
 local function retain()
@@ -93,7 +101,7 @@ local function scrollList(parent, initializer, template)
 	if ScrollUtil.AddManagedScrollBarVisibilityBehavior then
 		ScrollUtil.AddManagedScrollBarVisibilityBehavior(box, bar)
 	end
-	return box, view
+	return box, view, bar
 end
 
 -- Board list ------------------------------------------------------------------
@@ -118,7 +126,7 @@ local function initBoard(row, board)
 	local current = store():current()
 	row.boardId = board.id
 	row.name:SetText(Store.name(board))
-	row.detail:SetText(View.boardDetail(#Store.notes(board)))
+	row.detail:SetText(View.boardDetail(#Store.notes(board), #sync():onlineNames(board.id)))
 	row.selected:SetShown(current ~= nil and current.id == board.id)
 end
 
@@ -313,22 +321,27 @@ local function build()
 	ui.boards, boardView = scrollList(list, initBoard, "Button")
 	boardView:SetElementExtent(BOARD_ROW)
 	ui.boards:SetPoint("TOPLEFT", 4, -26)
-	ui.boards:SetPoint("BOTTOMRIGHT", -16, 32)
-	local third = (LIST_WIDTH - 16) / 3
-	ui.newBoard = button(list, "New", third)
-	ui.newBoard:SetPoint("BOTTOMLEFT", 6, 6)
+	ui.boards:SetPoint("BOTTOMRIGHT", -16, FOOTER + 4)
+	local half = (LIST_WIDTH - 14) / 2
+	ui.newBoard = button(list, "New", half)
+	ui.newBoard:SetPoint("BOTTOMLEFT", 6, 32)
 	ui.newBoard:SetScript("OnClick", function()
 		ns.Popups.NewBoard()
 	end)
-	ui.rename = button(list, "Rename", third)
-	ui.rename:SetPoint("LEFT", ui.newBoard, "RIGHT", 2, 0)
+	ui.join = button(list, "Join", half)
+	ui.join:SetPoint("LEFT", ui.newBoard, "RIGHT", 2, 0)
+	ui.join:SetScript("OnClick", function()
+		ns.Popups.Join()
+	end)
+	ui.rename = button(list, "Rename", half)
+	ui.rename:SetPoint("BOTTOMLEFT", 6, 6)
 	ui.rename:SetScript("OnClick", function()
 		local board = store():current()
 		if board then
 			ns.Popups.RenameBoard(board.id)
 		end
 	end)
-	ui.delete = button(list, "Delete", third)
+	ui.delete = button(list, "Delete", half)
 	ui.delete:SetPoint("LEFT", ui.rename, "RIGHT", 2, 0)
 	ui.delete:SetScript("OnClick", function()
 		local board = store():current()
@@ -341,8 +354,9 @@ local function build()
 	local notes = CreateFrame("Frame", nil, frame, "InsetFrameTemplate")
 	notes:SetPoint("TOPLEFT", list, "TOPRIGHT", GAP, 0)
 	notes:SetPoint("BOTTOMRIGHT", -MARGIN, 30)
+	ui.notesPanel = notes
 	local noteView
-	ui.notes, noteView = scrollList(notes, initRow, "Frame")
+	ui.notes, noteView, ui.notesBar = scrollList(notes, initRow, "Frame")
 	noteView:SetElementExtentCalculator(function(_, data)
 		return data.height
 	end)
@@ -356,18 +370,71 @@ local function build()
 	ui.measure:SetNonSpaceWrap(true)
 	ui.measure:Hide()
 
-	-- Status line.
-	ui.dot = frame:CreateTexture(nil, "OVERLAY")
+	-- The alert strip (docs/mockups/SyncStates): yellow text over the notes
+	-- when a board is far behind or its sends are paused.
+	ui.alert = CreateFrame("Frame", nil, notes)
+	ui.alert:SetPoint("BOTTOMLEFT", INSET_PAD, INSET_PAD)
+	ui.alert:SetPoint("BOTTOMRIGHT", -INSET_PAD, INSET_PAD)
+	ui.alert:SetHeight(26)
+	local strip = ui.alert:CreateTexture(nil, "BACKGROUND")
+	strip:SetAllPoints()
+	strip:SetColorTexture(0, 0, 0, 0.6)
+	ui.alertText = ui.alert:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+	ui.alertText:SetPoint("LEFT", 8, 0)
+	ui.alertText:SetTextColor(unpack(WARNING))
+	ui.reload = button(ui.alert, "Reload", 70)
+	ui.reload:SetPoint("RIGHT", -4, 0)
+	ui.reload:SetScript("OnClick", function()
+		ReloadUI()
+	end)
+	ui.alert:Hide()
+
+	-- Status line: a dot (hollow while in progress or idle), the state, and
+	-- the note count.
+	ui.dot = frame:CreateTexture(nil, "ARTWORK")
 	ui.dot:SetSize(6, 6)
 	ui.dot:SetPoint("BOTTOMLEFT", 16, 12)
-	ui.dot:SetColorTexture(unpack(IDLE_DOT))
-	ui.status = frame:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+	ui.hole = frame:CreateTexture(nil, "OVERLAY")
+	ui.hole:SetSize(4, 4)
+	ui.hole:SetPoint("CENTER", ui.dot)
+	ui.hole:SetColorTexture(unpack(FRAME_BG))
+	ui.status = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
 	ui.status:SetPoint("LEFT", ui.dot, "RIGHT", 6, 0)
+	ui.detail = frame:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+	ui.detail:SetPoint("LEFT", ui.status, "RIGHT", 4, 0)
 	ui.count = frame:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
 	ui.count:SetPoint("BOTTOMRIGHT", -16, 10)
 
+	-- Bottom tabs: Notes and Members (docs/ui-style.md).
+	ui.tabs = {}
+	for i, label in ipairs({ "Notes", "Members" }) do
+		local ok, tab = pcall(CreateFrame, "Button", "CorkboardFrameTab" .. i, frame, "PanelTabButtonTemplate")
+		if not ok then
+			tab = CreateFrame("Button", "CorkboardFrameTab" .. i, frame, "CharacterFrameTabButtonTemplate")
+		end
+		tab:SetID(i)
+		tab:SetText(label)
+		if i == 1 then
+			tab:SetPoint("TOPLEFT", frame, "BOTTOMLEFT", 12, 2)
+		else
+			tab:SetPoint("LEFT", ui.tabs[i - 1], "RIGHT", 4, 0)
+		end
+		tab:SetScript("OnClick", function()
+			Main:ShowTab(i)
+		end)
+		if PanelTemplates_TabResize then
+			PanelTemplates_TabResize(tab, 0)
+		end
+		ui.tabs[i] = tab
+	end
+	if PanelTemplates_SetNumTabs then
+		PanelTemplates_SetNumTabs(frame, #ui.tabs)
+	end
+	ui.members = ns.Members:Build(notes)
+	ui.tab = 1
+
 	frame:SetScript("OnShow", function()
-		Main:Refresh()
+		Main:ShowTab(ui.tab)
 		-- Keeps the card ages current while the window is open.
 		ui.ticker = C_Timer.NewTicker(30, function()
 			Main:Refresh()
@@ -380,6 +447,27 @@ local function build()
 		end
 		ns.Editor:Close()
 	end)
+end
+
+local function setStatus(state)
+	local color = View.DOTS[state.dot]
+	ui.dot:SetColorTexture(unpack(color))
+	ui.hole:SetShown(state.hollow == true)
+	ui.status:SetText(state.label)
+	ui.status:SetTextColor(unpack(state.dim and DIM or LEAD))
+	ui.detail:SetText(state.detail or "")
+end
+
+local function setAlert(status)
+	local text
+	if status.behind then
+		text = ("%d notes behind. The companion will fetch the rest, then /reload."):format(status.behind)
+	elseif status.paused and status.queued > 0 then
+		text = ("Sync paused. %d queued messages will send when it's allowed again."):format(status.queued)
+	end
+	ui.alert:SetShown(text ~= nil)
+	ui.alertText:SetText(text or "")
+	ui.reload:SetShown(status.behind ~= nil)
 end
 
 function Main:Refresh()
@@ -397,12 +485,13 @@ function Main:Refresh()
 	ui.newNote:SetEnabled(current ~= nil)
 	ui.rename:SetEnabled(current ~= nil)
 	ui.delete:SetEnabled(current ~= nil)
+	ui.tabs[2]:SetEnabled(current ~= nil)
 
 	local all = current and Store.notes(current) or {}
 	local shown = View.filter(all, ui.search:GetText())
 	ui.notes:SetDataProvider(CreateDataProvider(current and noteRows(current.id, shown) or {}), retain())
 	if not current then
-		ui.empty:SetText("No boards yet. Click New to make one.")
+		ui.empty:SetText("No boards yet. Click New to make one, or Join to use an invite.")
 	elseif #all == 0 then
 		ui.empty:SetText("No notes yet. Click New Note to add one.")
 	elseif #shown == 0 then
@@ -410,14 +499,54 @@ function Main:Refresh()
 	else
 		ui.empty:SetText("")
 	end
-	local status, count = View.status(#all, #shown)
-	ui.status:SetText(status)
-	ui.count:SetText(current and count or "")
+	if current then
+		local status = sync():status(current.id)
+		setStatus(View.syncStatus(status, ns.Net:ChannelState(current), now(), myRealm()))
+		setAlert(status)
+		ui.count:SetText(View.count(#all, #shown))
+	else
+		setStatus({ label = "", dot = "idle", hollow = true })
+		ui.alert:Hide()
+		ui.count:SetText("")
+	end
+	if ui.tab == 2 then
+		ns.Members:Refresh(current)
+	end
+end
+
+-- Tab 1 is the notes; tab 2 the members, invite and sync options.
+function Main:ShowTab(index)
+	if index == 2 and not store():current() then
+		index = 1
+	end
+	ui.tab = index
+	if PanelTemplates_SetTab then
+		PanelTemplates_SetTab(frame, index)
+	end
+	ui.notes:SetShown(index == 1)
+	ui.notesBar:SetShown(index == 1)
+	ui.search:SetShown(index == 1)
+	ui.newNote:SetShown(index == 1)
+	ui.empty:SetShown(index == 1)
+	ui.members:SetShown(index == 2)
+	if index ~= 1 then
+		ui.alert:Hide()
+	end
+	self:Refresh()
 end
 
 function Main:SelectBoard(id)
-	store():select(id)
+	local board = store():select(id)
+	if board then
+		board.sync = board.sync or {}
+		board.sync.lastUsed = now() -- the most recently used boards keep their channels
+		ns.Net:Refresh()
+	end
 	self:Refresh()
+end
+
+function Main:IsShown()
+	return frame ~= nil and frame:IsShown()
 end
 
 function Main:Toggle()
