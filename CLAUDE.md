@@ -43,6 +43,14 @@ Current status and the ordered next steps are in `docs/next-steps.md`. Read it a
 - **Hooks:** use `hooksecurefunc` post-hooks only. No pre-hooks or global overrides.
 - **UI:** use Blizzard frame templates and follow `docs/ui-style.md`. No custom coloured chrome.
 
+## Ponytail (lazy senior dev mode)
+
+The `ponytail` skills are vendored in `.claude/skills/` (see `.claude/skills/ponytail/SOURCE.md`). Use the `ponytail` skill at the default `full` level on every coding task: before writing code, go down its ladder (does it need to exist → already in this repo → stdlib → native platform/WoW API → installed dependency → one line → minimum that works). Mark any deliberate shortcut with a `ponytail:` comment that names its limit and how to upgrade it.
+
+- The hard rules above and the spec always win. Ponytail never cuts the merge core's test vectors or property tests, sanitisation, the send gate or throttle, secret-value checks, or anything `docs/design.md` requires.
+- Its "one small check, no frameworks" rule means no *extra* scaffolding. Keep using busted and pytest as described under Testing.
+- Commands: `/ponytail [lite|full|ultra|off]`, `/ponytail-review` (review a diff for over-engineering), `/ponytail-audit` (review the whole repo), `/ponytail-debt` (list all `ponytail:` markers), `/ponytail-help`.
+
 ## Testing
 
 - **Lua:** `busted` over `addon/Corkboard/Core/` (merge, digest, sanitiser) plus the shared vectors.
