@@ -102,7 +102,7 @@ CorkboardDB.global.boards[boardId] = {
   recipes  = true,                 -- share this character's recipes here (§9.2); local, false opts out
   quests   = true,                 -- share this character's quest log here (§9.3); local, false opts out
   oldSecrets = { … },              -- up to 5 retired secrets, newest first (§7.3 rotate)
-  seen     = { ["Name-Realm"] = { at, class } },  -- local roster bookkeeping, never replicated
+  seen     = { ["Name-Realm"] = { at, class, level } },  -- local roster bookkeeping, never replicated
 }
 ```
 
@@ -196,7 +196,7 @@ The outbox (§5.5) classifies each chunk's `SendAddonMessage` result by the clie
 
 | Type | Payload | When |
 |---|---|---|
-| `HELLO` | `r` nonce, `d` digest, `n` count, `c` clock, `k` buckets[32], `kc` per-bucket note counts[32], `md` members digest, `m` BoardMeta, `me` the sender's own MemberRecord, `cls` class token, `cl` when the sender's companion last synced this board (or false) | Login, joining a board, when lockdown clears, and every 5 min ± 60 s. A periodic HELLO is skipped if a HELLO for this board was seen < 2 min ago, but never twice running, so every member announces itself at least every ~12 min. |
+| `HELLO` | `r` nonce, `d` digest, `n` count, `c` clock, `k` buckets[32], `kc` per-bucket note counts[32], `md` members digest, `m` BoardMeta, `me` the sender's own MemberRecord, `cls` class token, `lvl` the sender's level (1–255, for the roster's Level column; anything else is ignored), `cl` when the sender's companion last synced this board (or false) | Login, joining a board, when lockdown clears, on `PLAYER_LEVEL_UP`, and every 5 min ± 60 s. A periodic HELLO is skipped if a HELLO for this board was seen < 2 min ago, but never twice running, so every member announces itself at least every ~12 min. |
 | `IDX` | `to`, `r`, `e` = `{ {id, rev, editor}, … }` for mismatched buckets only, `bk` the buckets it covers completely; or, for a partial catch-up (§5.6), `p = 1`, `bh` notes behind, and the sender's newest 20 entries | Reply to a HELLO with a differing digest, broadcast on the board's transport. Split across several IDX when a board is large (60 entries each). |
 | `NEED` | `to`, `ids` (up to 100) | Requester: ids where the peer's copy is newer. |
 | `PUT` | `{ Note, … }`, packed to about 600 bytes before compression | Live on local edit; in reply to `NEED`; pushing our newer notes after an `IDX` diff. Always broadcast. |

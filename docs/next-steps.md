@@ -2,7 +2,7 @@
 
 The handoff between sessions. Read this after `CLAUDE.md`. Before you finish, update it: move what you finished into "Where things stand" and rewrite "Next steps".
 
-Last updated: 2026-09-27 (eleventh session: the web app, a PWA for desktop and phone).
+Last updated: 2026-09-27 (twelfth session: the level each member was last seen at).
 
 ## Where things stand
 
@@ -28,7 +28,7 @@ On 2026-09-26 Will asked for the remaining work to be built on best assumptions,
 | Phase 7: web app (§7.4) | `web/`, Caddy and compose in `infra/`, `CORK_WEB` in `api/` | Built; passes its unit tests and an end-to-end test (real API, headless Chromium, desktop and phone). Not deployed, not tried on a real phone. |
 | CI | `.github/workflows/ci.yml`, `api-image.yml` | Green on the branch: luacheck, busted, coverage gate (≥ 95%), spike smoke tests, pytest for corkcore, API, companion and packaging, and a check that the fuzz corpus is current. |
 
-Tests: `busted` runs 681 (Core coverage 98.5%, merge core 100%; the coverage run skips `#slow` specs); pytest runs 142 (corkcore), 23 (API), 32 (companion) and 6 (packaging and deploy, `tools/tests`); `node --test` runs 41 web unit tests and 2 end-to-end tests.
+Tests: `busted` runs 682 (Core coverage 98.5%, merge core 100%; the coverage run skips `#slow` specs); pytest runs 142 (corkcore), 23 (API), 32 (companion) and 6 (packaging and deploy, `tools/tests`); `node --test` runs 41 web unit tests and 2 end-to-end tests.
 
 ### First in-game run (fourth session)
 
@@ -102,6 +102,16 @@ Will asked for a companion for his phone that syncs with the boards, as close to
 - **UI:** the six tabs with the game's wording; editors for notes (tags, byte counter, Save greyed with the reason) and player notes; a **Link…** picker in place of shift-click; GameTooltip-style link boxes; board list with Join, Rename, Leave; a phone layout with a board drawer and bottom tabs. Screenshots were checked against `docs/mockups/`.
 - **Deploy:** Caddy serves `/srv/web` (compose mounts `./web/public`) with a strict CSP; `tools/arcane_deploy.py` uploads `web/public/` (binary files byte for byte). `index.html` carries the same CSP as a meta tag, so the e2e run enforces it too.
 - **CI:** a `web` job runs `npm test` and the end-to-end test.
+
+### Twelfth session: last-seen level on the Members tab
+
+Will asked for the roster to record the level each member was last seen at.
+
+- **Wire:** `HELLO` gained `lvl`, the sender's level (§5.3 table in design.md). A receiver keeps it only if it's a whole number from 1 to 255; anything else leaves the last good level. Old clients ignore the field, and a HELLO without it keeps what was recorded.
+- **Store:** `Store.markSeen` records `seen[name].level` next to `at` and `class`: local bookkeeping, never replicated, so it survives `/reload` and shows for offline members.
+- **Addon:** `Corkboard:WatchLevel` reads `UnitLevel("player")` at login (skipping secret values) and, on `PLAYER_LEVEL_UP`, updates it and says HELLO on every board so members online see the new level straight away.
+- **UI:** the Members tab roster has a **Level** column between Role and Last Seen (yours is live; others' is from their last HELLO, blank until one arrives). `/cork members` prints "level N" too. The web app can't see HELLOs, so its roster is unchanged.
+- **Tests:** store, view, commands and sync specs, plus the fake-client roster test (Bob levels up and Will's roster follows). The fake client gained `UnitLevel`.
 
 ### Spec changes (earlier sessions)
 
@@ -190,7 +200,7 @@ Do these in order unless Will says otherwise.
    5. `/cork player <their name>`, then the same with a different case, and with their realm added: the same lines each time.
    6. Untick **Good players**, then search a word from the reason; Delete the entry (the popup reads "Delete this player note?") and it goes on both. `/reload` on A keeps everything. Send Lua errors and a screenshot of the tab and the tooltip.
 6. **Will: the Phase 2–4 check.** Needs two clients: two accounts, or a friend.
-   1. On A: open the **Members** tab, click the invite box, Ctrl+C, and send it to B out of game. On B: **Join**, paste. Within about 15 s B shows the board's name and A's notes, and once the catch-up finishes the status line reads "Synced with A …".
+   1. On A: open the **Members** tab, click the invite box, Ctrl+C, and send it to B out of game. On B: **Join**, paste. Within about 15 s B shows the board's name and A's notes, and once the catch-up finishes the status line reads "Synced with A …". The Members tab's Level column shows each character's level on both clients; if either levels up during the check, the other's roster follows within a few seconds.
    2. On both: nothing in any chat tab mentions a `Cork…` channel, even after `/reload`.
    3. A edits a note: B shows it within 5 s. `/cork debug` on both: the gate is Open, and the log shows the PUT.
    4. A dies (or pulls a dungeon boss) and edits while dead: A's status line says "Paused · N messages queued". After the res, B has the edits within 10 s, with no Lua errors.

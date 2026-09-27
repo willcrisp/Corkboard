@@ -114,6 +114,22 @@ describe("Sync: live P2P (Phase 2)", function()
 		assert.are.equal(before + 3, sync.stats.ignored)
 	end)
 
+	it("records the level each member was last seen at, from their HELLO", function()
+		local sim, nodes, id = group({ "Will", "Bob" })
+		local a, b = nodes[1], nodes[2]
+		assert.are.equal(20, Sim.board(a, id).seen["Bob-Realm"].level)
+		b.sync.env.level = 21
+		b.sync:hello(id)
+		assert(sim:runUntil(function()
+			return Sim.board(a, id).seen["Bob-Realm"].level == 21
+		end, 10), "the new level never arrived")
+		-- A HELLO without a usable level keeps the one already seen.
+		local hello = b.sync:buildHello({ board = id })
+		hello.lvl = "sixty"
+		assert.is_true(a.sync:receive(hello, "Bob-Realm"))
+		assert.are.equal(21, Sim.board(a, id).seen["Bob-Realm"].level)
+	end)
+
 	it("drops malformed envelopes without errors", function()
 		local _, nodes, id = group({ "Will", "Bob" })
 		local sync = nodes[1].sync

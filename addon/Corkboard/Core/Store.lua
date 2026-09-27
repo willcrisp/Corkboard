@@ -29,6 +29,7 @@ Store.ID_LENGTH = 16
 Store.SECRET_LENGTH = 24
 -- Keeps a note id within Sanitise.MAX_ID: 8 hex, "-", 9 digits.
 Store.MAX_COUNTER = 999999999
+Store.MAX_LEVEL = 255 -- highest level taken from a HELLO for the roster
 
 local BASE36 = "0123456789abcdefghijklmnopqrstuvwxyz"
 
@@ -827,14 +828,18 @@ function Store:setOption(boardId, option, value)
 end
 
 -- Local-only bookkeeping for the roster: when each member was last heard
--- from, and their class for colouring. Never replicated.
-function Store.markSeen(board, name, class, now)
+-- from, their class for colouring, and the level they were then. Never
+-- replicated.
+function Store.markSeen(board, name, class, now, level)
 	board.seen = board.seen or {}
 	local seen = board.seen[name] or {}
 	board.seen[name] = seen
 	seen.at = now
 	if type(class) == "string" and class:match("^%u+$") then
 		seen.class = class
+	end
+	if Util.isInteger(level, 1, Store.MAX_LEVEL) then
+		seen.level = level
 	end
 end
 

@@ -40,7 +40,7 @@ In game these come from the templates and font objects wherever possible. Only t
 
 1. **Board view**: portrait frame with the board list inset on the left, a 2-column note grid on the right, a search box, a New Note button, a status line, and bottom tabs.
 2. **Note editor**: small button frame with a multi-line input, a "shift-click to link" hint, a character counter, a tag picker, and Delete / Cancel / Save buttons.
-3. **Members tab**: the invite string (selected, "Ctrl+C to copy", since addons can't write to the clipboard), a Rotate Secret button, cloud and guild sync checkboxes, and a roster table.
+3. **Members tab**: the invite string (selected, "Ctrl+C to copy", since addons can't write to the clipboard), a Rotate Secret button, cloud and guild sync checkboxes, and a roster table (Name, Role, Level, Last Seen, Sync). Level is the level the member was at when last heard from, carried in their HELLO; it's blank until one arrives.
 4. **Popups**: join by invite, remove a member (rotates the secret), and an expired invite.
 5. **Sync states**: status line variants, a yellow alert strip, chat output, and the minimap button tooltip.
 6. **Debug (`/cork debug`)**: stats list, 32-bucket diff grid, peers table, message log.

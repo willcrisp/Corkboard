@@ -234,8 +234,9 @@ function View.seen(seconds)
 	return plural(floor(seconds / 86400), "day")
 end
 
--- The Members tab roster (docs/mockups/Share): one row per member.
-function View.memberRows(board, members, peers, online, me, now, myRealm)
+-- The Members tab roster (docs/mockups/Share): one row per member. `level`
+-- is the level they were last seen at: the player's own is `myLevel`.
+function View.memberRows(board, members, peers, online, me, now, myRealm, myLevel)
 	local isOnline = {}
 	for _, name in ipairs(online) do
 		isOnline[name] = true
@@ -249,6 +250,7 @@ function View.memberRows(board, members, peers, online, me, now, myRealm)
 			label = View.shortName(m.name, myRealm),
 			role = m.role == "owner" and "Owner" or "Member",
 			class = seen and seen.class,
+			level = m.name == me and myLevel or seen and seen.level or nil,
 			online = m.name == me or isOnline[m.name] == true,
 			removable = board.owner == me and m.name ~= me,
 		}

@@ -104,6 +104,8 @@ describe("/cork sharing commands", function()
 		has(out, "MC: 2 members")
 		has(out, "Will-Realm |cff808080(owner)|r")
 		has(out, "Bob-Realm |cff808080(member, seen 2m ago)|r")
+		board.seen["Bob-Realm"].level = 34
+		has(run(store, "members"), "Bob-Realm |cff808080(member, level 34, seen 2m ago)|r")
 		has(run(store, "remove"), "Usage: /cork remove")
 		has(run(store, "remove Nobody-Realm"), "aren't a member")
 		local secret = board.secret

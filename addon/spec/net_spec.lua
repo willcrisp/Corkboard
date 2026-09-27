@@ -274,7 +274,7 @@ describe("the Members tab and sharing UI #slow", function()
 
 	it("shows the invite and roster, and removes a member", function()
 		local network, clients, id = shared({ { name = "Will" }, { name = "Bob", class = "PRIEST" } })
-		local a = clients[1]
+		local a, b = clients[1], clients[2]
 		run(network, clients, 20)
 		a:slash("/cork")
 		tab(a, 2):Click()
@@ -292,7 +292,15 @@ describe("the Members tab and sharing UI #slow", function()
 		assert.are.equal(2, #rows)
 		assert.are.equal("Will", rows[1].cells[1].text)
 		assert.are.equal("Bob", rows[2].cells[1].text)
-		assert.are.equal("Online", rows[2].cells[3].text)
+		assert.are.equal("20", rows[1].cells[3].text)
+		assert.are.equal("20", rows[2].cells[3].text)
+		assert.are.equal("Online", rows[2].cells[4].text)
+		-- A level-up reaches the other members' roster straight away.
+		b.level = 21
+		b.fire("PLAYER_LEVEL_UP", 21)
+		assert(within(network, clients, 10, function()
+			return rows[2].cells[3].text == "21"
+		end), "Bob's new level never showed")
 		assert.is_true(rows[2].remove:IsShown())
 		assert.is_false(rows[1].remove:IsShown())
 		-- Typing in the invite box puts the invite back.

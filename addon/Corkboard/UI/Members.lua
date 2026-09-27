@@ -11,7 +11,7 @@ ns.Members = Members
 
 local ROW = 22
 local PAD = 10
-local COLUMNS = { { "Name", 0 }, { "Role", 170 }, { "Last Seen", 250 }, { "Sync", 340 } }
+local COLUMNS = { { "Name", 0 }, { "Role", 150 }, { "Level", 220 }, { "Last Seen", 265 }, { "Sync", 350 } }
 local DIM = { 0x9d / 255, 0x9d / 255, 0x9d / 255 }
 local TEXT = { 0.9, 0.9, 0.9 }
 
@@ -87,7 +87,7 @@ local function initRow(row, data)
 	end
 	row.member, row.label = data.name, data.label
 	row.shade:SetShown(data.index % 2 == 0)
-	local values = { data.label, data.role, data.seen, data.sync }
+	local values = { data.label, data.role, data.level and tostring(data.level) or "", data.seen, data.sync }
 	for i, cell in ipairs(row.cells) do
 		cell:SetText(values[i])
 		cell:SetTextColor(unpack(data.online and TEXT or DIM))
@@ -197,7 +197,7 @@ function Members:Refresh(board)
 	ui.guild:SetChecked(board.guild)
 	local sync = addon().sync
 	local rows = View.memberRows(board, Store.members(board), sync.peers[board.id], sync:onlineNames(board.id), me,
-		s.env.now(), View.realmOf(me))
+		s.env.now(), View.realmOf(me), addon().syncEnv.level)
 	for i, row in ipairs(rows) do
 		row.index = i
 	end

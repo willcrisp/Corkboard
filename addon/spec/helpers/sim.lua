@@ -180,6 +180,7 @@ function Sim:login(node)
 		end,
 		random = self.random,
 		class = "MAGE",
+		level = 20,
 	})
 	local function tick()
 		node.outbox:pump()

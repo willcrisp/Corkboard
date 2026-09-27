@@ -419,6 +419,7 @@ function Client.new(options)
 		realm = options.realm or "Mirage Raceway",
 		guid = options.guid or "Player-4372-0ABCDEF0",
 		class = options.class or "MAGE",
+		level = options.level or 20,
 		guild = options.guild,
 		network = options.network or Network.new(),
 		prefixes = {},
@@ -942,6 +943,9 @@ function Client:makeEnv()
 	env.UnitClass = function()
 		return "Mage", client.class, 8
 	end
+	env.UnitLevel = function()
+		return client.level
+	end
 	env.UnitRace = function()
 		return "Gnome", "Gnome", 7
 	end
@@ -1231,6 +1235,7 @@ function Client:reload()
 		realm = self.realm,
 		guid = self.guid,
 		class = self.class,
+		level = self.level,
 		guild = self.guild,
 		network = self.network,
 		equipped = self.equipped,

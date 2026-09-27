@@ -215,7 +215,8 @@ function handlers.members(store)
 	local now = store.env.now()
 	for _, m in ipairs(members) do
 		local seen = board.seen and board.seen[m.name]
-		out[#out + 1] = format("  %s %s(%s%s)|r", m.name, GREY, m.role,
+		out[#out + 1] = format("  %s %s(%s%s%s)|r", m.name, GREY, m.role,
+			seen and seen.level and ", level " .. seen.level or "",
 			seen and ", seen " .. Commands.age(now - seen.at) or "")
 	end
 	return out

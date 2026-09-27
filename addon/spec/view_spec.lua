@@ -228,8 +228,8 @@ describe("View roster, tooltip and debug", function()
 
 	it("builds roster rows", function()
 		local board = { owner = "Will-Realm", seen = {
-			["Bob-Realm"] = { at = NOW - 60, class = "PRIEST" },
-			["Mira-Other"] = { at = NOW - 3 * 3600 },
+			["Bob-Realm"] = { at = NOW - 60, class = "PRIEST", level = 31 },
+			["Mira-Other"] = { at = NOW - 3 * 3600, level = 12 },
 		} }
 		local members = {
 			{ name = "Will-Realm", role = "owner" },
@@ -238,14 +238,15 @@ describe("View roster, tooltip and debug", function()
 			{ name = "Dorn-Realm", role = "member" },
 		}
 		local peers = { ["Bob-Realm"] = { state = "match" }, ["Mira-Other"] = { cloud = NOW - 7200 } }
-		local rows = View.memberRows(board, members, peers, { "Bob-Realm" }, "Will-Realm", NOW, "Realm")
-		assert.are.same({ name = "Will-Realm", label = "Will", role = "Owner", online = true, removable = false,
-			seen = "You", sync = "-" }, rows[1])
-		assert.are.same({ name = "Bob-Realm", label = "Bob", role = "Member", class = "PRIEST", online = true,
-			removable = true, seen = "Online", sync = "Up to date" }, rows[2])
-		assert.are.same({ name = "Mira-Other", label = "Mira-Other", role = "Member", online = false,
+		local rows = View.memberRows(board, members, peers, { "Bob-Realm" }, "Will-Realm", NOW, "Realm", 40)
+		assert.are.same({ name = "Will-Realm", label = "Will", role = "Owner", level = 40, online = true,
+			removable = false, seen = "You", sync = "-" }, rows[1])
+		assert.are.same({ name = "Bob-Realm", label = "Bob", role = "Member", class = "PRIEST", level = 31,
+			online = true, removable = true, seen = "Online", sync = "Up to date" }, rows[2])
+		assert.are.same({ name = "Mira-Other", label = "Mira-Other", role = "Member", level = 12, online = false,
 			removable = true, seen = "3 hours", sync = "Cloud 2h ago" }, rows[3])
 		assert.are.equal("Never", rows[4].seen)
+		assert.is_nil(rows[4].level)
 		assert.are.equal("-", rows[4].sync)
 		peers["Bob-Realm"].state = "differs"
 		assert.are.equal("Syncing", View.memberRows(board, members, peers, { "Bob-Realm" }, "Will-Realm", NOW)[2].sync)

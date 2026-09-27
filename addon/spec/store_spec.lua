@@ -502,9 +502,15 @@ describe("Store sharing", function()
 
 	it("records when members were last seen, locally", function()
 		local board = {}
-		Store.markSeen(board, "Bob-Realm", "MAGE", 5)
+		Store.markSeen(board, "Bob-Realm", "MAGE", 5, 24)
 		Store.markSeen(board, "Bob-Realm", "not a class", 9)
-		assert.are.same({ at = 9, class = "MAGE" }, board.seen["Bob-Realm"])
+		assert.are.same({ at = 9, class = "MAGE", level = 24 }, board.seen["Bob-Realm"])
+		-- A level that isn't a whole number from 1 to 255 keeps the last good one.
+		for _, bad in ipairs({ 0, -3, 2.5, 256, "25", {} }) do
+			Store.markSeen(board, "Bob-Realm", nil, 10, bad)
+		end
+		Store.markSeen(board, "Bob-Realm", nil, 11, 25)
+		assert.are.same({ at = 11, class = "MAGE", level = 25 }, board.seen["Bob-Realm"])
 	end)
 
 	it("applies records from peers and reports what it stored", function()

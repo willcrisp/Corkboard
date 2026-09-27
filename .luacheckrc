@@ -13,7 +13,7 @@ files["addon/Corkboard/Corkboard.lua"] = {
 	globals = { "Corkboard", "CorkboardCompartment_OnClick", "SLASH_CORK1", "SlashCmdList" },
 	read_globals = {
 		"C_Timer", "CreateFrame", "DEFAULT_CHAT_FRAME", "GetNormalizedRealmName", "GetServerTime", "GetTime", "LibStub",
-		"NORMAL_FONT_COLOR_CODE", "UnitClass", "GetPlayerInfoByGUID", "UnitGUID", "issecretvalue",
+		"NORMAL_FONT_COLOR_CODE", "UnitClass", "UnitLevel", "GetPlayerInfoByGUID", "UnitGUID", "issecretvalue",
 		"C_Item", "GetInventoryItemLink", "GetInventoryItemQuality", "C_Spell", "C_TradeSkillUI", "GetSpellInfo",
 		"C_QuestLog", "GetNumQuestLogEntries", "GetQuestLogTitle",
 		"Enum", "GameTooltip", "GetNumGroupMembers", "IsInGroup", "IsInRaid", "TooltipDataProcessor", "UnitExists",

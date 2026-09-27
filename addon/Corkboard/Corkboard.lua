@@ -184,6 +184,13 @@ local function classToken()
 	end
 end
 
+local function playerLevel(level)
+	level = level or UnitLevel("player")
+	if not secret(level) and type(level) == "number" and level > 0 then
+		return level
+	end
+end
+
 -- ADDON_LOADED, once SavedVariables are in.
 function Corkboard:OnInitialize()
 	self.db = LibStub("AceDB-3.0"):New("CorkboardDB", DEFAULTS, true)
@@ -253,6 +260,7 @@ end
 function Corkboard:OnEnable()
 	self:Identify()
 	self.syncEnv.class = classToken()
+	self:WatchLevel()
 	-- Notes the companion fetched from the cloud since the last session (§7.2).
 	ns.Cloud.load(self.store, _G.CorkboardCloudData)
 	self:WatchGear()
@@ -376,6 +384,20 @@ function Corkboard:Identify()
 		self.env.me, self.env.prefix = identity()
 	end
 	return self.env.me
+end
+
+-- The player's level rides each HELLO for the roster's Level column. A
+-- level-up says HELLO at once, so members online see it without waiting.
+function Corkboard:WatchLevel()
+	self.syncEnv.level = playerLevel()
+	local events = CreateFrame("Frame")
+	events:RegisterEvent("PLAYER_LEVEL_UP")
+	events:SetScript("OnEvent", function(_, _, level)
+		-- UnitLevel can still read the old level while this event runs.
+		self.syncEnv.level = playerLevel(level) or playerLevel()
+		self.sync:helloAll()
+		self:Changed()
+	end)
 end
 
 -- /cork sync and /cork debug need the running addon; everything else is a

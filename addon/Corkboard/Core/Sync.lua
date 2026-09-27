@@ -7,6 +7,7 @@
 --   env.after(s, fn)     runs fn after s seconds; returns a handle with :Cancel()
 --   env.random()         a number in [0, 1)
 --   env.class            the player's class token ("MAGE"), for roster colours
+--   env.level            the player's level, for the roster's Level column
 --   env.changed(boardId) optional: called when a board's sync state changes
 --   env.synced(boardId)  optional: called when a board matches a peer's copy
 --
@@ -378,6 +379,7 @@ function Sync:buildHello(item)
 		m = board.meta,
 		me = me and board.members and board.members[me] or nil,
 		cls = self.env.class,
+		lvl = self.env.level,
 		cl = self:cloudActive(board) and board.sync.lastCloudAt or false,
 	}
 end
@@ -725,6 +727,9 @@ function handlers.HELLO(self, board, e, sender)
 	if type(e.cls) == "string" then
 		peer.class = e.cls
 	end
+	if isInt(e.lvl, 1, Store.MAX_LEVEL) then
+		peer.level = e.lvl
+	end
 	self.lastHello[board.id] = self:time()
 	-- A HELLO carries the board name and the sender's own member record.
 	local records = { meta = type(e.m) == "table" and e.m or nil }
@@ -934,7 +939,7 @@ function Sync:receive(envelope, sender)
 	end
 	local peer = self:peer(board.id, sender)
 	peer.heard = self:time()
-	Store.markSeen(board, sender, envelope.cls or peer.class, self.store.env.now())
+	Store.markSeen(board, sender, envelope.cls or peer.class, self.store.env.now(), envelope.lvl or peer.level)
 	local ok, result = pcall(handler, self, board, envelope, sender)
 	if not ok or not result then
 		self.stats.malformed = self.stats.malformed + 1
