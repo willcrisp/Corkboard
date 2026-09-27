@@ -3,7 +3,7 @@
 **Status:** Draft v0.2 · **Target client:** World of Warcraft: Forever 1.60.x (TOC `## Interface: 16001`, game type `camelot`) · **Addon prefix:** `CORK`
 **Backend hosting:** Docker stack on Will's Arcane host, exposed on a public DNS name.
 
-Corkboard is an addon for World of Warcraft: Forever. A player creates a board and shares it with an invite string. Everyone on the board can add free-text notes containing item, quest, spell and similar links. Boards sync between members peer-to-peer in game. A companion app and a self-hosted sync API let members catch up even when no other member is online.
+Corkboard is an addon for World of Warcraft: Forever. A player creates a board and shares it with an invite string. Everyone on the board can add free-text notes containing item, quest, spell and similar links. Boards sync between members peer-to-peer in game. A companion app and a self-hosted sync API let members catch up even when no other member is online, and a web app (a PWA for desktop and phone) reads and writes the same boards away from the game.
 
 > **v0.2 changes from v0.1 (retail):**
 > - Retargeted to Forever 1.60.
@@ -23,6 +23,7 @@ Corkboard is an addon for World of Warcraft: Forever. A player creates a board a
 - Members converge on the same board state regardless of who is online when.
 - Live updates when members are online together.
 - Offline catch-up from any online member (P2P, small deltas) or from the cloud (companion; any size, nobody else online).
+- Read and write boards away from the game, on a desktop browser or a phone (the web app, §7.4).
 - No data loss under concurrent edits. Deleted notes never come back.
 
 **Non-goals (v1)**
@@ -72,10 +73,11 @@ Forever has vanilla-era content but a **modern (Mainline-style) addon API**, and
  ── cloud path (bulk + nobody-online catch-up) ──────────────────────
  SavedVariables/Corkboard.lua ─► Companion ─HTTPS─► corkboard.<domain>
  AddOns/Corkboard_Cloud/Data.lua ◄─ Companion ◄──── Caddy ► API ► SQLite
-                                                    (Docker stack on Arcane)
+                                                      │  (Docker stack on Arcane)
+ Web app / PWA (browser, phone) ◄─────HTTPS──────────┘  Caddy also serves the app
 ```
 
-The same **merge core** (§4.3) runs in the addon (Lua 5.1) and in the companion and API (Python). Shared JSON test vectors keep all three behaviourally identical.
+The same **merge core** (§4.3) runs in the addon (Lua 5.1), in the companion and API (Python), and in the web app (JavaScript). Shared JSON test vectors keep all four behaviourally identical.
 
 ---
 
@@ -317,6 +319,21 @@ CREATE INDEX notes_seq ON notes(board_id, seq);
 - **Merge:** in one transaction, upsert when the incoming record wins under §4.3 (`(rev, editor)`, then the exact-tie rule), and assign `seq = ++boards.seq` to each accepted row.
 - **Limits:** 1,000 notes per board, 2,000 bytes per note, 64 KB per request, 60 requests/min per board, 20 board registrations/hour per IP.
 
+### 7.4 Web app (PWA)
+
+Added on 2026-09-27 at Will's request: the boards on a desktop browser or a phone, looking as close to the in-game window as a web page can. It's a client of the sync API like the companion, so the addon, the API and the merge rules don't change.
+
+- **Where:** `web/public/`, plain ES modules with no build step. Caddy serves it at `https://corkboard.<domain>/` next to the API's `/v1/` (§8), so requests are same-origin and the API needs no CORS. Installable as an app (manifest, icons, a service worker that caches the app itself, never board data or API responses). For a local run the API serves it too when `CORK_WEB` points at the folder.
+- **Signing in:** a board's invite string (§9), which carries the id and secret the API wants (`Bearer <boardId>.<secret>`), plus a free-text name. Records need `Name-Realm` (§6), so a name typed without a realm is signed `Name-Web`, which also tells members in game where the note came from; a name typed with a realm is used as it is, so a player can post as their character. The name is per device and can be changed. Joining doesn't add a MemberRecord: the roster stays the characters who joined in game.
+- **Storage:** IndexedDB in the browser: each board's records, clock, API cursor and unsent changes. A private window that has no IndexedDB keeps them in memory and says so. "Leave" removes a board from the device only, like deleting one in game (§4.1).
+- **Note ids:** a random 8-hex-digit prefix per device (the game derives it from the character's GUID, which the web has none of), then the counter rule of §4.2. So two devices never share a counter.
+- **Merge core:** `web/public/js/core/` is the JavaScript port of `Merge`, `Digest`, `Sanitise` and `Invite`. It passes every case in `shared/test-vectors/`, the fuzz corpus included, plus the same convergence properties as the Python suite. Strings are measured and compared as UTF-8 bytes, never UTF-16 units. Local changes use the §4.3 clock with the device's time, like any client.
+- **Sync:** `POST /v1/boards/{id}/sync` with the device's unsent records and its cursor, then pages until `more` is false, applying every row with the merge core. A 401 tries `POST /v1/boards` as the companion does (§7.1): 201 means the board was new to the server, 409 that the secret is wrong, which the app shows as "Invite out of date" and stops polling until the invite is entered again (polling would spend the per-IP registration limit). The board on screen syncs every 30 s while the page is visible, others every 5 minutes, and a local change goes 0.8 s after it's made. Offline, changes wait and the status line counts them. A record the server merged is no longer pending, whether it won or lost to a newer one.
+- **What it shows:** the six tabs from the game (§9) with the game's rules and wording: Notes (search, New Note, edit, delete, tags), Members (the invite with a Copy button, the roster, the board digest as `/cork debug` prints it), Gear, Professions, Quests and Players (add, edit and delete player notes in the `P1;` format of §9.4). Board list: Join, Rename (a BoardMeta edit), Leave.
+- **Links:** notes render with their colour codes; a link shows a GameTooltip-style box with its name, kind and id (the web has no item data). The editor is a text box where links read `[Name]`: an existing link keeps its exact bytes, and **Link…** lists every link on the board to insert, standing in for shift-click. A typed `|` becomes `||`, as the game's edit boxes write it. Colour codes that don't wrap a link are dropped when a note is edited on the web (the editor says so). Quest and recipe names come from links seen on the board; otherwise they show as "Quest #id" and "Recipe id".
+- **Not on the web:** anything that needs the game: gear posts, recipe scans, quest logs, the unit tooltip and group warning, creating a board, rotating the secret and removing members (both owner-only and tied to the channel, §10), and the sync options (they're per-install settings of the addon).
+- **Delay to the game:** what the web writes reaches a player's client when their companion syncs the board and they `/reload` (§7.2), and spreads from there over P2P. Game edits reach the web once a companion has pushed them.
+
 ---
 
 ## 8. Hosting: Arcane + public DNS
@@ -347,7 +364,7 @@ services:
     image: caddy:2
     restart: unless-stopped
     ports: ["80:80", "443:443"]
-    volumes: [./Caddyfile:/etc/caddy/Caddyfile:ro, caddy-data:/data]
+    volumes: [./Caddyfile:/etc/caddy/Caddyfile:ro, ./web/public:/srv/web:ro, caddy-data:/data]
     networks: [internal]
   backup:
     image: alpine
@@ -360,8 +377,13 @@ networks: { internal: {} }
 ```caddyfile
 corkboard.<domain> {
   request_body { max_size 64KB }
-  reverse_proxy api:8000
   header { Strict-Transport-Security "max-age=31536000" -Server }
+  handle /v1/* { reverse_proxy api:8000 }
+  handle {                      # the web app (§7.4)
+    root * /srv/web
+    header Content-Security-Policy "default-src 'self'; … frame-ancestors 'none'"
+    file_server
+  }
 }
 ```
 
@@ -460,6 +482,8 @@ Added on 2026-09-27 at Will's request: a place on each board to note a character
 - **Membership = holding the secret.** Revoking someone means rotating the secret (new channel password and cloud credential), then re-sharing it with the remaining members.
 - **Transport identity is server-verified; relayed authorship is not.** A malicious member could forge `author`. This is accepted for v1.
 - **Player notes are opinions** (§9.4). They are only as good as the member who wrote them, which is why each shows its author. They stay inside the board: only members (and the board's cloud copy) hold them, and nothing is ever sent to the player or posted in public chat.
+- **The web app holds the secret.** A device that signed in keeps the board's secret in browser storage, as the companion keeps it in its config. Anyone with the device has the board; rotating the secret (§10, first bullet) shuts them out. The page runs no third-party code, sets a strict Content-Security-Policy, and renders board text as text nodes, never HTML.
+- **Web names are unverified,** like relayed authorship: anyone with the invite can sign as any name, `-Web` or a character's. Accepted for v1, for the same reason.
 - **Public API surface:** auth on every board route, strict size and rate limits, the same sanitiser as the addon, and no admin endpoints.
 - **Platform risk:** Forever is pre-launch. API names, restrictions, the throttle and the install layout can all change before and after 2026-11-04. Re-run the Phase 1–4 in-game checks at launch.
 
@@ -468,7 +492,8 @@ Added on 2026-09-27 at Will's request: a place on each board to note a character
 ## 11. Testing
 
 - The merge, digest and sanitiser code is pure Lua 5.1 (no WoW API), tested with `busted`.
-- Shared JSON test vectors run in both the Lua tests and pytest.
+- Shared JSON test vectors run in the Lua tests, pytest and the web app's `node --test` suite.
+- The web app has its own end-to-end test: the real API serving the app, driven in headless Chromium on desktop and phone viewports (`web/e2e/`).
 - Hypothesis property tests: random edits, deletes, and reordered, duplicated or dropped deliveries across 3–5 simulated nodes plus a simulated server must converge to the same digest.
 - A throttle simulator (1 msg/s per prefix, burst of 10) validates the bulk-rule thresholds before in-game testing.
 - The `/cork debug` panel shows outbox depth, throttle stalls, gate state, bucket diffs, and last HELLO per member.
@@ -534,12 +559,22 @@ Will dropped the spikes after a first in-game run on the 1.60.1 beta: the main a
 
   *So far:* `tools/package_addon.py`, `.pkgmeta` and `.github/workflows/release.yml` (GitHub release now; CurseForge and Wago once they list Forever and the tokens exist); a PyInstaller spec and a tkinter wizard, untested on Windows and macOS, and no signing certificate yet.
 
+**Phase 7: Web app (§7.4)**
+- [ ] The app is served at `https://corkboard.<domain>/` from the live host, installs as an app on a phone (iOS Safari "Add to Home Screen" and Android Chrome "Install"), and opens with no network.
+- [ ] Signed in with an invite and a name, it shows a board's notes, gear, professions, quest logs and player notes as the game wrote them.
+- [ ] A note written on the phone shows in game after the companion syncs and the player `/reload`s, signed `Name-Web`, with any link it holds working in game.
+- [ ] A note edited in game shows on the phone within a minute of the companion pushing it.
+- [ ] The JavaScript merge core passes every shared vector and the fuzz corpus.
+
+  *Outside the game:* the last item passes (`web/test/`), and the end-to-end test covers the others against a local API: joining, every tab, writing notes and player notes, a reload, a queued offline edit, the app opening offline, a change pushed as a companion would, and the phone layout.
+
 ---
 
 ## 13. Dependencies
 
 - **Addon:** from Ace3, LibStub, CallbackHandler, AceDB and ChatThrottleLib; then LibSerialize, LibDeflate, LibDataBroker and LibDBIcon. All must be current builds that load on modern-API clients. Corkboard frames its own messages (§5.2), so AceComm isn't carried. A frame on `ADDON_LOADED`/`PLAYER_LOGIN`, `SlashCmdList` and `C_Timer` replace AceAddon, AceConsole, AceEvent and AceTimer, which were listed here but had one trivial use each or none.
 - **Companion/API:** Python 3.12, FastAPI, SQLite, a Lua-table data parser, Hypothesis, PyInstaller.
+- **Web app:** no runtime dependencies; Marcellus and PT Sans Narrow (SIL OFL) are self-hosted. Node 20+ runs its tests, and Playwright drives Chromium for the end-to-end test.
 - **Infra:** Arcane, Caddy 2, GHCR, GitHub Actions.
 
 ## 14. Decisions (formerly open questions)

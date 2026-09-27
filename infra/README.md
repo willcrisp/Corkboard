@@ -15,14 +15,15 @@ The `corkboard` project builds its image on the host from the uploaded source, l
    python tools/arcane_deploy.py create --domain corkboard.<domain>
    ```
 
-   `create` stops before changing anything if a `corkboard` project exists or another container already publishes 80 or 443. In that case, remove the `caddy` service from `compose.yaml` and route the name to `api:8000` in the existing proxy (§14.1). Otherwise it creates the project (compose, `.env` with `CORK_DOMAIN`, and the workspace: `Caddyfile`, `.dockerignore`, `api/`, `shared/python/`), builds `corkboard-api:latest`, brings the stack up, and waits for `https://corkboard.<domain>/v1/health`.
-3. **Point the companion at it:** `corkboard-companion setup --api https://corkboard.<domain>`, then `watch`.
+   `create` stops before changing anything if a `corkboard` project exists or another container already publishes 80 or 443. In that case, remove the `caddy` service from `compose.yaml`, route `/v1/*` to `api:8000` in the existing proxy and serve `web/public/` for everything else (§14.1). Otherwise it creates the project (compose, `.env` with `CORK_DOMAIN`, and the workspace: `Caddyfile`, `.dockerignore`, `api/`, `shared/python/` and `web/public/`), builds `corkboard-api:latest`, brings the stack up, and waits for `https://corkboard.<domain>/v1/health`.
+3. **The web app** is at `https://corkboard.<domain>/` (Caddy serves `web/public/`; `/v1/` goes to the API). Updating it is uploading the changed `web/public/` files; no image build or restart is needed.
+4. **Point the companion at it:** `corkboard-companion setup --api https://corkboard.<domain>`, then `watch`.
 
 The data lives on the `corkboard-data` volume. Never bring the stack up with `recreateVolumes: true`, and never destroy the project or delete that volume. For a later code deploy, follow the `ballot` steps (back up the volume, check the workspace hasn't drifted, upload the changed files, build `api`, then `up` with `forceRecreate`).
 
 ## Checks (§12 Phase 5)
 
-- From outside the tailnet: `curl -fsS https://corkboard.<domain>/v1/health` returns `{"ok":true}` over valid TLS.
+- From outside the tailnet: `curl -fsS https://corkboard.<domain>/v1/health` returns `{"ok":true}` over valid TLS, and `curl -sI https://corkboard.<domain>/` returns 200 with a `Content-Security-Policy` header (the web app).
 - `curl -m 5 http://<host public IP>:<arcane port>` fails: the dashboard stays tailnet-only. Only 80 and 443 are published.
 - Wrong secret, rotation and rate limits: `api/tests/test_api.py` covers them; to spot-check live, a `POST /v1/boards/<id>/sync` with a wrong token returns 401.
 

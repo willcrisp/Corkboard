@@ -1,6 +1,6 @@
 # Shared test vectors
 
-JSON fixtures that pin down the merge core (docs/design.md §4.3, §4.4, §6). The Lua suite (`addon/spec/`) runs every case. The Python ports in `companion/` and `api/` must run the same cases and pass them unchanged. A case that one side can't pass is a bug in that side, not in the vector.
+JSON fixtures that pin down the merge core (docs/design.md §4.3, §4.4, §6). The Lua suite (`addon/spec/`) runs every case. The Python port (`shared/python/corkcore`, used by `companion/` and `api/`) and the JavaScript port (`web/public/js/core/`, tested by `web/test/vectors.test.mjs`) must run the same cases and pass them unchanged. JavaScript decodes `input_hex` the way Python does, with each invalid byte kept as U+DC00 + byte. A case that one side can't pass is a bug in that side, not in the vector.
 
 Expected FNV-1a and digest values were computed with a short Python reference implementation, independently of the Lua code, and checked against the published FNV test values. Merge and sanitiser expectations are written out by hand from the spec.
 

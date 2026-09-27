@@ -70,6 +70,18 @@ What the first in-game build does differently from the mockups, and why:
 - **Alert strip:** yellow text on a dark strip along the bottom of the notes inset, for "N notes behind" (with a Reload button) and for paused sends with messages queued.
 - **Debug panel** (`/cork debug`): a `ButtonFrameTemplate` window with the stats list, a 8×4 bucket grid against the member most recently heard from, the peers table, and the last 12 log lines. It refreshes every second while open.
 
+## Web app build notes
+
+The web app (design.md §7.4, `web/public/css/corkboard.css`) draws the same window in CSS, from the reference values above and the mockups:
+
+- **Frames:** the portrait frame (the note icon in a ringed circle at the top left), the dark title bar with the gold title, recessed insets, the red-and-gold `UIPanelButtonTemplate` buttons, dark input boxes, gold-ticked check boxes, and the bottom tabs hanging under the frame. Popups are StaticPopup-style boxes; the editors are `ButtonFrameTemplate`-style windows with a red close button.
+- **Fonts:** Marcellus for headings, labels, buttons and tabs, PT Sans Narrow for body and note text, self-hosted (SIL OFL, `web/public/fonts/`), as in the mockups.
+- **Colour** comes only from what the game colours: gold headings, link colours from the note text (`|cnIQ<n>:` maps to the item quality colours), the note tags, the status dots, and the Players tab's red and green. Ready-check marks are drawn as a green tick and a red cross.
+- **Links:** hovering (or tapping) a link shows a GameTooltip-style box: the name in the link's colour, the kind in blue, and the id in grey.
+- **Title bar buttons:** a person icon on the right opens "Your name on notes" (the name notes are signed with). On a phone, a menu icon on the left opens the board list.
+- **Phone layout** (720 px and narrower): the window fills the screen, the board list becomes a drawer, cards go to one column, Edit and Delete always show (there's no hover), the search box and New Note wrap under the board name, and the six tabs sit along the bottom edge, above the home indicator.
+- **Only dark.** The game has no light UI, so neither does the web app.
+
 ## Optional extras
 
 - **Flat skin.** An ElvUI-style variant (1px black borders, `#1a1a1a` background, narrow font) for players who run flat UIs. It's a setting, not the default.

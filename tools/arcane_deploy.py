@@ -33,18 +33,25 @@ ARCANE = "https://harry.alpine-ionian.ts.net/api"
 ENV = "0"
 PROJECT = "corkboard"
 
-# Workspace path -> repo path, besides api/ and shared/python/ (tests left out).
+# Workspace path -> repo path, besides api/, shared/python/ and web/public/ (tests left out).
 EXTRA = {"Caddyfile": "infra/Caddyfile", ".dockerignore": ".dockerignore"}
+# Uploaded as they are; everything else is text and goes up with LF line endings.
+BINARY = (".png", ".woff2")
 
 
 def workspace_files() -> dict[str, bytes]:
-    """The files uploaded next to compose.yaml, as LF text, keyed by workspace path."""
+    """The files uploaded next to compose.yaml, keyed by workspace path. Caddy
+    serves web/public/ (the web app, docs/design.md §7.4) from the workspace."""
     tracked = subprocess.run(
-        ["git", "ls-files", "api", "shared/python"], cwd=ROOT, check=True, capture_output=True, text=True
+        ["git", "ls-files", "api", "shared/python", "web/public"], cwd=ROOT, check=True, capture_output=True, text=True
     ).stdout.split()
     paths = {p: p for p in tracked if "/tests/" not in p}
     paths.update(EXTRA)
-    return {dest: (ROOT / src).read_bytes().replace(b"\r\n", b"\n") for dest, src in sorted(paths.items())}
+    files = {}
+    for dest, src in sorted(paths.items()):
+        data = (ROOT / src).read_bytes()
+        files[dest] = data if dest.endswith(BINARY) else data.replace(b"\r\n", b"\n")
+    return files
 
 
 def compose() -> str:

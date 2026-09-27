@@ -77,3 +77,32 @@ jobs:
 
       - name: Packaging
         run: pytest tools/tests
+
+  web:
+    name: Web app (JS core, unit tests, end to end)
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+          pip install -e ../shared/python -e ../api
+
+      - name: Unit tests (shared vectors, fuzz corpus, properties, model, board store)
+        run: npm test
+
+      - name: End to end (the real API and Chromium)
+        run: npm run e2e

@@ -8,6 +8,9 @@ dist/
 build/
 *.spec
 
+# Node
+node_modules/
+
 # Local data
 *.db
 *.db-wal

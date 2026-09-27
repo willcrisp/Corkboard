@@ -240,3 +240,15 @@ def test_offline_digest_tool_matches_the_endpoint(api, board, tmp_path):
     (line,) = tools.digest(str(tmp_path / "cork.db"))
     assert line == f"{BOARD} digest={live['digest']:08x} notes=2 cursor={live['cursor']}"
     assert tools.main(["x"]) == 2
+
+
+def test_serves_the_web_app_only_when_asked(make_client, tmp_path):
+    web = tmp_path / "web"
+    web.mkdir()
+    (web / "index.html").write_text("<!doctype html><title>Corkboard</title>")
+    plain = make_client()
+    assert plain.get("/").status_code == 404
+    served = make_client(db=str(tmp_path / "other.db"), web=str(web))
+    page = served.get("/")
+    assert page.status_code == 200 and "Corkboard" in page.text
+    assert served.get("/v1/health").json() == {"ok": True}

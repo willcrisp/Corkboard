@@ -2,7 +2,7 @@
 
 Shared post-it boards for **World of Warcraft: Forever** (client 1.60.x, TOC `## Interface: 16001`).
 Players create a board, share it with an invite string, and everyone on it can add free-text notes with item, quest and spell links.
-Boards sync peer-to-peer in game over addon messages. A companion app and a self-hosted sync API let members catch up when nobody else is online.
+Boards sync peer-to-peer in game over addon messages. A companion app and a self-hosted sync API let members catch up when nobody else is online, and a web app (PWA, desktop and phone) reads and writes the same boards through that API.
 
 The full spec is in `docs/design.md`. Read it before changing behaviour. Section numbers below (§) refer to it.
 
@@ -17,6 +17,7 @@ Current status and the ordered next steps are in `docs/next-steps.md`. Read it a
 | `addon/Corkboard_Cloud/` | Tiny data-only addon. The companion writes its `Data.lua`. Never hand-edit it. |
 | `companion/` | Desktop companion (Python 3.12, PyInstaller). Reads SavedVariables and talks to the API. |
 | `api/` | Sync API (FastAPI + SQLite). |
+| `web/` | Web app and PWA (§7.4). `public/` is served as it is (no build step): `js/core/` is the JavaScript port of the merge core, `js/model/` the note formats and labels, `js/app/` the UI, sync and storage. `test/` runs under `node --test`; `e2e/` drives the app in Chromium against the real API. |
 | `spikes/` | Phase 0 spike addons (not shipped; dropped on 2026-09-26 and due for removal). They may break the hard rules below on purpose, for example by calling `SendAddonMessage` directly. |
 | `infra/` | Docker Compose + Caddy for Will's Arcane host, public DNS `corkboard.<domain>`. |
 | `tools/` | Release helpers: `package_addon.py` builds the addon zip. |
@@ -36,19 +37,21 @@ Current status and the ordered next steps are in `docs/next-steps.md`. Read it a
 ## Hard rules
 
 - **Target the modern API.** Forever is vanilla content on a Mainline-style client: use `C_ChatInfo.*` and other `C_*` namespaces, not 1.12 or Classic Era APIs. Lua is 5.1.
-- **The merge core is pure Lua.** `Merge`, `Digest` and `Sanitise` must not touch any WoW API, so they run under `busted` outside the game. The Python copies in `companion/` and `api/` must pass the same `shared/test-vectors/`.
+- **The merge core is pure Lua.** `Merge`, `Digest` and `Sanitise` must not touch any WoW API, so they run under `busted` outside the game. The Python copy (`shared/python/corkcore`, used by `companion/` and `api/`) and the JavaScript copy (`web/public/js/core/`) must pass the same `shared/test-vectors/`.
 - **Merge semantics are fixed** (§4.3): LWW on `(rev, editor)`, tombstones for deletes, HLC-lite clock. Any change needs new test vectors plus property tests.
 - **Never send secret values.** Drop any received payload where `issecretvalue(msg)` is true (§2).
 - **Respect the send gate and throttle** (§5.5, §5.6). Every send goes through the outbox. Never call `SendAddonMessage` directly from feature code.
 - **The companion never writes SavedVariables.** It only writes `addon/Corkboard_Cloud/Data.lua`, atomically (temp file + rename).
-- **Sanitise identically** in Lua and Python (§6). A note that fails sanitisation is dropped, not repaired.
+- **Sanitise identically** in Lua, Python and JavaScript (§6). A note that fails sanitisation is dropped, not repaired.
 - **Hooks:** use `hooksecurefunc` post-hooks only. No pre-hooks or global overrides.
-- **UI:** use Blizzard frame templates and follow `docs/ui-style.md`. No custom coloured chrome.
+- **UI:** use Blizzard frame templates and follow `docs/ui-style.md`. No custom coloured chrome. The web app copies that look in CSS (`docs/ui-style.md`, "Web app build notes").
+- **Web app:** no third-party runtime code and no build step. Board text goes into the page as text nodes, never HTML. Every file in `web/public/` must be in the service worker's `SHELL` list (a test checks).
 
 ## Testing
 
 - **Lua:** `busted` over `addon/Corkboard/Core/` (merge, digest, sanitiser) plus the shared vectors.
 - **Python:** `pytest` in `api/` and `companion/`, with Hypothesis property tests for convergence (§11).
+- **Web:** `npm test` in `web/` (shared vectors, fuzz corpus, properties, model, board store) and `npm run e2e` (the real API plus headless Chromium).
 - **In game:** test persistence with `/reload`. A beta bug means SavedVariables don't load on a fresh launch. Copy the addon into the client's `Interface/AddOns`; don't symlink it, or SavedVariables are never read back.
 - Dev installs live under the beta folder (`_classic_beta_`) until launch on 2026-11-04.
 - **Will's dev machine (Windows):** the beta client he runs is `C:\wow\World of Warcraft\_classic_beta_\WowB.exe`. Install with `python tools/package_addon.py --install "C:/wow/World of Warcraft/_classic_beta_/Interface/AddOns"`, then `/reload` in game (quit and relaunch if a newly added file such as `Data.lua` isn't picked up). A second, unused beta install under `C:\Program Files (x86)\World of Warcraft` holds stale copies: installing there does nothing in game. If unsure, check the running client's path with `Get-Process | ? Name -like '*wow*' | select Path`.
@@ -70,7 +73,9 @@ Run these from the repo root. They need Lua 5.1 with busted, luacheck, dkjson an
 - **Python core:** `pip install -e shared/python && pytest shared/python` runs the shared vectors and the Hypothesis property tests.
 - **Fuzz corpus:** `python3 shared/test-vectors/tools/gen_sanitise_fuzz.py` regenerates `sanitise_fuzz.json` after a sanitiser change.
 - **Package the addon:** `python3 tools/package_addon.py --version X.Y.Z` writes `dist/Corkboard-X.Y.Z.zip` (Corkboard + Corkboard_Cloud with an empty `Data.lua`). Add `--install <client>/Interface/AddOns` to also unzip it into a client for in-game testing.
-- **Run the API locally:** `pip install -e shared/python -e api && CORK_DB=/tmp/cork.db python3 -m corkboard_api.app` (port 8000).
+- **Run the API locally:** `pip install -e shared/python -e api && CORK_DB=/tmp/cork.db python3 -m corkboard_api.app` (port 8000). Add `CORK_WEB=web/public` to serve the web app at `http://127.0.0.1:8000/` as well; `node web/e2e/demo.mjs http://127.0.0.1:8000` pushes a demo board and prints its invite.
+- **Web app tests:** `cd web && npm ci && npm test`; `npm run e2e` also needs the API installed and Playwright's Chromium (`npx playwright install chromium`, or set `CHROMIUM` to a browser path).
+- **App icons:** `node web/tools/render_icons.mjs` re-renders the PNGs from the SVGs.
 - **Companion:** `pip install -e shared/python -e companion && corkboard-companion setup --api URL --wow PATH`, then `corkboard-companion watch`.
 - **Deploy the API to Arcane (first time):** `ARCANE_API_KEY=… python tools/arcane_deploy.py create --domain corkboard.<domain>`; `files` lists what it uploads and `health --domain …` rechecks it. See `infra/README.md`.
 - **Spike smoke tests:** `lua5.1 spikes/mock/smoke.lua spikes/CorkSpike/CorkSpike.lua` runs CorkSpike against a fake client, and `lua5.1 spikes/mock/smoke2.lua spikes/CorkSpike2/CorkSpike2.lua` does the same for CorkSpike2.

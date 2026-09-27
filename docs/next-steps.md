@@ -2,7 +2,7 @@
 
 The handoff between sessions. Read this after `CLAUDE.md`. Before you finish, update it: move what you finished into "Where things stand" and rewrite "Next steps".
 
-Last updated: 2026-09-27 (tenth session: player notes, an avoid / good-player list per board, on a Players tab).
+Last updated: 2026-09-27 (eleventh session: the web app, a PWA for desktop and phone).
 
 ## Where things stand
 
@@ -25,9 +25,10 @@ On 2026-09-26 Will asked for the remaining work to be built on best assumptions,
 | Professions tab (§9.2) | `Core/Recipes.lua`, `Store:learned`/`shareRecipes`, `UI/Professions.lua`, the scan in `Corkboard.lua` | Built; passes between fake clients. Not run in game. |
 | Player notes (§9.4) | `Core/Players.lua`, `Store:addPlayer`/`editPlayer`, `UI/Players.lua`, `UI/PlayerEditor.lua`, the tooltip and group check in `Corkboard.lua` | Built; passes between fake clients. Not run in game. |
 | Phase 6: packaging | `tools/package_addon.py`, `.pkgmeta`, `.github/workflows/release.yml`, `companion/corkboard-companion.spec`, `companion/corkboard_companion/gui.py` | Zip builder tested; the GUI, PyInstaller build and store uploads are untested. |
+| Phase 7: web app (§7.4) | `web/`, Caddy and compose in `infra/`, `CORK_WEB` in `api/` | Built; passes its unit tests and an end-to-end test (real API, headless Chromium, desktop and phone). Not deployed, not tried on a real phone. |
 | CI | `.github/workflows/ci.yml`, `api-image.yml` | Green on the branch: luacheck, busted, coverage gate (≥ 95%), spike smoke tests, pytest for corkcore, API, companion and packaging, and a check that the fuzz corpus is current. |
 
-Tests: `busted` runs 681 (Core coverage 98.5%, merge core 100%; the coverage run skips `#slow` specs); pytest runs 142 (corkcore), 22 (API), 32 (companion) and 5 (packaging, `tools/tests`).
+Tests: `busted` runs 681 (Core coverage 98.5%, merge core 100%; the coverage run skips `#slow` specs); pytest runs 142 (corkcore), 23 (API), 32 (companion) and 6 (packaging and deploy, `tools/tests`); `node --test` runs 41 web unit tests and 2 end-to-end tests.
 
 ### First in-game run (fourth session)
 
@@ -89,6 +90,18 @@ Will asked for a blacklist / whitelist area on a board: put in a character's nam
 - **UI:** a sixth tab, **Players** (`UI/Players.lua`): Avoid / Good players filters, search, Add Player, and rows with a ready-check cross or tick, the name and verdict in the game's red or green, author and age, the reason with live links, and Edit / Delete on hover. The editor (`UI/PlayerEditor.lua`) has Character (with a Target button, pre-filled from the target), Avoid or Good player, and Why.
 - **In the world** (`Corkboard.lua`): hovering a player adds the boards' verdicts to their tooltip (`TooltipDataProcessor`, falling back to `OnTooltipSetUnit`), and an avoided player joining your group prints one warning per session. Both use every board on the account and skip secret names. These APIs are assumptions until seen in game (new §2 row); the check is next step 5.
 - **Tests:** `addon/spec/players_spec.lua` (codec, store rules, lookup, the view, the command, and two fake clients adding, syncing, editing and deleting from the tab, the tooltip, the group warning and `/reload`). The fake client gained other units, groups, `GROUP_ROSTER_UPDATE`, unit tooltips and `TooltipDataProcessor`.
+
+### Eleventh session: the web app (design.md §7.4)
+
+Will asked for a companion for his phone that syncs with the boards, as close to the in-game look as possible, desktop and PWA both, signing in with a board's shared key and a free-text name.
+
+- **Shape.** A static web app in `web/public/` (no build step, no runtime dependencies) that talks to the existing sync API exactly as the companion does. Caddy serves it at `/` beside `/v1/`, so there's no CORS; `CORK_WEB` makes the API serve it for local runs. Nothing in the addon, the API's routes or the merge rules changed.
+- **Merge core in JavaScript** (`web/public/js/core/`): passes every shared vector and the 1,262-case fuzz corpus, plus the Python suite's merge laws and 3–5-node convergence (seeded, `web/test/properties.test.mjs`). Strings are compared and measured as UTF-8 bytes.
+- **Sign-in:** invite + name. A name without a realm is signed `Name-Web` (records need `Name-Realm`, §6); `Name-Realm` posts as a character. Joining on the web adds no MemberRecord. Each device has a random note-id prefix.
+- **Sync** (`js/app/boards.js`): unsent records plus the cursor, pages until `more` is false; 401 → register, 409 → "Invite out of date" (and no more polling until the invite is re-entered, to spare the per-IP registration limit). Every 30 s for the board on screen, 5 min for others, 0.8 s after a local change; offline changes wait and are counted in the status line.
+- **UI:** the six tabs with the game's wording; editors for notes (tags, byte counter, Save greyed with the reason) and player notes; a **Link…** picker in place of shift-click; GameTooltip-style link boxes; board list with Join, Rename, Leave; a phone layout with a board drawer and bottom tabs. Screenshots were checked against `docs/mockups/`.
+- **Deploy:** Caddy serves `/srv/web` (compose mounts `./web/public`) with a strict CSP; `tools/arcane_deploy.py` uploads `web/public/` (binary files byte for byte). `index.html` carries the same CSP as a meta tag, so the e2e run enforces it too.
+- **CI:** a `web` job runs `npm test` and the end-to-end test.
 
 ### Spec changes (earlier sessions)
 
@@ -185,10 +198,19 @@ Do these in order unless Will says otherwise.
    6. A removes B in the Members tab: B stops getting A's edits. A sends the new invite, B joins with it, and syncing resumes.
    7. Send Lua errors and screenshots of the window, the Members tab, the debug panel and the status line.
 7. **Apply the results.** Fix whatever the checks turn up and tick the §12 items that have their evidence. Since the spikes are dropped, `spikes/`, its CI smoke steps and `Corkboard.Sanitise` (kept only for CorkSpike2) can go in their own small change. If the 1.60 client has `C_EncodingUtil`, it could replace LibSerialize and LibDeflate.
-8. **Deploy the API:** on Will's box, `$env:ARCANE_API_KEY=…; python tools/arcane_deploy.py create --domain corkboard.<domain>` (`infra/README.md`, full steps in `docs/arcane-next-steps.md`). Then the Phase 5 checks: health over TLS from outside the tailnet, the dashboard unreachable, and a restore drill. Then install the companion (`pip install ./shared/python ./companion`, `corkboard-companion setup --api https://corkboard.<domain>`) and run the "B edits and logs out, A's companion syncs, A reloads" check for real.
-9. **Phase 6 for real:** CurseForge and Wago IDs and tokens, a signing certificate, and a Windows/macOS test of the companion's window and PyInstaller build.
+8. **Will: try the web app locally** (optional, before deploying): `pip install -e shared/python -e api`, then `CORK_DB=cork.db CORK_WEB=web/public python -m corkboard_api.app` and open `http://127.0.0.1:8000/`. `node web/e2e/demo.mjs http://127.0.0.1:8000` prints a demo invite; a real board works too once the companion points at this API. Say what feels off next to the in-game window.
+9. **Deploy the API:** on Will's box, `$env:ARCANE_API_KEY=…; python tools/arcane_deploy.py create --domain corkboard.<domain>` (`infra/README.md`, full steps in `docs/arcane-next-steps.md`). Then the Phase 5 checks: health over TLS from outside the tailnet, the dashboard unreachable, and a restore drill. Then install the companion (`pip install ./shared/python ./companion`, `corkboard-companion setup --api https://corkboard.<domain>`) and run the "B edits and logs out, A's companion syncs, A reloads" check for real.
+10. **Will: the Phase 7 check (web app on the phone),** once the host is up:
+    1. Open `https://corkboard.<domain>/` on the phone. Enter a name and paste the board's invite: the board shows, with the notes, gear, professions, quests and players the game wrote.
+    2. Install it (iOS: Share → Add to Home Screen; Android: Install app). Open it from the home screen in flight mode: it opens and shows the last copy, with "Offline" in the status line.
+    3. Write a note on the phone with a link from **Link…**. On the PC, let the companion sync, then `/reload`: the note shows, signed `Name-Web`, and its link has a working tooltip.
+    4. Edit a note in game, `/reload` (or log out) so the companion pushes it: the phone shows the edit within a minute.
+    5. Send screenshots of the phone and anything that looks wrong next to the in-game window.
+11. **Phase 6 for real:** CurseForge and Wago IDs and tokens, a signing certificate, and a Windows/macOS test of the companion's window and PyInstaller build.
 
 ## Open issues
+
+- **Web edits reach the game only through a companion.** A board whose members all lack the companion never sees what the web writes, and the web never sees their edits (§7.4). By design; the app says so on sign-in and on the Members tab.
 
 - **Note-id collision** is fixed for the common case (§4.2). Two installs of one character that both create notes before either has seen the other's can still produce the same id, and LWW keeps one. Accepted for v1.
 - **Board deletion is local-only.** Closing a board for everyone is out of scope for v1 (§14.5).

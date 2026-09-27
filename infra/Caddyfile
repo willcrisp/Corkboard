@@ -1,13 +1,33 @@
 # The public hostname comes from CORK_DOMAIN in the Arcane project's .env.
 # Caddy fetches the TLS certificate automatically (ports 80 and 443 must be
 # reachable from the internet). See docs/design.md §8.
+#
+# /v1/* goes to the sync API. Everything else is the web app (§7.4), served
+# from web/public as it is in the repo: there's no build step.
 {$CORK_DOMAIN} {
 	request_body {
 		max_size 64KB
 	}
-	reverse_proxy api:8000
 	header {
 		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "no-referrer"
 		-Server
+	}
+
+	handle /v1/* {
+		reverse_proxy api:8000
+	}
+
+	handle {
+		root * /srv/web
+		header {
+			# The same policy index.html sets, plus what only a header can say.
+			Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; manifest-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+			# Files keep their names across deploys, so browsers revalidate
+			# (cheaply, by ETag) instead of caching blindly.
+			Cache-Control "no-cache"
+		}
+		file_server
 	}
 }

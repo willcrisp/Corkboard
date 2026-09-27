@@ -15,8 +15,18 @@ def test_workspace_holds_what_the_image_build_needs_and_no_tests():
         assert path in files, path
     assert "api/corkboard_api/app.py" in files and "shared/python/corkcore/merge.py" in files
     assert not [p for p in files if "/tests/" in p or p == "compose.yaml"]
-    assert not [p for p, data in files.items() if b"\r\n" in data]
+    assert not [p for p, data in files.items() if b"\r\n" in data and not p.endswith(arcane_deploy.BINARY)]
     assert b"{$CORK_DOMAIN}" in files["Caddyfile"]
+
+
+def test_workspace_holds_the_web_app_byte_for_byte():
+    files = arcane_deploy.workspace_files()
+    root = Path(arcane_deploy.ROOT)
+    for path in ("web/public/index.html", "web/public/sw.js", "web/public/js/core/merge.js",
+                 "web/public/icons/icon-192.png", "web/public/fonts/marcellus-latin.woff2"):
+        assert path in files, path
+    assert files["web/public/icons/icon-192.png"] == (root / "web/public/icons/icon-192.png").read_bytes()
+    assert not [p for p in files if p.startswith("web/") and not p.startswith("web/public/")]
 
 
 def test_compose_builds_on_the_host_and_names_its_volume():
@@ -25,6 +35,7 @@ def test_compose_builds_on_the_host_and_names_its_volume():
     assert "dockerfile: api/Dockerfile" in text and "image: corkboard-api:latest" in text
     assert "ghcr.io" not in text
     assert "name: corkboard-data" in text and "${CORK_DOMAIN:?" in text
+    assert "./web/public:/srv/web:ro" in text
 
 
 def test_create_request_references_every_upload_in_order():

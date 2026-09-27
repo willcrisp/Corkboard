@@ -6,6 +6,9 @@
     GET  /v1/boards/{id}/digest    the server's digest, count and cursor (for checks and the backup drill)
     GET  /v1/health                liveness and a database check
 
+With CORK_WEB set, the web app (web/public) is served at / as well, for local
+runs. Deployed, Caddy serves it and the API only answers /v1/.
+
 Auth: "Authorization: Bearer <boardId>.<secret>". The server stores
 sha256(secret) and compares in constant time. Logs carry the board id,
 route, status and latency, never the Authorization header or bodies.
@@ -22,6 +25,7 @@ from typing import Any
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from corkcore import invite as invites
 from corkcore.util import INT_MAX, is_integer
@@ -159,6 +163,9 @@ def create_app(settings: Settings | None = None, clock=time.monotonic) -> FastAP
     def board_digest(board_id: str, request: Request):
         authorise(request, board_id)
         return db().digest(board_id)
+
+    if settings.web:
+        app.mount("/", StaticFiles(directory=settings.web, html=True), name="web")
 
     return app
 

@@ -1,6 +1,7 @@
 # Corkboard sync API, deployed as the `corkboard` Arcane project (docs/design.md §8).
 # tools/arcane_deploy.py creates the project from this file and uploads the
-# workspace next to it: Caddyfile, .dockerignore, api/ and shared/python/.
+# workspace next to it: Caddyfile, .dockerignore, api/, shared/python/ and
+# web/public/ (the web app, which Caddy serves).
 # So paths here are relative to the Arcane workspace root, not to infra/.
 # The project's .env sets CORK_DOMAIN, the public hostname Caddy serves.
 name: corkboard
@@ -29,6 +30,7 @@ services:
       CORK_DOMAIN: ${CORK_DOMAIN:?set CORK_DOMAIN to the public hostname}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./web/public:/srv/web:ro
       - caddy-data:/data
     depends_on: [api]
     networks: [internal]
