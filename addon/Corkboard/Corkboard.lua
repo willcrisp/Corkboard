@@ -71,11 +71,49 @@ local function equippedItem(slot)
 	return itemId, link, quality
 end
 
--- The open profession window's profession and learned recipe ids (§9.2), or
--- nil when no window is ready, it shows someone else's recipes (a linked,
--- guild or NPC view), or anything read back is a secret value.
 local SKIPPED_VIEWS = { "IsTradeSkillLinked", "IsTradeSkillGuild", "IsNPCCrafting", "IsRuneforging" }
 local SKIPPED_RECIPES = { "isDummyRecipe", "isRecraft", "isSalvageRecipe", "isGatheringRecipe" }
+local ARMOR_CLASS = 4 -- Enum.ItemClass.Armor
+-- Enum.ItemArmorSubclass: the types the Professions tab filters on.
+local ARMOUR_TYPES = { [1] = "cloth", [2] = "leather", [3] = "mail", [4] = "plate" }
+
+-- What a recipe makes, for the Professions tab's filters (§9.2): the item's
+-- required level and armour type, from the crafted item's link. Returns the
+-- details (nil when the recipe doesn't make an item) and whether the client
+-- still has to load the item before its level is known. A cloak counts as
+-- no armour type, since anyone wears one.
+local function craftedItem(link)
+	if type(link) ~= "string" or secret(link) or not link:find("|Hitem:", 1, true) then
+		return nil, false
+	end
+	local detail = {}
+	if C_Item and C_Item.GetItemInfoInstant then
+		local _, _, _, equipLoc, _, classID, subclassID = C_Item.GetItemInfoInstant(link)
+		local armor = Enum and Enum.ItemClass and Enum.ItemClass.Armor or ARMOR_CLASS
+		if not secret(classID) and not secret(subclassID) and not secret(equipLoc) and classID == armor
+			and equipLoc ~= "INVTYPE_CLOAK" then
+			detail.armour = ARMOUR_TYPES[subclassID]
+		end
+	end
+	local getInfo = C_Item and C_Item.GetItemInfo or GetItemInfo
+	if not getInfo then
+		return detail, false
+	end
+	-- An item the client hasn't loaded returns nil, and asking starts the load.
+	local name, _, _, _, minLevel = getInfo(link)
+	if name == nil then
+		return detail, true
+	end
+	if not secret(minLevel) and type(minLevel) == "number" and minLevel >= 1 then
+		detail.level = minLevel
+	end
+	return detail, false
+end
+
+-- The open profession window's profession, learned recipe ids, the details
+-- of what each makes, and how many items weren't loaded yet (§9.2); or nil
+-- when no window is ready, it shows someone else's recipes (a linked, guild
+-- or NPC view), or anything read back is a secret value.
 
 local function openProfession()
 	local T = C_TradeSkillUI
@@ -105,7 +143,7 @@ local function openProfession()
 	if type(profession.id) ~= "number" or profession.id <= 0 then
 		return nil
 	end
-	local ids = {}
+	local ids, details, loading = {}, {}, 0
 	for _, id in ipairs(T.GetAllRecipeIDs() or {}) do
 		local recipe = not secret(id) and T.GetRecipeInfo(id)
 		if type(recipe) == "table" and not secret(recipe.learned) and recipe.learned == true then
@@ -117,10 +155,13 @@ local function openProfession()
 			end
 			if not skip then
 				ids[#ids + 1] = id
+				local detail, pending = craftedItem(recipe.hyperlink)
+				details[id] = detail
+				loading = loading + (pending and 1 or 0)
 			end
 		end
 	end
-	return profession, ids
+	return profession, ids, details, loading
 end
 
 -- The quest log (§9.3), as { id, level, title } for each quest, headers and
@@ -437,15 +478,25 @@ end
 -- TRADE_SKILL_LIST_UPDATE: that fires on each craft, and re-sending a recipe
 -- list per skill-up would use up the throttle (§5.6).
 local WANT_SCAN = { TRADE_SKILL_SHOW = true, TRADE_SKILL_DATA_SOURCE_CHANGED = true, NEW_RECIPE_LEARNED = true }
+-- When some crafted items weren't loaded, the scan runs again this much
+-- later, at most RESCANS times per window, so their levels get shared.
+local RESCAN_DELAY = 3
+local RESCANS = 2
 
 function Corkboard:ScanProfession()
-	local profession, ids = openProfession()
+	local profession, ids, details, loading = openProfession()
 	if not profession then
 		return nil
 	end
 	self.scanWanted = false
 	self:Identify()
-	return self.store:learned(profession, ids)
+	if loading > 0 and (self.rescans or 0) < RESCANS then
+		self.rescans = (self.rescans or 0) + 1
+		C_Timer.After(RESCAN_DELAY, function()
+			self:ScanProfession()
+		end)
+	end
+	return self.store:learned(profession, ids, details)
 end
 
 function Corkboard:WatchProfessions()
@@ -460,6 +511,9 @@ function Corkboard:WatchProfessions()
 	events:SetScript("OnEvent", function(_, event)
 		if WANT_SCAN[event] then
 			self.scanWanted = true
+		end
+		if event == "TRADE_SKILL_SHOW" then
+			self.rescans = 0
 		end
 		if self.scanWanted and event ~= "TRADE_SKILL_CLOSE" then
 			self:ScanProfession()

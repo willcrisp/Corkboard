@@ -86,25 +86,41 @@ export function playerEntries(board) {
 
 export const RECIPES_KIND = "recipes";
 const RECIPE_MAX_ID = 2147483647;
-const RECIPE_HEADER = /^R1;(\d+);(\d+);(\d+);(\d+);([^;\n]+)$/;
+const RECIPE_HEADER = /^R([12]);(\d+);(\d+);(\d+);(\d+);([^;\n]+)$/;
+const RECIPE_DETAIL = /^(\d{0,3})([clmp]?)$/;
+// Armour types a recipe's item can have, in the tab's order (§9.2).
+export const ARMOUR = ["cloth", "leather", "mail", "plate"];
+export const ARMOUR_NAMES = { cloth: "Cloth", leather: "Leather", mail: "Mail", plate: "Plate" };
+const ARMOUR_OF = { c: "cloth", l: "leather", m: "mail", p: "plate" };
 
 function validProfessionName(name) {
   return typeof name === "string" && byteLen(name) >= 1 && byteLen(name) <= 64 && !/[;|]/.test(name)
     && !LUA_CONTROL.test(name) && sanitise.text(name)[0] === true;
 }
 
-// Reads a recipe list: { id, name, skill, max, learned, recipes } or null.
+// Reads a recipe list: { id, name, skill, max, learned, recipes, details } or
+// null. details maps a recipe id to { level, armour } for the item it makes,
+// from an R2 list's third line (see Core/Recipes.lua).
 export function decodeRecipes(text) {
   if (typeof text !== "string") return null;
   const newline = text.indexOf("\n");
   const header = newline >= 0 ? text.slice(0, newline) : text;
-  const body = newline >= 0 ? text.slice(newline + 1) : "";
-  const m = RECIPE_HEADER.exec(header);
-  if (!m || m[1].length > 10 || m[2].length > 4 || m[3].length > 4 || m[4].length > 10 || !validProfessionName(m[5])) {
+  let body = newline >= 0 ? text.slice(newline + 1) : "";
+  let third = null;
+  const second = body.indexOf("\n");
+  if (second >= 0) {
+    third = body.slice(second + 1);
+    body = body.slice(0, second);
+  }
+  const match = RECIPE_HEADER.exec(header);
+  if (!match) return null;
+  const [, version, id, skill, max, learned, name] = match;
+  if ((third !== null && version !== "2") || id.length > 10 || skill.length > 4 || max.length > 4
+    || learned.length > 10 || !validProfessionName(name)) {
     return null;
   }
-  const entry = { id: Number(m[1]), name: m[5], skill: Number(m[2]), max: Number(m[3]), learned: Number(m[4]),
-    recipes: [] };
+  const entry = { id: Number(id), name, skill: Number(skill), max: Number(max), learned: Number(learned),
+    recipes: [], details: {} };
   if (!isInteger(entry.id, 1, RECIPE_MAX_ID) || entry.learned > RECIPE_MAX_ID) return null;
   if (newline >= 0) {
     if (body === "" || /[^0-9a-z,]/.test(body) || body.includes(",,") || body.startsWith(",") || body.endsWith(",")) {
@@ -118,6 +134,20 @@ export function decodeRecipes(text) {
       total += gap;
       if (total > RECIPE_MAX_ID) return null;
       entry.recipes.push(total);
+    }
+  }
+  if (entry.recipes.length > entry.learned) return null;
+  if (third !== null) {
+    const tokens = third.split(",");
+    if (tokens.length !== entry.recipes.length) return null;
+    for (const [i, token] of tokens.entries()) {
+      const d = RECIPE_DETAIL.exec(token);
+      if (!d || d[1].startsWith("0")) return null;
+      if (token === "") continue;
+      const detail = {};
+      if (d[1]) detail.level = Number(d[1]);
+      if (d[2]) detail.armour = ARMOUR_OF[d[2]];
+      entry.details[entry.recipes[i]] = detail;
     }
   }
   return entry;

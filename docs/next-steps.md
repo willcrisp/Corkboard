@@ -2,7 +2,7 @@
 
 The handoff between sessions. Read this after `CLAUDE.md`. Before you finish, update it: move what you finished into "Where things stand" and rewrite "Next steps".
 
-Last updated: 2026-09-27 (thirteenth session: opening a profession to see its recipes).
+Last updated: 2026-09-27 (thirteenth session: opening a profession to see its recipes, and level and armour filters).
 
 ## Where things stand
 
@@ -28,7 +28,7 @@ On 2026-09-26 Will asked for the remaining work to be built on best assumptions,
 | Phase 7: web app (§7.4) | `web/`, Caddy and compose in `infra/`, `CORK_WEB` in `api/` | Built; passes its unit tests and an end-to-end test (real API, headless Chromium, desktop and phone). Not deployed, not tried on a real phone. |
 | CI | `.github/workflows/ci.yml`, `api-image.yml` | Green on the branch: luacheck, busted, coverage gate (≥ 95%), spike smoke tests, pytest for corkcore, API, companion and packaging, and a check that the fuzz corpus is current. |
 
-Tests: `busted` runs 684 (Core coverage 98.5%, merge core 100%; the coverage run skips `#slow` specs); pytest runs 142 (corkcore), 23 (API), 32 (companion) and 6 (packaging and deploy, `tools/tests`); `node --test` runs 41 web unit tests and 2 end-to-end tests.
+Tests: `busted` runs 691 (Core coverage 98.5%, merge core 100%; the coverage run skips `#slow` specs); pytest runs 142 (corkcore), 23 (API), 32 (companion) and 6 (packaging and deploy, `tools/tests`); `node --test` runs 41 web unit tests and 2 end-to-end tests.
 
 ### First in-game run (fourth session)
 
@@ -123,6 +123,13 @@ Will's first look at the Professions tab in game (screenshot: "Leatherworking 47
 - **Tests:** `recipes_spec` (rows for an open profession, one with no recipes, search ignoring what's open, and clicking open and closed on the fake client); the web e2e opens and closes Leatherworking on the demo board. `busted` 684, `npm test` 41, `npm run e2e` 2, luacheck clean.
 - **Not seen in game yet:** the toggle textures `Interface\Buttons\UI-PlusButton-Up` / `UI-MinusButton-Up` and hyperlinks on a Button row. Step 3 below now checks them.
 
+Will then asked for recipe filters by level range and armour type (design.md §9.2 "Filters"):
+
+- **Records:** recipe lists are now `R2`, with a third line giving each recipe's crafted-item required level and armour letter (`,5l,3l,…`); `R1` still reads. Encoding and decoding in `Core/Recipes.lua` and `web/public/js/model/formats.js`, with the same accept and reject cases in `recipes_spec` and `web/test/model.test.mjs`. The sanitiser needs nothing (plain text). A client from before this change shows no recipe lists until it updates.
+- **Scan** (`Corkboard.lua`, `craftedItem`): details from each recipe's `hyperlink` through `C_Item.GetItemInfoInstant` (armour; a cloak has none) and `C_Item.GetItemInfo` (required level). Items not loaded yet get a rescan 3 s later, at most twice per window. New §2 row: these calls are assumed, not seen in game.
+- **Tab:** a Level min–max and Cloth / Leather / Mail / Plate checkboxes under the top row; any filter switches to the recipe list across members, like a search, and recipe rows show "Level 25 · Leather". Same in the web app.
+- **Tests:** `busted` 691 (encode/decode, capacity with details, the filters, two fake clients sharing details with an uncached cloak, the tab's filter widgets); the fake client gained `C_Item`. `npm test` 41, `npm run e2e` 2 (the demo board's Leatherworking list carries details and the e2e filters it), luacheck clean.
+
 ### Spec changes (earlier sessions)
 
 Each is written into `docs/design.md` with its reason:
@@ -190,11 +197,12 @@ Do these in order unless Will says otherwise.
 3. **Will: the Professions tab check** (can go with step 2; a second character on the board also checks syncing):
    1. Open a profession window, then the **Professions** tab: a row like "Leatherworking 47/75 · 8 recipes" with your name. The count should match the recipes you know.
    2. Click the row: a plus turns to a minus and your recipes list under it as gold links, the same ones on the other client. Hover and click one. Click the row again: it closes. If the plus / minus is a green square or missing, send a screenshot.
-   3. Search `sewing` (or any recipe you know): the recipe shows as a gold link with your name. Hover it (recipe tooltip) and click it. If the name reads "Recipe 1263079", `C_Spell.GetSpellName` doesn't name recipes: send `/dump C_Spell.GetSpellName(1263079), GetSpellInfo(1263079)`.
-   4. Craft something that skills up: nothing resends (`/cork debug` shows no PUT). Close and reopen the window: the skill updates.
-   5. Untick "Share my recipes on this board": the row goes on the other client. Tick it again: it's back without reopening the window. `/reload` keeps it.
-   6. Shift-click a recipe and your `[Leatherworking]` link (the link button in the profession window) into a note: Save is allowed, and the other client shows both. Click the `[Leatherworking]` link on the other client, with you online and then logged out, and note what opens.
-   7. Send Lua errors. Pruning a dropped profession waits on `/dump GetProfessions()` and `/dump GetProfessionInfo(<each index>)` output from a character with two professions and Cooking.
+   3. Close and reopen the profession window (the scan now carries levels and armour types), then open your row again: armour you can make shows "Level N · Leather" on the right, and non-gear (kits, leather) shows a level or nothing. Set Level 1–20 and tick Leather: only leather armour in range shows, with who can make it. If no recipe shows details, send `/dump C_TradeSkillUI.GetRecipeInfo(<a learned recipe id>).hyperlink` and `/dump C_Item.GetItemInfoInstant(<that link>)` with the window open.
+   4. Search `sewing` (or any recipe you know): the recipe shows as a gold link with your name. Hover it (recipe tooltip) and click it. If the name reads "Recipe 1263079", `C_Spell.GetSpellName` doesn't name recipes: send `/dump C_Spell.GetSpellName(1263079), GetSpellInfo(1263079)`.
+   5. Craft something that skills up: nothing resends (`/cork debug` shows no PUT). Close and reopen the window: the skill updates.
+   6. Untick "Share my recipes on this board": the row goes on the other client. Tick it again: it's back without reopening the window. `/reload` keeps it.
+   7. Shift-click a recipe and your `[Leatherworking]` link (the link button in the profession window) into a note: Save is allowed, and the other client shows both. Click the `[Leatherworking]` link on the other client, with you online and then logged out, and note what opens.
+   8. Send Lua errors. Pruning a dropped profession waits on `/dump GetProfessions()` and `/dump GetProfessionInfo(<each index>)` output from a character with two professions and Cooking.
 4. **Will: the quest log check.** Two characters on one board (two accounts, or a friend):
    1. On A, `/dump C_QuestLog.GetNumQuestLogEntries()` and `/dump C_QuestLog.GetInfo(2)`: send the output. If `C_QuestLog.GetInfo` is nil, `/dump GetQuestLogTitle(2)` instead.
    2. Open `/cork`, **Quests** tab, on both. Within a few seconds of login each sees the other in the list on the left, with the right quest count.

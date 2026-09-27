@@ -434,6 +434,9 @@ function Client.new(options)
 		-- The profession window: nil while closed, else { info, recipes (id -> fields), ready, linked }.
 		trade = nil,
 		spellNames = options.spellNames or {}, -- spell id -> name, for C_Spell.GetSpellName
+		-- item id -> { classID, subclassID, equipLoc, minLevel, uncached }, for
+		-- C_Item. An uncached item's GetItemInfo is nil until it has been asked for.
+		items = options.items or {},
 		-- The quest log, in order: { id, level } for a quest (its title comes
 		-- from Client.QUEST_DB) or { header = "Zone" }.
 		quests = options.quests or {},
@@ -797,6 +800,31 @@ function Client:makeEnv()
 				info[k] = v
 			end
 			return info
+		end,
+	}
+	local function itemOf(link)
+		local id = type(link) == "string" and tonumber(link:match("|Hitem:(%d+)"))
+		return id, id and client.items[id]
+	end
+	env.C_Item = {
+		GetItemInfoInstant = function(link)
+			local id, item = itemOf(link)
+			if not item then
+				return nil
+			end
+			return id, "", "", item.equipLoc or "", 0, item.classID, item.subclassID
+		end,
+		-- Asking for an item the client hasn't loaded starts the load: the
+		-- next call has it.
+		GetItemInfo = function(link)
+			local _, item = itemOf(link)
+			if not item then
+				return nil
+			elseif item.uncached then
+				item.uncached = false
+				return nil
+			end
+			return "Item", link, 3, item.minLevel or 1, item.minLevel or 0
 		end,
 	}
 	env.C_Spell = {
@@ -1240,6 +1268,7 @@ function Client:reload()
 		network = self.network,
 		equipped = self.equipped,
 		spellNames = self.spellNames,
+		items = self.items,
 		quests = self.quests,
 		units = self.units,
 	})

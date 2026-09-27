@@ -2,8 +2,13 @@
 -- learned recipes in one profession ride a Note with kind = "recipes", whose
 -- text is plain (no escapes, so the sanitiser needs no special case):
 --
---   R1;<professionID>;<skill>;<max skill>;<learned>;<profession name>
+--   R2;<professionID>;<skill>;<max skill>;<learned>;<profession name>
 --   <recipe ids, ascending, in base 36, each after the first as the gap from the one before>
+--   <per recipe on the line above: the crafted item's required level in decimal,
+--    then c, l, m or p for cloth, leather, mail or plate armour; empty if unknown>
+--
+-- The third line is left out when no recipe has details. R1 lists (from
+-- before the details) have the same first two lines and still read.
 --
 -- Pure Lua 5.1: the tab's search and rows are built here too, with recipe
 -- names coming in through a function from the WoW side.
@@ -25,9 +30,15 @@ Recipes.MAX_ID = 2147483647 -- profession and recipe ids
 Recipes.MAX_SKILL = 9999
 Recipes.MAX_NAME = 64 -- bytes of profession name
 Recipes.SHOWN = 200 -- rows on the tab
+Recipes.MAX_LEVEL = 999 -- a crafted item's required level
+-- Armour types a recipe's item can have, in the tab's order, and their letters.
+Recipes.ARMOUR = { "cloth", "leather", "mail", "plate" }
+Recipes.ARMOUR_NAMES = { cloth = "Cloth", leather = "Leather", mail = "Mail", plate = "Plate" }
+local LETTER = { cloth = "c", leather = "l", mail = "m", plate = "p" }
+local ARMOUR_OF = { c = "cloth", l = "leather", m = "mail", p = "plate" }
 
 local DIGITS = "0123456789abcdefghijklmnopqrstuvwxyz"
-local HEADER = "^R1;(%d+);(%d+);(%d+);(%d+);([^;\n]+)$"
+local HEADER = "^R([12]);(%d+);(%d+);(%d+);(%d+);([^;\n]+)$"
 -- 36^6 is above MAX_ID, so no valid id or gap needs more digits.
 local MAX_DIGITS = 6
 
@@ -48,12 +59,22 @@ function Recipes.validName(name)
 		and Sanitise.text(name) == true
 end
 
+-- One recipe's details as its third-line token: "" when nothing is known.
+local function detailToken(detail)
+	if type(detail) ~= "table" then
+		return ""
+	end
+	local level = Util.isInteger(detail.level, 1, Recipes.MAX_LEVEL) and tostring(detail.level) or ""
+	return level .. (LETTER[detail.armour] or "")
+end
+
 -- The note text for one profession. profession = { id, name, skill, max }; ids
--- lists recipe ids (any order, duplicates and bad values ignored). Returns
--- the text and how many ids it holds, or nil and a reason. If every id
--- doesn't fit in a note, the lowest that fit are kept; the header still
--- counts them all.
-function Recipes.encode(profession, ids)
+-- lists recipe ids (any order, duplicates and bad values ignored); details
+-- optionally maps a recipe id to { level, armour } for the item it makes
+-- (armour is one of Recipes.ARMOUR). Returns the text and how many ids it
+-- holds, or nil and a reason. If every id doesn't fit in a note, the lowest
+-- that fit are kept; the header still counts them all.
+function Recipes.encode(profession, ids, details)
 	if type(profession) ~= "table" or not Util.isInteger(profession.id, 1, Recipes.MAX_ID)
 		or not Recipes.validName(profession.name) then
 		return nil, "profession"
@@ -70,26 +91,53 @@ function Recipes.encode(profession, ids)
 		end
 	end
 	sort(list)
-	local header = format("R1;%d;%d;%d;%d;%s", profession.id, skill, max, #list, profession.name)
-	local parts, size, previous = {}, #header, 0
-	for i, id in ipairs(list) do
-		local token = base36(id - previous)
-		local cost = #token + 1 -- the line break or comma before it
-		if size + cost > Sanitise.MAX_TEXT then
-			break
+	details = type(details) == "table" and details or {}
+	local header = format("R2;%d;%d;%d;%d;%s", profession.id, skill, max, #list, profession.name)
+	-- The ids (and with `withDetails`, their tokens) that fit after the header.
+	local function fit(withDetails)
+		local parts, extra, size, previous, any = {}, {}, #header, 0, false
+		for i, id in ipairs(list) do
+			local token, detail = base36(id - previous), withDetails and detailToken(details[id]) or ""
+			-- Each token has a line break or comma before it, on both lines.
+			local cost = #token + 1 + (withDetails and #detail + 1 or 0)
+			if size + cost > Sanitise.MAX_TEXT then
+				break
+			end
+			parts[i], extra[i] = token, detail
+			any = any or detail ~= ""
+			size = size + cost
+			previous = id
 		end
-		parts[i] = token
-		size = size + cost
-		previous = id
+		return parts, extra, any
+	end
+	local parts, extra, any = fit(true)
+	if not any then
+		-- No third line, so its bytes can hold more ids.
+		parts = fit(false)
 	end
 	if #parts == 0 then
 		return header, 0
 	end
-	return header .. "\n" .. concat(parts, ","), #parts
+	local text = header .. "\n" .. concat(parts, ",")
+	if any then
+		text = text .. "\n" .. concat(extra, ",")
+	end
+	return text, #parts
 end
 
--- Reads a recipe list's text. Returns { id, name, skill, max, learned, recipes }
--- or nil when the text isn't one (a malformed list is ignored, not repaired).
+-- Splits a line on commas, keeping empty fields.
+local function fields(line)
+	local out = {}
+	for field in string.gmatch(line .. ",", "([^,]*),") do
+		out[#out + 1] = field
+	end
+	return out
+end
+
+-- Reads a recipe list's text. Returns { id, name, skill, max, learned,
+-- recipes, details }, where details maps a recipe id to { level, armour } for
+-- the recipes that have any, or nil when the text isn't one (a malformed
+-- list is ignored, not repaired).
 function Recipes.decode(text)
 	if type(text) ~= "string" then
 		return nil
@@ -97,8 +145,14 @@ function Recipes.decode(text)
 	local newline = find(text, "\n", 1, true)
 	local header = newline and sub(text, 1, newline - 1) or text
 	local body = newline and sub(text, newline + 1) or ""
-	local id, skill, max, learned, name = match(header, HEADER)
-	if not id or #id > 10 or #skill > 4 or #max > 4 or #learned > 10 or not Recipes.validName(name) then
+	local third
+	local second = find(body, "\n", 1, true)
+	if second then
+		body, third = sub(body, 1, second - 1), sub(body, second + 1)
+	end
+	local version, id, skill, max, learned, name = match(header, HEADER)
+	if not id or (third and version ~= "2") or #id > 10 or #skill > 4 or #max > 4 or #learned > 10
+		or not Recipes.validName(name) then
 		return nil
 	end
 	local entry = {
@@ -108,6 +162,7 @@ function Recipes.decode(text)
 		max = tonumber(max),
 		learned = tonumber(learned),
 		recipes = {},
+		details = {},
 	}
 	if not Util.isInteger(entry.id, 1, Recipes.MAX_ID) or entry.learned > Recipes.MAX_ID then
 		return nil
@@ -135,6 +190,21 @@ function Recipes.decode(text)
 	end
 	if #entry.recipes > entry.learned then
 		return nil
+	end
+	if third then
+		local tokens = fields(third)
+		if #tokens ~= #entry.recipes then
+			return nil
+		end
+		for i, token in ipairs(tokens) do
+			local level, letter = match(token, "^(%d*)([clmp]?)$")
+			if not level or #level > 3 or sub(level, 1, 1) == "0" then
+				return nil
+			end
+			if token ~= "" then
+				entry.details[entry.recipes[i]] = { level = tonumber(level), armour = ARMOUR_OF[letter] }
+			end
+		end
 	end
 	return entry
 end
@@ -210,20 +280,61 @@ local function byName(a, b)
 	return a.id < b.id
 end
 
--- Rows for the Professions tab. With no search, one row per character and
--- profession, each followed by its recipes when its key is in `open` (a
--- set, see Recipes.key). With a search, one row per matching recipe with
--- everyone who knows it; every word must appear in the recipe's name, its
--- profession or a knower's name. nameOf(id) gives a recipe's name or nil;
--- shortName(author) how to show a character. Returns the rows and whether
--- any were cut.
-function Recipes.rows(lists, query, nameOf, shortName, open)
+-- Whether a filter ({ min, max, armour = { [type] = true } }) narrows anything.
+function Recipes.filtering(filter)
+	return type(filter) == "table" and (filter.min ~= nil or filter.max ~= nil or next(filter.armour or {}) ~= nil)
+end
+
+-- Whether a recipe's details pass a filter. With a level bound, a recipe
+-- whose level isn't known is left out; with armour types ticked, anything
+-- that isn't one of them is.
+function Recipes.passes(detail, filter)
+	if not Recipes.filtering(filter) then
+		return true
+	end
+	detail = detail or {}
+	if (filter.min or filter.max) and not detail.level then
+		return false
+	end
+	if filter.min and detail.level < filter.min or filter.max and detail.level > filter.max then
+		return false
+	end
+	if next(filter.armour or {}) ~= nil and not (detail.armour and filter.armour[detail.armour]) then
+		return false
+	end
+	return true
+end
+
+-- What the tab shows beside a recipe: "Level 25 · Leather", or less.
+function Recipes.info(detail)
+	if not detail then
+		return ""
+	end
+	local parts = {}
+	if detail.level then
+		parts[#parts + 1] = format("Level %d", detail.level)
+	end
+	if detail.armour then
+		parts[#parts + 1] = Recipes.ARMOUR_NAMES[detail.armour]
+	end
+	return concat(parts, " · ")
+end
+
+-- Rows for the Professions tab. With no search or filter, one row per
+-- character and profession, each followed by its recipes when its key is in
+-- `open` (a set, see Recipes.key). With a search or a filter, one row per
+-- matching recipe with everyone who knows it; every word must appear in the
+-- recipe's name, its profession or a knower's name, and the recipe's
+-- details must pass the filter (see Recipes.passes). nameOf(id) gives a
+-- recipe's name or nil; shortName(author) how to show a character. Returns
+-- the rows and whether any were cut.
+function Recipes.rows(lists, query, nameOf, shortName, open, filter)
 	local rows = {}
 	local words = {}
 	for word in string.gmatch(lower(query or ""), "%S+") do
 		words[#words + 1] = word
 	end
-	if #words == 0 then
+	if #words == 0 and not Recipes.filtering(filter) then
 		open = open or {}
 		for _, item in ipairs(lists) do
 			local p = item.profession
@@ -250,6 +361,7 @@ function Recipes.rows(lists, query, nameOf, shortName, open)
 						index = #rows + 1,
 						text = Recipes.link(recipe.id, recipe.name),
 						who = "",
+						info = Recipes.info(p.details and p.details[recipe.id]),
 						recipe = true,
 						nested = true,
 					}
@@ -260,6 +372,7 @@ function Recipes.rows(lists, query, nameOf, shortName, open)
 	end
 	local byId, order = {}, {}
 	for _, item in ipairs(lists) do
+		local details = item.profession.details or {}
 		for _, id in ipairs(item.profession.recipes) do
 			local recipe = byId[id]
 			if not recipe then
@@ -267,15 +380,16 @@ function Recipes.rows(lists, query, nameOf, shortName, open)
 				byId[id] = recipe
 				order[#order + 1] = recipe
 			end
+			recipe.detail = recipe.detail or details[id]
 			recipe.knowers[#recipe.knowers + 1] = shortName(item.author)
 		end
 	end
 	local matched = {}
 	for _, recipe in ipairs(order) do
 		local haystack = lower((recipe.name or "") .. "\n" .. recipe.profession .. "\n" .. concat(recipe.knowers, "\n"))
-		local ok = true
+		local ok = Recipes.passes(recipe.detail, filter)
 		for _, word in ipairs(words) do
-			if not find(haystack, word, 1, true) then
+			if not ok or not find(haystack, word, 1, true) then
 				ok = false
 				break
 			end
@@ -292,6 +406,7 @@ function Recipes.rows(lists, query, nameOf, shortName, open)
 			index = i,
 			text = Recipes.link(recipe.id, recipe.name),
 			who = concat(recipe.knowers, ", "),
+			info = Recipes.info(recipe.detail),
 			recipe = true,
 		}
 	end

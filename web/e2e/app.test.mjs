@@ -137,6 +137,20 @@ test("join, read every tab, write, reload, work offline, and see game changes", 
   assert.equal(await page.locator(".recipe-row").count(), 0);
   await page.fill('[aria-label="Search recipes"]', "belt");
   await page.locator(".list-row", { hasText: "Handstitched Leather Belt" }).waitFor();
+  await page.locator(".list-row", { hasText: "Level 5 · Leather" }).waitFor();
+  await page.fill('[aria-label="Search recipes"]', "");
+  // The level and armour filters list matching recipes from every member.
+  await page.fill('[aria-label="Lowest level"]', "4");
+  await page.fill('[aria-label="Highest level"]', "7");
+  await page.click('.recipe-filters [role="checkbox"]:has-text("Leather")');
+  assert.equal(await page.locator(".list-row").count(), 2);
+  await page.click('.recipe-filters [role="checkbox"]:has-text("Plate")');
+  await page.click('.recipe-filters [role="checkbox"]:has-text("Leather")');
+  await page.getByText("No recipes match your search and filters.").waitFor();
+  await page.click('.recipe-filters [role="checkbox"]:has-text("Plate")');
+  await page.fill('[aria-label="Lowest level"]', "");
+  await page.fill('[aria-label="Highest level"]', "");
+  await page.locator(".profession-row", { hasText: "Leatherworking 47/75" }).waitFor();
   await page.click('.tab:has-text("Quests")');
   await page.click('.members-col button:has-text("Kaelthra")');
   await page.locator(".list-row", { hasText: "Attunement to the Core" }).waitFor();

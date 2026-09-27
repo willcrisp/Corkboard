@@ -6,7 +6,7 @@ import { checkbox, h, icon, ICONS, searchBox, tick } from "./dom.js";
 import { localLink, renderText } from "./links.js";
 import { compute as computeDigest } from "../core/digest.js";
 import {
-  decodeQuests, gear, GEAR_SHOWN, members, playerEntries, questLogs, recipeLists, VERDICT_LABELS,
+  ARMOUR, ARMOUR_NAMES, decodeQuests, gear, GEAR_SHOWN, members, playerEntries, questLogs, recipeLists, VERDICT_LABELS,
 } from "../model/formats.js";
 import { collectLinks, nameIndex, plain } from "../model/text.js";
 import { age, byline, byName, digestLabel, matches, plural, shortAge, shortName, tag } from "../model/view.js";
@@ -129,20 +129,64 @@ function gearTab(ctx) {
 
 const RECIPES_SHOWN = 200;
 
+function filtering(filter) {
+  return filter.min !== null || filter.max !== null || Object.keys(filter.armour).length > 0;
+}
+
+// Whether a recipe's details pass the level and armour filter, as Recipes.passes in game.
+function passes(detail, filter) {
+  if (!filtering(filter)) return true;
+  detail = detail || {};
+  if ((filter.min !== null || filter.max !== null) && detail.level === undefined) return false;
+  if ((filter.min !== null && detail.level < filter.min) || (filter.max !== null && detail.level > filter.max)) return false;
+  if (Object.keys(filter.armour).length && !(detail.armour && filter.armour[detail.armour])) return false;
+  return true;
+}
+
+// "Level 25 · Leather", or less.
+function recipeInfo(detail) {
+  if (!detail) return "";
+  return [detail.level !== undefined ? `Level ${detail.level}` : null, ARMOUR_NAMES[detail.armour]]
+    .filter(Boolean).join(" · ");
+}
+
 function professionsTab(ctx) {
   const { board, ui } = ctx;
   const query = ui.tabState.recipes || "";
+  const state = ui.tabState.recipeFilter || (ui.tabState.recipeFilter = { min: "", max: "", armour: {} });
+  const filter = {
+    min: state.min === "" ? null : Number(state.min),
+    max: state.max === "" ? null : Number(state.max),
+    armour: state.armour,
+  };
   const lists = recipeLists(board);
   const names = nameIndex(collectLinks(Object.values(board.notes).filter((n) => !n.deleted).map((n) => n.text)));
+  const nameOf = (id) => names.get(`spell:${id}`) || `Recipe ${id}`;
   const search = searchBox(query, "Search recipes", (value) => {
     ui.tabState.recipes = value;
     ctx.render();
   });
   search.querySelector("input").dataset.keep = "recipes-search";
+  const levelBox = (key, label) => {
+    const input = h("input", { class: "field level-box", type: "text", inputmode: "numeric", maxlength: "3",
+      "aria-label": label, value: state[key], autocomplete: "off", "data-keep": `recipes-${key}` });
+    input.addEventListener("input", () => {
+      state[key] = input.value.replace(/\D/g, "").replace(/^0+/, "");
+      ctx.render();
+    });
+    return input;
+  };
+  const filters = h("div", { class: "row-line wrap recipe-filters" },
+    h("span", { class: "heading" }, "Level"), levelBox("min", "Lowest level"), "–", levelBox("max", "Highest level"),
+    ARMOUR.map((armour) => checkbox(ARMOUR_NAMES[armour], !!state.armour[armour], (on) => {
+      if (on) state.armour[armour] = true;
+      else delete state.armour[armour];
+      ctx.render();
+    })));
   let body;
   if (!lists.length) {
     body = empty(null, "Nobody shares their recipes on this board yet. Members share them from the Professions tab in game.");
-  } else if (!/\S/.test(query)) {
+  } else if (!/\S/.test(query) && !filtering(filter)) {
     // A click on a profession opens or closes the recipes it holds.
     const open = ui.tabState.openRecipes || (ui.tabState.openRecipes = {});
     body = h("div", { class: "striped" }, lists.map((l) => {
@@ -159,33 +203,40 @@ function professionsTab(ctx) {
         ctx.render();
       });
       if (!open[key]) return row;
-      const recipes = p.recipes.map((id) => ({ id, name: names.get(`spell:${id}`) || `Recipe ${id}` }))
+      const recipes = p.recipes.map((id) => ({ id, name: nameOf(id), detail: p.details?.[id] }))
         .sort((a, b) => a.name.localeCompare(b.name));
       return [row, recipes.length
-        ? recipes.map((r) => h("div", { class: "list-row recipe-row" }, h("div", { class: "main" }, localLink("enchant", r.id, r.name, "#ffd000"))))
+        ? recipes.map((r) => h("div", { class: "list-row recipe-row" },
+          h("div", { class: "main" }, localLink("enchant", r.id, r.name, "#ffd000")),
+          h("div", { class: "side info" }, recipeInfo(r.detail))))
         : h("div", { class: "list-row recipe-row grey" }, "No recipes learned.")];
     }));
   } else {
     const found = new Map();
     for (const l of lists) {
       for (const id of l.profession.recipes) {
-        const name = names.get(`spell:${id}`) || `Recipe ${id}`;
-        if (!matches(`${name}\n${l.profession.name}\n${l.author}`, query)) continue;
-        const row = found.get(id) || { id, name, who: [] };
+        const name = nameOf(id);
+        const detail = l.profession.details?.[id];
+        const row = found.get(id) || { id, name, profession: l.profession.name, who: [], detail };
+        row.detail = row.detail || detail;
         row.who.push(l.author);
         found.set(id, row);
       }
     }
-    const rows = [...found.values()].sort((a, b) => a.name.localeCompare(b.name)).slice(0, RECIPES_SHOWN);
+    const matched = [...found.values()]
+      .filter((r) => passes(r.detail, filter) && matches(`${r.name}\n${r.profession}\n${r.who.join("\n")}`, query));
+    const rows = matched.sort((a, b) => a.name.localeCompare(b.name)).slice(0, RECIPES_SHOWN);
     body = rows.length
       ? h("div", { class: "striped" }, rows.map((r) => h("div", { class: "list-row" },
         h("div", { class: "main" }, localLink("enchant", r.id, r.name, "#ffd000")),
+        h("div", { class: "side info" }, recipeInfo(r.detail)),
         h("div", { class: "side" }, r.who.map(shortName).sort().join(", ")))))
-      : empty(null, "No recipes match.");
-    if (found.size > RECIPES_SHOWN) body = [h("div", { class: "grey small" }, `Showing ${RECIPES_SHOWN} of ${found.size}.`), body];
+      : empty(null, filtering(filter) ? "No recipes match your search and filters." : "No recipes match.");
+    if (matched.length > RECIPES_SHOWN) body = [h("div", { class: "grey small" }, `Showing ${RECIPES_SHOWN} of ${matched.length}.`), body];
   }
   return scroll("professions", h("div", { class: "section" },
     h("div", { class: "row-line wrap" }, h("div", { class: "grey small spacer" }, "Click a profession to see its recipes. Recipe names come from links seen on this board; the rest show by id."), search),
+    filters,
     body));
 }
 

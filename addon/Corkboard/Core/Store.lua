@@ -425,16 +425,18 @@ function Store:shareRecipes(boardId)
 	return changed
 end
 
--- A scan of an open profession window: profession = { id, name, skill, max }
--- and the learned recipe ids. Keeps it for this character, then shares it.
--- Returns how many notes changed, or nil and a reason.
-function Store:learned(profession, ids)
+-- A scan of an open profession window: profession = { id, name, skill, max },
+-- the learned recipe ids, and optionally the details of what each makes
+-- (recipe id -> { level, armour }, see Recipes.encode). Keeps it for this
+-- character, then shares it. Returns how many notes changed, or nil and a
+-- reason.
+function Store:learned(profession, ids, details)
 	local author, reason = me(self)
 	if not author then
 		return nil, reason
 	end
 	local text
-	text, reason = Recipes.encode(profession, ids)
+	text, reason = Recipes.encode(profession, ids, details)
 	if not text then
 		return nil, reason
 	end

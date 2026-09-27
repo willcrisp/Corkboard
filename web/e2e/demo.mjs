@@ -17,7 +17,8 @@ const EPIC = "a335ee";
 const RARE = "0070dd";
 const COMMON = "ffffff";
 
-function recipes(profession, skill, max, ids) {
+// An R2 recipe list (Core/Recipes.lua); details maps an id to "<level><armour letter>".
+function recipes(profession, skill, max, ids, details = {}) {
   ids = [...ids].sort((a, b) => a - b);
   let previous = 0;
   const gaps = ids.map((id) => {
@@ -25,7 +26,8 @@ function recipes(profession, skill, max, ids) {
     previous = id;
     return gap;
   });
-  return `R1;${profession.id};${skill};${max};${ids.length};${profession.name}\n${gaps.join(",")}`;
+  const text = `R2;${profession.id};${skill};${max};${ids.length};${profession.name}\n${gaps.join(",")}`;
+  return ids.some((id) => details[id]) ? `${text}\n${ids.map((id) => details[id] || "").join(",")}` : text;
 }
 
 export function demoBoard(now = Math.floor(Date.now() / 1000)) {
@@ -63,7 +65,8 @@ export function demoBoard(now = Math.floor(Date.now() / 1000)) {
   add(M, 2, mira, 30000, item(12930, "Briarwood Reed", RARE), 1, "gear");
   add(D, 2, dorn, 90000, item(13965, "Blackhand's Breadth", RARE), 1, "gear");
 
-  add(W, 3, will, 3 * 86400, recipes({ id: 165, name: "Leatherworking" }, 47, 75, [2108, 2152, 2149, 2153, 3753, 9058, 9059, 1263079]), 1, "recipes");
+  add(W, 3, will, 3 * 86400, recipes({ id: 165, name: "Leatherworking" }, 47, 75, [2108, 2152, 2149, 2153, 3753, 9058, 9059, 1263079],
+    { 2149: "3l", 3753: "5l", 9058: "7l", 9059: "8l", 2152: "1" }), 1, "recipes");
   add(B, 3, bob, 2 * 86400, recipes({ id: 171, name: "Alchemy" }, 280, 300, [17555, 17556, 17557, 17570, 17573, 17574, 17575, 17577]), 1, "recipes");
   add(W, 4, will, 3 * 3600, `Crafting |cffffd000|Henchant:3753|h[Leatherworking: Handstitched Leather Belt]|h|r for anyone levelling. Bob has |cffffd000|Henchant:17573|h[Alchemy: Greater Arcane Elixir]|h|r.`, 2);
 

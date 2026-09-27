@@ -74,9 +74,25 @@ test("player notes encode and decode like Core/Players.lua", () => {
 
 test("recipe lists and quest logs decode", () => {
   const text = "R1;165;47;75;3;Leatherworking\n1ki,2,1";
-  assert.deepEqual(decodeRecipes(text), { id: 165, name: "Leatherworking", skill: 47, max: 75, learned: 3, recipes: [2034, 2036, 2037] });
+  assert.deepEqual(decodeRecipes(text), { id: 165, name: "Leatherworking", skill: 47, max: 75, learned: 3, recipes: [2034, 2036, 2037], details: {} });
   assert.equal(decodeRecipes("R1;165;47;75;3;Leatherworking\n1ki,,2"), null);
   assert.deepEqual(decodeRecipes("R1;356;1;300;0;Fishing").recipes, []);
+  // R2 adds each recipe's level and armour type (the same text as recipes_spec.lua).
+  const r2 = decodeRecipes("R2;165;47;75;4;Leatherworking\n3,4,r2lc,1\n,25l,5,p");
+  assert.deepEqual(r2.recipes, [3, 7, 1263079, 1263080]);
+  assert.deepEqual(r2.details, { 7: { level: 25, armour: "leather" }, 1263079: { level: 5 }, 1263080: { armour: "plate" } });
+  for (const bad of [
+    "R3;165;47;75;1;Leatherworking\n1",
+    "R1;165;47;75;1;Leatherworking\n1\n5l",
+    "R2;165;47;75;2;Leatherworking\n1,1\n5l",
+    "R2;165;47;75;1;Leatherworking\n1\n5l,",
+    "R2;165;47;75;1;Leatherworking\n1\n05",
+    "R2;165;47;75;1;Leatherworking\n1\n1000",
+    "R2;165;47;75;1;Leatherworking\n1\nl5",
+    "R2;165;47;75;1;Leatherworking\n1\n5s",
+    "R2;165;47;75;1;Leatherworking\n1\n5\n",
+    "R1;165;47;75;1;Leatherworking\n1,2",
+  ]) assert.equal(decodeRecipes(bad), null, bad);
   assert.deepEqual(decodeQuests("7:5,46:10,x:1,166:18"), [{ id: 7, level: 5 }, { id: 46, level: 10 }, { id: 166, level: 18 }]);
 });
 

@@ -47,7 +47,7 @@ describe("Recipes.encode and decode", function()
 	it("round-trips a profession, sorted, without duplicates or bad ids", function()
 		local text, shown = Recipes.encode(LW, { SEWING + 5, SEWING, 7, SEWING, 0, -1, 1.5, "x", SEWING + 1 })
 		assert.are.equal(4, shown)
-		assert.are.equal("R1;165;47;75;4;Leatherworking\n7,r2lc,1,4", text)
+		assert.are.equal("R2;165;47;75;4;Leatherworking\n7,r2lc,1,4", text)
 		assert.is_true(Sanitise.text(text))
 		assert.are.same({
 			id = 165,
@@ -56,14 +56,53 @@ describe("Recipes.encode and decode", function()
 			max = 75,
 			learned = 4,
 			recipes = { 7, SEWING, SEWING + 1, SEWING + 5 },
+			details = {},
 		}, Recipes.decode(text))
+	end)
+
+	it("carries each recipe's level and armour type on a third line", function()
+		local details = {
+			[7] = { level = 25, armour = "leather" },
+			[SEWING] = { level = 5 },
+			[SEWING + 1] = { armour = "plate" },
+			[SEWING + 9] = { level = 60, armour = "mail" }, -- not in the list
+			[3] = { level = 0, armour = "wood" }, -- nothing valid: an empty token
+		}
+		local text, shown = Recipes.encode(LW, { SEWING + 1, 3, SEWING, 7 }, details)
+		assert.are.equal(4, shown)
+		assert.are.equal("R2;165;47;75;4;Leatherworking\n3,4,r2lc,1\n,25l,5,p", text)
+		assert.is_true(Sanitise.text(text))
+		assert.are.same({
+			[7] = { level = 25, armour = "leather" },
+			[SEWING] = { level = 5 },
+			[SEWING + 1] = { armour = "plate" },
+		}, Recipes.decode(text).details)
+	end)
+
+	it("still reads an R1 list, from before the details", function()
+		local entry = Recipes.decode("R1;165;47;75;2;Leatherworking\n7,1")
+		assert.are.same({ 7, 8 }, entry.recipes)
+		assert.are.same({}, entry.details)
+	end)
+
+	it("keeps the details within the note limit too", function()
+		local ids, details = {}, {}
+		for i = 1, 600 do
+			ids[i] = i * 1000
+			details[i * 1000] = { level = 55, armour = "cloth" }
+		end
+		local text, shown = Recipes.encode(LW, ids, details)
+		assert.is_true(#text <= Sanitise.MAX_TEXT, #text)
+		local entry = Recipes.decode(text)
+		assert.are.equal(shown, #entry.recipes)
+		assert.are.same({ level = 55, armour = "cloth" }, entry.details[shown * 1000])
 	end)
 
 	it("writes a profession with no recipes as its header alone", function()
 		local text, shown = Recipes.encode({ id = 185, name = "Cooking" }, {})
-		assert.are.equal("R1;185;0;0;0;Cooking", text)
+		assert.are.equal("R2;185;0;0;0;Cooking", text)
 		assert.are.equal(0, shown)
-		assert.are.same({ id = 185, name = "Cooking", skill = 0, max = 0, learned = 0, recipes = {} },
+		assert.are.same({ id = 185, name = "Cooking", skill = 0, max = 0, learned = 0, recipes = {}, details = {} },
 			Recipes.decode(text))
 	end)
 
@@ -110,7 +149,15 @@ describe("Recipes.encode and decode", function()
 			42,
 			"",
 			"Bring flasks",
-			"R2;165;47;75;1;Leatherworking\n1",
+			"R3;165;47;75;1;Leatherworking\n1",
+			"R1;165;47;75;1;Leatherworking\n1\n5l", -- details need R2
+			"R2;165;47;75;2;Leatherworking\n1,1\n5l", -- a token per recipe
+			"R2;165;47;75;1;Leatherworking\n1\n5l,",
+			"R2;165;47;75;1;Leatherworking\n1\n05",
+			"R2;165;47;75;1;Leatherworking\n1\n1000",
+			"R2;165;47;75;1;Leatherworking\n1\nl5",
+			"R2;165;47;75;1;Leatherworking\n1\n5s",
+			"R2;165;47;75;1;Leatherworking\n1\n5\n",
 			"R1;165;47;75;1;\n1",
 			"R1;165;47;75;1;Leather;working\n1",
 			"R1;0;47;75;1;Leatherworking\n1",
@@ -237,8 +284,9 @@ describe("Recipes.lists and rows", function()
 
 	it("finds recipes by name, with everyone who knows them", function()
 		local rows = Recipes.rows(Recipes.lists(cork), "BOOTS", nameOf, short)
-		assert.are.same({ { index = 1, text = Recipes.link(2, "Handstitched Boots"), who = "Bob, Will", recipe = true } },
-			rows)
+		assert.are.same({
+			{ index = 1, text = Recipes.link(2, "Handstitched Boots"), who = "Bob, Will", info = "", recipe = true },
+		}, rows)
 	end)
 
 	it("finds a member's or a profession's recipes, sorted by name", function()
@@ -250,6 +298,58 @@ describe("Recipes.lists and rows", function()
 		assert.are.same({ Recipes.link(4), Recipes.link(3, "Herb Baked Egg") },
 			{ byProfession[1].text, byProfession[2].text })
 		assert.are.same({}, (Recipes.rows(Recipes.lists(cork), "boots amy", nameOf, short)))
+	end)
+
+	describe("filters", function()
+		local gear = board({
+			note("a1b2c3d4-0001", ME, T0, (Recipes.encode(LW, { 1, 2, SEWING }, {
+				[1] = { level = 10 },
+				[2] = { level = 5, armour = "leather" },
+				[SEWING] = { level = 30, armour = "leather" },
+			}))),
+			note("b1b2c3d4-0001", "Bob-Realm", T0, (Recipes.encode({ id = 197, name = "Tailoring", skill = 1, max = 75 },
+				{ 5, 6 }, { [5] = { level = 12, armour = "cloth" } }))),
+		})
+		names[5], names[6] = "Linen Robe", "Bolt of Linen"
+		local function texts(query, filter)
+			local rows = Recipes.rows(Recipes.lists(gear), query, nameOf, short, nil, filter)
+			local out = {}
+			for i, row in ipairs(rows) do
+				out[i] = row.text .. " " .. row.info .. " " .. row.who
+			end
+			return out
+		end
+
+		it("lists every recipe in range, with its level and armour type", function()
+			assert.are.same({
+				Recipes.link(2, "Handstitched Boots") .. " Level 5 · Leather Will",
+				Recipes.link(1, "Light Armor Kit") .. " Level 10 Will",
+				Recipes.link(5, "Linen Robe") .. " Level 12 · Cloth Bob",
+			}, texts("", { min = 1, max = 20, armour = {} }))
+			-- One bound is enough; a recipe of unknown level is left out.
+			assert.are.same({ Recipes.link(SEWING, "Sewing Machine") .. " Level 30 · Leather Will" },
+				texts("", { min = 20, armour = {} }))
+		end)
+
+		it("keeps the armour types ticked, and works with a search", function()
+			assert.are.same({
+				Recipes.link(2, "Handstitched Boots") .. " Level 5 · Leather Will",
+				Recipes.link(5, "Linen Robe") .. " Level 12 · Cloth Bob",
+				Recipes.link(SEWING, "Sewing Machine") .. " Level 30 · Leather Will",
+			}, texts("", { armour = { cloth = true, leather = true } }))
+			assert.are.same({ Recipes.link(5, "Linen Robe") .. " Level 12 · Cloth Bob" },
+				texts("linen", { armour = { cloth = true } }))
+			assert.are.same({}, texts("", { max = 20, armour = { plate = true } }))
+		end)
+
+		it("shows details under an open profession, and nothing narrows with an empty filter", function()
+			local rows = Recipes.rows(Recipes.lists(gear), "", nameOf, short, { ["Bob-Realm\n197"] = true },
+				{ armour = {} })
+			assert.are.same({ "", "Level 12 · Cloth" }, { rows[3].info, rows[4].info })
+			assert.is_false(Recipes.filtering({ armour = {} }))
+			assert.is_false(Recipes.filtering(nil))
+			assert.is_true(Recipes.passes(nil, nil))
+		end)
 	end)
 
 	it("caps the rows at Recipes.SHOWN", function()
@@ -431,12 +531,12 @@ describe("the Professions tab in game", function()
 		return { professionID = 165, professionName = "Leatherworking", skillLevel = 47, maxSkillLevel = 75 }
 	end
 
-	local function party()
+	local function party(items)
 		local network = Client.Network.new()
 		local clients = {}
 		for i, name in ipairs({ "Will", "Bob" }) do
 			clients[i] = Client.new({ network = network, name = name, guid = "Player-4372-0000000" .. i,
-				spellNames = NAMES }):login()
+				spellNames = NAMES, items = i == 1 and items or nil }):login()
 		end
 		network:advance(10, clients)
 		local a, b = clients[1], clients[2]
@@ -494,6 +594,53 @@ describe("the Professions tab in game", function()
 		assert.are.equal("No recipes match your search.", ui.empty.text)
 		b.env.CorkboardFrameTab1:Click()
 		assert.is_false(ui.list:IsVisible())
+	end)
+
+	it("shares each recipe's level and armour type, and filters on them", function()
+		local network, clients, id = party({
+			[2307] = { classID = 4, subclassID = 2, equipLoc = "INVTYPE_FEET", minLevel = 3 },
+			[2308] = { classID = 4, subclassID = 1, equipLoc = "INVTYPE_CLOAK", minLevel = 10, uncached = true },
+		})
+		local a, b = clients[1], clients[2]
+		local recipes = copy(RECIPES)
+		recipes[2149].hyperlink = "|cffffffff|Hitem:2307::::::::|h[Handstitched Leather Boots]|h|r"
+		recipes[2150] = { learned = true, hyperlink = "|cffffffff|Hitem:2308::::::::|h[Handstitched Cloak]|h|r" }
+		NAMES[2150] = "Handstitched Cloak"
+		-- The sewing machine isn't an item: no details.
+		recipes[SEWING].hyperlink = "|cffffd000|Henchant:1263079|h[Sewing Machine]|h|r"
+		a:openProfession(lw(), recipes)
+		network:advance(1, clients)
+		local details = lists(b, id)[1].profession.details
+		assert.are.same({ [2149] = { level = 3, armour = "leather" } }, details)
+		-- The cloak's item loads, and the rescan shares its level; a cloak has no armour type.
+		network:advance(10, clients)
+		details = lists(b, id)[1].profession.details
+		assert.are.same({ [2149] = { level = 3, armour = "leather" }, [2150] = { level = 10 } }, details)
+
+		b:slash("/cork")
+		b.env.CorkboardFrameTab4:Click()
+		local ui = b.ns.Professions.Widgets()
+		ui.minLevel:SetText("1")
+		ui.maxLevel:SetText("20")
+		assert.are.equal(2, ui.list.count)
+		assert.are.equal(Recipes.link(2150, "Handstitched Cloak"), ui.list.elements[1].text.text)
+		assert.are.equal("Level 10", ui.list.elements[1].info.text)
+		assert.are.equal("Level 3 · Leather", ui.list.elements[2].info.text)
+		assert.are.equal("Will", ui.list.elements[2].who.text)
+		assert.are.equal("", ui.more.text)
+		ui.armour.leather:SetChecked(true)
+		ui.armour.leather:Click()
+		assert.are.equal(1, ui.list.count)
+		assert.are.equal(Recipes.link(2149, "Handstitched Leather Boots"), ui.list.elements[1].text.text)
+		ui.maxLevel:SetText("2")
+		assert.are.equal("No recipes match your search and filters.", ui.empty.text)
+		-- Cleared, the tab lists professions again.
+		ui.minLevel:SetText("")
+		ui.maxLevel:SetText("")
+		ui.armour.leather:SetChecked(false)
+		ui.armour.leather:Click()
+		assert.are.equal("Leatherworking 47/75 · 3 recipes", ui.list.elements[1].text.text)
+		NAMES[2150] = nil
 	end)
 
 	it("resends only when the window opens or a recipe is learned, not on each craft", function()
