@@ -9,6 +9,7 @@ local Sanitise = ns.Sanitise or require("Core.Sanitise")
 local Store = ns.Store or require("Core.Store")
 local Invite = ns.Invite or require("Core.Invite")
 local Util = ns.Util or require("Core.Util")
+local Players = ns.Players or require("Core.Players")
 
 local format, gsub, lower, match, sub = string.format, string.gsub, string.lower, string.match, string.sub
 local floor = math.floor
@@ -30,6 +31,7 @@ local USAGE = {
 	"  /cork cloud on|off, /cork guild on|off - the current board's sync options",
 	"  /cork quests [name] - who shares a quest log here, or one member's quests",
 	"  /cork quests on|off - share your quest log with the current board",
+	"  /cork player <name> - what your boards say about a player",
 	"  /cork sync - ask members for changes now; /cork debug - the sync panel",
 	"  /cork minimap - show or hide the minimap button",
 }
@@ -56,6 +58,8 @@ local REASONS = {
 	not_member = "They aren't a member of this board.",
 	remove_self = "You can't remove yourself. Delete the board from this account instead.",
 	option = "Unknown option.",
+	player_name = format("Character names are 1-%d bytes, with no ; or | in them.", Players.MAX_NAME),
+	verdict = "Pick Avoid or Good player.",
 }
 
 local function warn(text)
@@ -353,6 +357,52 @@ function handlers.quests(store, name)
 	for _, quest in ipairs(list) do
 		local level = quest.level > 0 and format(" %s(%d)|r", GREY, quest.level) or ""
 		out[#out + 1] = "  " .. quest.link .. level .. (quest.shared and who ~= me and " " .. SHARED or "")
+	end
+	return out
+end
+
+-- Player notes (§9.4) ------------------------------------------------------------
+
+-- The verdict in the game's red or green, for chat.
+Commands.VERDICT_CODES = { avoid = "|cffff2020", good = "|cff19ff19" }
+
+local function verdict(entry)
+	return Commands.VERDICT_CODES[entry.verdict] .. Players.LABELS[entry.verdict] .. "|r"
+end
+
+-- One entry as a chat line: "Avoid: why (Will on Raid, 2d ago)". The reason
+-- keeps its links, on one line.
+local function playerLine(entry, me, now)
+	local reason = gsub(entry.reason, "\n", " ")
+	return format("%s%s %s(%s on %s, %s)|r", verdict(entry), reason ~= "" and ": " .. reason or "", GREY,
+		shortName(entry.note.author, me), Store.name(entry.board), Commands.age(math.max(0, now - entry.note.rev)))
+end
+
+-- The chat warning when a player your boards say to avoid is in your group.
+-- `found` is Players.lookup's list, avoid entries first.
+function Commands.playerWarning(found, me, now)
+	local first = found[1]
+	local line = format("%s is in your group. %s", first.name, playerLine(first, me, now))
+	if #found > 1 then
+		line = line .. format(" %s(/cork player %s for %s more)|r", GREY, first.name, #found - 1)
+	end
+	return line
+end
+
+-- /cork player <name>: every entry about that player on any of your boards.
+function handlers.player(store, name)
+	if not Players.key(name) then
+		return { "Usage: /cork player <name>. Add players on the Players tab in /cork." }
+	end
+	local found = Players.lookup(store:boards(), name)
+	if #found == 0 then
+		return { format("None of your boards have a note about %s.", name) }
+	end
+	local me, now = store.env.me, store.env.now()
+	local out = { format("%s on your boards:", name) }
+	for _, entry in ipairs(found) do
+		local who = entry.name ~= name and format("%s ", entry.name) or ""
+		out[#out + 1] = "  " .. who .. playerLine(entry, me, now)
 	end
 	return out
 end

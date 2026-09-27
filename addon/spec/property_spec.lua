@@ -57,7 +57,7 @@ local function randomNote(rand)
 	}
 	if rand(3) == 1 then
 		-- so ties between kinds, and between a kind and a plain note, come up
-		local kinds = { "gear", "recipes", "quests" }
+		local kinds = { "gear", "recipes", "quests", "player" }
 		note.kind = kinds[rand(#kinds)]
 	end
 	if rand(20) == 1 then

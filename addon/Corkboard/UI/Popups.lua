@@ -93,12 +93,13 @@ StaticPopupDialogs.CORKBOARD_DELETE_BOARD = {
 }
 
 StaticPopupDialogs.CORKBOARD_DELETE_NOTE = {
-	text = "Delete this note?",
+	text = "Delete this %s?",
 	button1 = DELETE or "Delete",
 	button2 = CANCEL or "Cancel",
 	OnAccept = function(_, data)
 		if done(store():deleteNote(data.boardId, data.noteId)) then
 			ns.Editor:Close()
+			ns.PlayerEditor:Close()
 		end
 	end,
 	timeout = 0,
@@ -205,5 +206,10 @@ function Popups.DeleteBoard(boardId)
 end
 
 function Popups.DeleteNote(boardId, noteId)
-	StaticPopup_Show("CORKBOARD_DELETE_NOTE", nil, nil, { boardId = boardId, noteId = noteId })
+	StaticPopup_Show("CORKBOARD_DELETE_NOTE", "note", nil, { boardId = boardId, noteId = noteId })
+end
+
+-- An entry on the Players tab (§9.4).
+function Popups.DeletePlayer(boardId, noteId)
+	StaticPopup_Show("CORKBOARD_DELETE_NOTE", "player note", nil, { boardId = boardId, noteId = noteId })
 end

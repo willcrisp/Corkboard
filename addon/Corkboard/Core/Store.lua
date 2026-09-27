@@ -16,6 +16,7 @@ local Util = ns.Util or require("Core.Util")
 local Merge = ns.Merge or require("Core.Merge")
 local Invite = ns.Invite or require("Core.Invite")
 local Recipes = ns.Recipes or require("Core.Recipes")
+local Players = ns.Players or require("Core.Players")
 
 local format, gmatch, lower, match, sub = string.format, string.gmatch, string.lower, string.match, string.sub
 local floor = math.floor
@@ -617,6 +618,52 @@ function Store:questLog(quests)
 		end
 	end
 	return changed, logChanged
+end
+
+-- Player notes (§9.4) -----------------------------------------------------------
+
+-- Adds an entry to the board's player notes: a character to avoid or a good
+-- player, and why. Returns the note, or nil and a reason (Players.encode's,
+-- or the store's).
+function Store:addPlayer(boardId, name, verdict, reason)
+	local board, author = noteChange(self, boardId)
+	if not board then
+		return nil, author
+	end
+	local text, why = Players.encode(name, verdict, reason)
+	if not text then
+		return nil, why
+	end
+	local id
+	id, why = Store.nextNoteId(board, self.env.prefix)
+	if not id then
+		return nil, why
+	end
+	return self:noted(board, Merge.createNote(board, { id = id, author = author, text = text, kind = Players.KIND },
+		self.env.now()))
+end
+
+-- Changes an entry. Any member may, as with notes. An unchanged entry writes
+-- nothing, so it isn't resent. Returns the note, or nil and a reason.
+function Store:editPlayer(boardId, noteId, name, verdict, reason)
+	local board, editor = noteChange(self, boardId)
+	if not board then
+		return nil, editor
+	end
+	local note = board.notes[noteId]
+	if not note or note.kind ~= Players.KIND then
+		return nil, "missing"
+	elseif note.deleted then
+		return nil, "deleted"
+	end
+	local text, why = Players.encode(name, verdict, reason)
+	if not text then
+		return nil, why
+	end
+	if text == note.text then
+		return note
+	end
+	return self:noted(board, Merge.editNote(board, noteId, { text = text }, editor, self.env.now()))
 end
 
 -- Sharing and members (§4.1, §9, §10) -------------------------------------------

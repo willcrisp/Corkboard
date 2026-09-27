@@ -408,9 +408,9 @@ local function build()
 	ui.count = frame:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
 	ui.count:SetPoint("BOTTOMRIGHT", -16, 10)
 
-	-- Bottom tabs: Notes, Members, Gear, Professions and Quests (docs/ui-style.md).
+	-- Bottom tabs: Notes, Members, Gear, Professions, Quests and Players (docs/ui-style.md).
 	ui.tabs = {}
-	for i, label in ipairs({ "Notes", "Members", "Gear", "Professions", "Quests" }) do
+	for i, label in ipairs({ "Notes", "Members", "Gear", "Professions", "Quests", "Players" }) do
 		local ok, tab = pcall(CreateFrame, "Button", "CorkboardFrameTab" .. i, frame, "PanelTabButtonTemplate")
 		if not ok then
 			tab = CreateFrame("Button", "CorkboardFrameTab" .. i, frame, "CharacterFrameTabButtonTemplate")
@@ -437,6 +437,7 @@ local function build()
 	ui.gear = ns.Gear:Build(notes)
 	ui.professions = ns.Professions:Build(notes)
 	ui.quests = ns.Quests:Build(notes)
+	ui.players = ns.PlayersTab:Build(notes)
 	ui.tab = 1
 
 	frame:SetScript("OnShow", function()
@@ -452,6 +453,7 @@ local function build()
 			ui.ticker = nil
 		end
 		ns.Editor:Close()
+		ns.PlayerEditor:Close()
 	end)
 end
 
@@ -491,10 +493,9 @@ function Main:Refresh()
 	ui.newNote:SetEnabled(current ~= nil)
 	ui.rename:SetEnabled(current ~= nil)
 	ui.delete:SetEnabled(current ~= nil)
-	ui.tabs[2]:SetEnabled(current ~= nil)
-	ui.tabs[3]:SetEnabled(current ~= nil)
-	ui.tabs[4]:SetEnabled(current ~= nil)
-	ui.tabs[5]:SetEnabled(current ~= nil)
+	for i = 2, #ui.tabs do
+		ui.tabs[i]:SetEnabled(current ~= nil)
+	end
 
 	local all = current and Store.notes(current) or {}
 	local shown = View.filter(all, ui.search:GetText())
@@ -526,12 +527,14 @@ function Main:Refresh()
 		ns.Professions:Refresh(current)
 	elseif ui.tab == 5 then
 		ns.Quests:Refresh(current)
+	elseif ui.tab == 6 then
+		ns.PlayersTab:Refresh(current)
 	end
 end
 
 -- Tab 1 is the notes; tab 2 the members, invite and sync options; tab 3 the
 -- gear feed; tab 4 the members' professions and recipes; tab 5 their quest
--- logs.
+-- logs; tab 6 the board's player notes (avoid and good players).
 function Main:ShowTab(index)
 	if index ~= 1 and not store():current() then
 		index = 1
@@ -549,6 +552,7 @@ function Main:ShowTab(index)
 	ui.gear:SetShown(index == 3)
 	ui.professions:SetShown(index == 4)
 	ui.quests:SetShown(index == 5)
+	ui.players:SetShown(index == 6)
 	if index ~= 1 then
 		ui.alert:Hide()
 	end

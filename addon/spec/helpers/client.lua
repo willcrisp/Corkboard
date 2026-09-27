@@ -438,6 +438,10 @@ function Client.new(options)
 		quests = options.quests or {},
 		questCache = {}, -- quest id -> title, for quests loaded from QUEST_DB
 		questRequests = {},
+		-- Other players' units: token ("target", "party1", "raid3") -> { name,
+		-- realm, guid, player }. name may carry a Forever surname; realm is ""
+		-- or nil for our own realm; player = false makes it an NPC.
+		units = options.units or {},
 	}, Client)
 	self.env = self:makeEnv()
 	return self
@@ -670,6 +674,26 @@ function Client:makeEnv()
 		assert(kind == "item" or kind == "spell" or kind == "quest" or kind == "enchant", "Unknown link type")
 		tooltip.link = link
 	end
+	-- Unit tooltips: Client:hoverUnit shows one, running the post-calls
+	-- registered with TooltipDataProcessor. Added lines are kept in
+	-- GameTooltip.lines as { left, right, r, g, b, wrap }.
+	env.GameTooltip.lines = {}
+	function env.GameTooltip.GetUnit(tooltip)
+		local unit = tooltip.unit
+		return unit and env.UnitName(unit), unit
+	end
+	function env.GameTooltip.AddLine(tooltip, text, r, g, b, wrap)
+		tooltip.lines[#tooltip.lines + 1] = { left = text, r = r, g = g, b = b, wrap = wrap }
+	end
+	function env.GameTooltip.AddDoubleLine(tooltip, left, right, r, g, b)
+		tooltip.lines[#tooltip.lines + 1] = { left = left, right = right, r = r, g = g, b = b }
+	end
+	client.tooltipCalls = {}
+	env.TooltipDataProcessor = {
+		AddTooltipPostCall = function(dataType, fn)
+			client.tooltipCalls[#client.tooltipCalls + 1] = { dataType = dataType, fn = fn }
+		end,
+	}
 	env.SetItemRef = function(link, text, button)
 		client.itemRefs[#client.itemRefs + 1] = { link = link, text = text, button = button }
 	end
@@ -849,8 +873,51 @@ function Client:makeEnv()
 	-- GetPlayerInfoByGUID has the whole name and an empty realm for our own.
 	local first, surname = client.name:match("^(%S+)%s*(.*)$")
 	surname = surname ~= "" and surname or nil
-	env.UnitName = function()
+	local function other(unit)
+		return unit ~= nil and unit ~= "player" and client.units[unit] or nil
+	end
+	local function unitNames(name)
+		local given, rest = name:match("^(%S+)%s*(.*)$")
+		return given, rest ~= "" and rest or nil
+	end
+	env.UnitName = function(unit)
+		local u = other(unit)
+		if u then
+			local given, rest = unitNames(u.name)
+			return given, (u.realm ~= "" and u.realm) or rest
+		end
 		return first, surname
+	end
+	env.UnitExists = function(unit)
+		return unit == "player" or other(unit) ~= nil
+	end
+	env.UnitIsPlayer = function(unit)
+		local u = other(unit)
+		return unit == "player" or (u ~= nil and u.player ~= false)
+	end
+	-- Groups: party1-4 or raid1-40 among the units.
+	local function groupCount(kind)
+		local n = 0
+		for unit in pairs(client.units) do
+			if unit:match("^" .. kind .. "%d+$") then
+				n = n + 1
+			end
+		end
+		return n
+	end
+	env.IsInRaid = function()
+		return groupCount("raid") > 0
+	end
+	env.IsInGroup = function()
+		return groupCount("raid") + groupCount("party") > 0
+	end
+	env.GetNumGroupMembers = function()
+		local raid = groupCount("raid")
+		if raid > 0 then
+			return raid
+		end
+		local party = groupCount("party")
+		return party > 0 and party + 1 or 0
 	end
 	env.UnitFullName = function()
 		return first, surname or env.GetNormalizedRealmName()
@@ -859,8 +926,17 @@ function Client:makeEnv()
 		if guid == client.guid then
 			return "Mage", client.class, "Human", "Human", 2, client.name, ""
 		end
+		for _, u in pairs(client.units) do
+			if u.guid and u.guid == guid and u.player ~= false then
+				return "Warrior", "WARRIOR", "Orc", "Orc", 2, u.name, u.realm or ""
+			end
+		end
 	end
-	env.UnitGUID = function()
+	env.UnitGUID = function(unit)
+		local u = other(unit)
+		if u then
+			return u.guid
+		end
 		return client.guid
 	end
 	env.UnitClass = function()
@@ -875,9 +951,9 @@ function Client:makeEnv()
 	env.Ambiguate = function(name)
 		return name
 	end
-	env.Enum = { SendAddonMessageResult = { Success = 0, InvalidPrefix = 1, InvalidMessage = 2,
-		AddonMessageThrottle = 3, InvalidChatType = 4, NotInGroup = 5, TargetRequired = 6, InvalidChannel = 7,
-		ChannelThrottle = 8, GeneralError = 9, NotInGuild = 10, AddOnMessageLockdown = 11 } }
+	env.Enum = { TooltipDataType = { Unit = 2 }, SendAddonMessageResult = { Success = 0, InvalidPrefix = 1,
+		InvalidMessage = 2, AddonMessageThrottle = 3, InvalidChatType = 4, NotInGroup = 5, TargetRequired = 6,
+		InvalidChannel = 7, ChannelThrottle = 8, GeneralError = 9, NotInGuild = 10, AddOnMessageLockdown = 11 } }
 	env.C_ChatInfo = {
 		RegisterAddonMessagePrefix = function(prefix)
 			client.prefixes[prefix] = true
@@ -1160,6 +1236,7 @@ function Client:reload()
 		equipped = self.equipped,
 		spellNames = self.spellNames,
 		quests = self.quests,
+		units = self.units,
 	})
 	-- The server keeps channel membership across a /reload.
 	fresh.myChannels = self.myChannels
@@ -1234,6 +1311,35 @@ end
 function Client:setQuests(quests)
 	self.quests = quests or self.quests
 	self.fire("QUEST_LOG_UPDATE")
+	return self:check()
+end
+
+-- Hovers a unit: shows its tooltip and runs the unit post-calls. Returns the
+-- lines added, as GameTooltip.lines.
+function Client:hoverUnit(unit)
+	local tooltip = self.env.GameTooltip
+	tooltip.unit, tooltip.lines = unit, {}
+	for _, call in ipairs(self.tooltipCalls) do
+		if call.dataType == self.env.Enum.TooltipDataType.Unit then
+			call.fn(tooltip, { type = call.dataType })
+		end
+	end
+	self:check()
+	return tooltip.lines
+end
+
+-- Sets the player's group: units as in Client.new (party1-4 or raid1-40), or
+-- nil to leave it. Fires GROUP_ROSTER_UPDATE, as the client does.
+function Client:setGroup(units)
+	for unit in pairs(self.units) do
+		if unit:match("^party%d+$") or unit:match("^raid%d+$") then
+			self.units[unit] = nil
+		end
+	end
+	for unit, u in pairs(units or {}) do
+		self.units[unit] = u
+	end
+	self.fire("GROUP_ROSTER_UPDATE")
 	return self:check()
 end
 

@@ -18,9 +18,10 @@ LINK_TYPES = frozenset({
     "enchant", "trade",  # a profession recipe and a whole profession (§9.2)
 })
 # Note kinds (§4.2): no kind is an ordinary note, "gear" a gear-feed entry (§9.1),
-# "recipes" a character's recipe list for one profession (§9.2) and "quests" a
-# character's quest log (§9.3).
-KINDS = frozenset({"gear", "recipes", "quests"})
+# "recipes" a character's recipe list for one profession (§9.2), "quests" a
+# character's quest log (§9.3) and "player" an entry on the board's avoid /
+# good-player list (§9.4).
+KINDS = frozenset({"gear", "recipes", "quests", "player"})
 
 _CONTROL = re.compile(r"[\x00-\x1f\x7f]")
 _TEXT_CONTROL = re.compile(r"[\x00-\x09\x0b-\x1f\x7f]")

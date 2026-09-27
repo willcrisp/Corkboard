@@ -26,6 +26,7 @@ Core\Digest.lua
 # Store, /cork commands, window logic and the sync engine (pure Lua)
 Core\Invite.lua
 Core\Recipes.lua
+Core\Players.lua
 Core\Store.lua
 Core\Commands.lua
 Core\View.lua
@@ -44,6 +45,8 @@ UI\Members.lua
 UI\Gear.lua
 UI\Professions.lua
 UI\Quests.lua
+UI\Players.lua
 UI\Editor.lua
+UI\PlayerEditor.lua
 UI\Popups.lua
 UI\Debug.lua

@@ -81,6 +81,12 @@ def test_quest_logs_keep_their_kind(api, board):
     assert sync(api, {"cursor": 0}).json()["notes"] == [log]
 
 
+def test_player_notes_keep_their_kind(api, board):
+    entry = note(1, text="P1;avoid;Gankalot\nNinja'd the chest") | {"kind": "player"}
+    assert sync(api, {"notes": [entry]}).json()["rejected"] == []
+    assert sync(api, {"cursor": 0}).json()["notes"] == [entry]
+
+
 def test_a_database_from_before_note_kinds_is_upgraded(make_client, tmp_path):
     old = sqlite3.connect(tmp_path / "cork.db")
     old.executescript("""

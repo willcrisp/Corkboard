@@ -29,7 +29,7 @@ def notes(draw):
         "deleted": deleted,
     }
     if draw(st.booleans()):  # ties between kinds, and between a kind and a plain note, come up
-        note["kind"] = draw(st.sampled_from(["gear", "recipes", "quests"]))
+        note["kind"] = draw(st.sampled_from(["gear", "recipes", "quests", "player"]))
     return note
 
 

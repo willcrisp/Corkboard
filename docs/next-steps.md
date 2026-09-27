@@ -2,7 +2,7 @@
 
 The handoff between sessions. Read this after `CLAUDE.md`. Before you finish, update it: move what you finished into "Where things stand" and rewrite "Next steps".
 
-Last updated: 2026-09-26 (ninth session that day: quest logs and the Quests tab, merged after the Professions tab).
+Last updated: 2026-09-27 (tenth session: player notes, an avoid / good-player list per board, on a Players tab).
 
 ## Where things stand
 
@@ -12,8 +12,8 @@ On 2026-09-26 Will asked for the remaining work to be built on best assumptions,
 
 | Part | Where | State |
 |---|---|---|
-| Spike tooling 01–02 | `spikes/CorkSpike/` | Dropped by Will; kept until removed (next step 6). |
-| Spike tooling 03–06 | `spikes/CorkSpike2/`, `spikes/install_probe.py` | Dropped by Will; kept until removed (next step 6). |
+| Spike tooling 01–02 | `spikes/CorkSpike/` | Dropped by Will; kept until removed (next step 7). |
+| Spike tooling 03–06 | `spikes/CorkSpike2/`, `spikes/install_probe.py` | Dropped by Will; kept until removed (next step 7). |
 | Phase 1: local boards | `addon/Corkboard/` | Built last session; not run in game. |
 | Phase 2: invites, channels, live PUTs | `Core/Invite.lua`, `Core/Wire.lua`, `Net.lua`, `UI/Members.lua` | Built; passes between fake clients running the real addon. |
 | Phase 3: anti-entropy, debug panel | `Core/Sync.lua`, `UI/Debug.lua` | Built; passes in the simulator (`addon/spec/helpers/sim.lua`). |
@@ -23,10 +23,11 @@ On 2026-09-26 Will asked for the remaining work to be built on best assumptions,
 | Phase 5: companion | `companion/`, `addon/Corkboard_Cloud/` | Passes pytest, including the real addon loading the `Data.lua` it writes. |
 | Phase 5: hosting | `infra/` | Compose, Caddyfile and `infra/README.md`; not deployed. |
 | Professions tab (§9.2) | `Core/Recipes.lua`, `Store:learned`/`shareRecipes`, `UI/Professions.lua`, the scan in `Corkboard.lua` | Built; passes between fake clients. Not run in game. |
+| Player notes (§9.4) | `Core/Players.lua`, `Store:addPlayer`/`editPlayer`, `UI/Players.lua`, `UI/PlayerEditor.lua`, the tooltip and group check in `Corkboard.lua` | Built; passes between fake clients. Not run in game. |
 | Phase 6: packaging | `tools/package_addon.py`, `.pkgmeta`, `.github/workflows/release.yml`, `companion/corkboard-companion.spec`, `companion/corkboard_companion/gui.py` | Zip builder tested; the GUI, PyInstaller build and store uploads are untested. |
 | CI | `.github/workflows/ci.yml`, `api-image.yml` | Green on the branch: luacheck, busted, coverage gate (≥ 95%), spike smoke tests, pytest for corkcore, API, companion and packaging, and a check that the fuzz corpus is current. |
 
-Tests: `busted` runs 651 (Core coverage 98.5%, merge core 100%; the coverage run skips `#slow` specs); pytest runs 142 (corkcore), 21 (API), 32 (companion) and 5 (packaging, `tools/tests`).
+Tests: `busted` runs 681 (Core coverage 98.5%, merge core 100%; the coverage run skips `#slow` specs); pytest runs 142 (corkcore), 22 (API), 32 (companion) and 5 (packaging, `tools/tests`).
 
 ### First in-game run (fourth session)
 
@@ -79,6 +80,16 @@ Will asked for a way to answer "what quests are you on?", with a mark on quests 
 - **UI:** a fifth tab, **Quests** (`UI/Quests.lua`): members sharing a log on the left, the chosen member's quests on the right by level, with a ready-check tick on quests you're on too, "online now" or "as of 2h ago", and an "Only quests I'm on too" filter. Clicking a member on the Members tab opens their log. `/cork quests [name]` and `/cork quests on|off` do the same from chat.
 - **Not seen in game yet:** the quest log API names (`C_QuestLog.GetInfo` and friends) are assumptions, recorded as such in design.md §2. The check is next step 4 below. Tests: `addon/spec/quests_spec.lua` (store rules, the view, the command, two fake clients with quest logs, title loading, the tab, the Members click and `/reload`).
 
+### Tenth session: player notes (design.md §9.4)
+
+Will asked for a blacklist / whitelist area on a board: put in a character's name, a short explanation of what they did, and whether to avoid them or they're a good player.
+
+- **Records.** An entry is a Note with `kind = "player"` and text `P1;<avoid|good>;<name>` then the reason on the following lines (links allowed), so it rides every sync path unchanged. The sanitiser accepts `"player"` in Lua and Python; new sanitise vectors (including a texture in the reason still failing), a merge vector ("quests" beats "player" on an exact tie), `"player"` in both property generators, and an API round trip. The fuzz corpus is unchanged.
+- **Core** (`Core/Players.lua`, pure): encode/decode, name tidying, matching on the first name (Forever surnames and realms vary between units, chat and typing), `entries`, `index` and `lookup`. `Store:addPlayer` and `editPlayer` (an unchanged save writes nothing); delete is `Store:deleteNote`. `/cork player <name>` lists what every board says about someone.
+- **UI:** a sixth tab, **Players** (`UI/Players.lua`): Avoid / Good players filters, search, Add Player, and rows with a ready-check cross or tick, the name and verdict in the game's red or green, author and age, the reason with live links, and Edit / Delete on hover. The editor (`UI/PlayerEditor.lua`) has Character (with a Target button, pre-filled from the target), Avoid or Good player, and Why.
+- **In the world** (`Corkboard.lua`): hovering a player adds the boards' verdicts to their tooltip (`TooltipDataProcessor`, falling back to `OnTooltipSetUnit`), and an avoided player joining your group prints one warning per session. Both use every board on the account and skip secret names. These APIs are assumptions until seen in game (new §2 row); the check is next step 5.
+- **Tests:** `addon/spec/players_spec.lua` (codec, store rules, lookup, the view, the command, and two fake clients adding, syncing, editing and deleting from the tab, the tooltip, the group warning and `/reload`). The fake client gained other units, groups, `GROUP_ROSTER_UPDATE`, unit tooltips and `TooltipDataProcessor`.
+
 ### Spec changes (earlier sessions)
 
 Each is written into `docs/design.md` with its reason:
@@ -111,7 +122,8 @@ On 2026-09-26, after the first in-game smoke test, Will said he's happy with whe
 
 Not open questions, just code paths the checklists below run in the client for the first time. If one misbehaves, the fix lives where it says.
 
-- Window, templates and popups: `UI/Main.lua`, `UI/Popups.lua`, `UI/Members.lua`, `UI/Debug.lua`, `UI/Quests.lua`.
+- Window, templates and popups: `UI/Main.lua`, `UI/Popups.lua`, `UI/Members.lua`, `UI/Debug.lua`, `UI/Quests.lua`, `UI/Players.lua`, `UI/PlayerEditor.lua`.
+- The unit tooltip hook, other players' names and the group roster: `WatchPlayers`, `UnitPlayerName` and `CheckGroup` in `Corkboard.lua`.
 - The quest log API and quest title loading: `readQuestLog` and `Corkboard:QuestTitle` in `Corkboard.lua`.
 - Hidden password channels (join, hiding from chat frames, the wrong-password notice, sender names): `Net.lua`.
 - Link insertion and link round trips: `UI/Links.lua`, `Core/Sanitise.lua`.
@@ -157,7 +169,14 @@ Do these in order unless Will says otherwise.
    5. A unticks "Share my quest log with this board": A disappears from B's list. A ticks it again: A is back.
    6. On B, `/cork quests` and `/cork quests <A's first name>` in chat. On the Members tab, clicking A opens A's log.
    7. `/reload` on A: nothing changes on B, and A's list isn't briefly empty. Send any Lua errors and a screenshot of the tab.
-5. **Will: the Phase 2–4 check.** Needs two clients: two accounts, or a friend.
+5. **Will: the player notes check.** Two characters on one board, plus a third player (anyone) to target:
+   1. On A, target the third player, open `/cork`, **Players** tab, **Add Player**: the Character box already holds their name. Pick **Avoid**, write a reason with a shift-clicked item, Save. The row shows a red cross, the name, "Avoid" in red, the reason with a working item link, and "You · now" or your name.
+   2. On B within a few seconds: the same row. Hover it: Edit and Delete appear. Edit it to **Good player**; A's row turns green.
+   3. Mouse over the third player (on A and B): their tooltip has a "Corkboard: Good player" line with "author · board" and the reason. Change it back to Avoid: the tooltip follows. If no line shows, send `/dump TooltipDataProcessor ~= nil` and `/dump GetPlayerInfoByGUID(UnitGUID("target"))` with them targeted.
+   4. Invite the third player to a party on B: chat prints "… is in your group. Avoid: …" once. Leave and re-invite: it prints again.
+   5. `/cork player <their name>`, then the same with a different case, and with their realm added: the same lines each time.
+   6. Untick **Good players**, then search a word from the reason; Delete the entry (the popup reads "Delete this player note?") and it goes on both. `/reload` on A keeps everything. Send Lua errors and a screenshot of the tab and the tooltip.
+6. **Will: the Phase 2–4 check.** Needs two clients: two accounts, or a friend.
    1. On A: open the **Members** tab, click the invite box, Ctrl+C, and send it to B out of game. On B: **Join**, paste. Within about 15 s B shows the board's name and A's notes, and once the catch-up finishes the status line reads "Synced with A …".
    2. On both: nothing in any chat tab mentions a `Cork…` channel, even after `/reload`.
    3. A edits a note: B shows it within 5 s. `/cork debug` on both: the gate is Open, and the log shows the PUT.
@@ -165,9 +184,9 @@ Do these in order unless Will says otherwise.
    5. B logs out. A makes 20 notes, edits 5 and deletes 3. B logs in: within 60 s both debug panels show the same digest, and B's log shows IDX for only some buckets.
    6. A removes B in the Members tab: B stops getting A's edits. A sends the new invite, B joins with it, and syncing resumes.
    7. Send Lua errors and screenshots of the window, the Members tab, the debug panel and the status line.
-6. **Apply the results.** Fix whatever the checks turn up and tick the §12 items that have their evidence. Since the spikes are dropped, `spikes/`, its CI smoke steps and `Corkboard.Sanitise` (kept only for CorkSpike2) can go in their own small change. If the 1.60 client has `C_EncodingUtil`, it could replace LibSerialize and LibDeflate.
-7. **Deploy the API:** on Will's box, `$env:ARCANE_API_KEY=…; python tools/arcane_deploy.py create --domain corkboard.<domain>` (`infra/README.md`, full steps in `docs/arcane-next-steps.md`). Then the Phase 5 checks: health over TLS from outside the tailnet, the dashboard unreachable, and a restore drill. Then install the companion (`pip install ./shared/python ./companion`, `corkboard-companion setup --api https://corkboard.<domain>`) and run the "B edits and logs out, A's companion syncs, A reloads" check for real.
-8. **Phase 6 for real:** CurseForge and Wago IDs and tokens, a signing certificate, and a Windows/macOS test of the companion's window and PyInstaller build.
+7. **Apply the results.** Fix whatever the checks turn up and tick the §12 items that have their evidence. Since the spikes are dropped, `spikes/`, its CI smoke steps and `Corkboard.Sanitise` (kept only for CorkSpike2) can go in their own small change. If the 1.60 client has `C_EncodingUtil`, it could replace LibSerialize and LibDeflate.
+8. **Deploy the API:** on Will's box, `$env:ARCANE_API_KEY=…; python tools/arcane_deploy.py create --domain corkboard.<domain>` (`infra/README.md`, full steps in `docs/arcane-next-steps.md`). Then the Phase 5 checks: health over TLS from outside the tailnet, the dashboard unreachable, and a restore drill. Then install the companion (`pip install ./shared/python ./companion`, `corkboard-companion setup --api https://corkboard.<domain>`) and run the "B edits and logs out, A's companion syncs, A reloads" check for real.
+9. **Phase 6 for real:** CurseForge and Wago IDs and tokens, a signing certificate, and a Windows/macOS test of the companion's window and PyInstaller build.
 
 ## Open issues
 

@@ -358,6 +358,26 @@
       }
     },
     {
+      "name": "exact tie: quests beats player (kinds compare byte-wise)",
+      "board": {
+        "clock": 1790000100,
+        "notes": [
+          { "id": "a1b2c3d4-0007", "author": "Will-Realm", "created": 1790000000, "rev": 1790000100, "editor": "Bob-Realm", "text": "P1;avoid;Gankalot", "color": 1, "deleted": false, "kind": "player" }
+        ]
+      },
+      "apply": [
+        { "id": "a1b2c3d4-0007", "author": "Will-Realm", "created": 1790000000, "rev": 1790000100, "editor": "Bob-Realm", "text": "P1;avoid;Gankalot", "color": 1, "deleted": false, "kind": "quests" },
+        { "id": "a1b2c3d4-0007", "author": "Will-Realm", "created": 1790000000, "rev": 1790000100, "editor": "Bob-Realm", "text": "P1;avoid;Gankalot", "color": 1, "deleted": false, "kind": "player" }
+      ],
+      "results": ["stored", "stale"],
+      "expect": {
+        "clock": 1790000100,
+        "notes": [
+          { "id": "a1b2c3d4-0007", "author": "Will-Realm", "created": 1790000000, "rev": 1790000100, "editor": "Bob-Realm", "text": "P1;avoid;Gankalot", "color": 1, "deleted": false, "kind": "quests" }
+        ]
+      }
+    },
+    {
       "name": "a newer quest log replaces the old one, whatever the order",
       "board": {
         "clock": 1790000100,

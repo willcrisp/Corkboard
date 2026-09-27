@@ -40,12 +40,13 @@ Forever has vanilla-era content but a **modern (Mainline-style) addon API**, and
 | Fact | Design consequence |
 |---|---|
 | The TOC interface is `16001` (check with `/dump (select(4, GetBuildInfo()))`). The client uses the modern `C_*` namespaces. | Write against the modern API (`C_ChatInfo.*`, etc.), not the 1.12 or Classic Era API. |
-| Combat and chat values can be **secret** in restricted contexts. `SendAddonMessage` refuses secret arguments. | Never send data derived from unit or combat APIs. Drop any received payload where `issecretvalue(msg)` is true. Corkboard sends user-typed text, plus the item links of the gear feed (§9.1), which come from the inventory API, and the quest ids and levels of each member's quest log (§9.3), which come from the quest log API. Both are checked with `issecretvalue` before use. |
+| Combat and chat values can be **secret** in restricted contexts. `SendAddonMessage` refuses secret arguments. | Never send data derived from unit or combat APIs. Drop any received payload where `issecretvalue(msg)` is true. Corkboard sends user-typed text, plus the item links of the gear feed (§9.1), which come from the inventory API, the quest ids and levels of each member's quest log (§9.3), which come from the quest log API, and a player's name that the Players editor's **Target** button fills in (§9.4), which comes from the unit API. Each is checked with `issecretvalue` before use, and a secret one is left out. |
 | **Addons can't read the combat log.** `CombatLogGetCurrentEventInfo` is nil, and registering `COMBAT_LOG_EVENT_UNFILTERED` is blocked as "only available to the Blizzard UI". `C_CombatLog` and `C_DamageMeter` exist. Seen in game on 2026-09-26. | No feature can use individual hits, so a "biggest crit" leaderboard was dropped. |
 | `PLAYER_EQUIPMENT_CHANGED` fires with the slot, and `GetInventoryItemLink("player", slot)` returns a plain (not secret) link with a quality from `C_Item.GetItemQualityByID`. Unequipping gives a nil link. Seen in game on 2026-09-26. | The gear feed (§9.1) is built on these. |
 | With a profession window open, `C_TradeSkillUI` works as on retail: `GetAllRecipeIDs()` returns the profession's whole catalogue (592 for Leatherworking), and `GetRecipeInfo(id).learned` marks the known ones (8 at skill 47/75). Recipe IDs are 7 digits (`1263079`), and the record's `hyperlink` is the crafted item's link. `GetBaseProfessionInfo()` gives `professionName`, `professionID` (165), `skillLevel` and `maxSkillLevel`. With no window open everything is empty or zero and `IsTradeSkillReady()` is false. `GetNumTradeSkills` and `GetNumCrafts` are nil, and the window is `ProfessionsFrame`. Seen in game on 2026-09-26. | Anything that shares recipes can read a profession only while its window is open, and must filter on `learned`. One code path covers every profession, Enchanting included. |
 | `C_TradeSkillUI.GetTradeSkillListLink()` (window open) returns a `trade` link and the skill line: `\|cffffd000\|Htrade:Player-4613-00CD2154:2108:165\|h[Leatherworking]\|h\|r`, `2108`. Seen in game on 2026-09-26. `GetRecipeLink(id)` returns a plain (not secret) `enchant` link, `\|cffffd000\|Henchant:1263079\|h[Leatherworking: Sewing Machine]\|h\|r`. Not yet known: what another player sees on clicking the `trade` link, online or offline. | The sanitiser accepts both link types (§6), and the Professions tab (§9.2) builds `enchant` links from recipe ids. |
 | **Assumed, not yet seen in game:** the quest log reads through the Mainline `C_QuestLog.GetNumQuestLogEntries` / `C_QuestLog.GetInfo(i)` (with `questID`, `level`, `isHeader`, `isHidden`), falling back to the Classic `GetQuestLogTitle`. `C_QuestLog.GetTitleForQuestID` names a quest outside your own log once `C_QuestLog.RequestLoadQuestByID` has loaded it (`QUEST_DATA_LOAD_RESULT`), and a `quest:<id>:<level>` link built from those shows a tooltip. Forever's quest log holds 40 quests. | The quest logs (§9.3) are built on these. If the Classic path is the one in use, quests under a collapsed header may be missed. |
+| **Assumed, not yet seen in game:** `TooltipDataProcessor.AddTooltipPostCall(Enum.TooltipDataType.Unit, fn)` runs after a unit tooltip is filled (Mainline 10.0.2+), with `GameTooltip:HookScript("OnTooltipSetUnit", …)` as the fallback. `GetPlayerInfoByGUID(UnitGUID(unit))` gives another player's whole name (surname included) and their realm, empty for your own; `UnitName` is the fallback. `GROUP_ROSTER_UPDATE` fires as a group changes, with `IsInGroup`, `IsInRaid`, `GetNumGroupMembers` and the `party1`–`4` / `raid1`–`40` unit tokens. Unit names may be secret in combat. | The player notes' tooltip line and group warning (§9.4) are built on these. Both skip a unit whose name or GUID is secret. |
 | Outgoing addon messages are restricted during encounters, and briefly around death and resurrection too. | The lockdown gate polls the client's restriction check instead of tracking `ENCOUNTER_START`/`END` flags, which can get stuck (§5.5). |
 | Addon messages have a **per-prefix throttle across all chat types**: roughly 1 message per second, with a small burst allowance. `SendAddonMessage` returns a result code. | About 255 bytes/sec sustained per prefix. P2P is for live edits and small deltas. Bulk sync goes through the cloud (§5.6). |
 | The client's Lua raises "Division by zero" on `x / 0` (and `0/0`), where stock Lua 5.1 returns inf or nan. Seen in game on 2026-09-26. | Tests outside the game can't catch it. No code, vendored libraries included, may divide by a value that can be zero; `Libs/README.md` lists the patches this needed. |
@@ -122,7 +123,8 @@ Note = {
   deleted = false,             -- tombstone; text cleared when true
   kind    = nil,               -- nil for an ordinary note, "gear" for a gear-feed entry (§9.1),
                                -- "recipes" for a character's recipe list (§9.2),
-                               -- "quests" for a character's quest log (§9.3)
+                               -- "quests" for a character's quest log (§9.3),
+                               -- "player" for an entry on the avoid / good-player list (§9.4)
 }
 ```
 
@@ -248,7 +250,7 @@ At about 255 bytes/sec per prefix, and with other traffic sharing that budget, P
 
   Any other `|` escape fails, including `|T`, `|A`, `|K` and `|n`. Text must also be strict UTF-8, with no control characters other than `\n`.
 
-  Records are checked as well. Note ids must be `<8 lower-case hex>-<digits>`, 18 bytes at most. Names must look like `Name-Realm`, 64 bytes at most, with no `|` or control characters. Board names (BoardMeta) must be 1–64 bytes of strict UTF-8 with at least one non-space character, and no `|` or control characters at all. `color` must be 1–8 (the UI uses 1–5), `deleted` must be a boolean, `kind` must be absent, `"gear"`, `"recipes"` or `"quests"` (reason `kind`, checked after `deleted`), and a tombstone's text must be empty. Unknown fields are ignored, so notes from a newer client still load.
+  Records are checked as well. Note ids must be `<8 lower-case hex>-<digits>`, 18 bytes at most. Names must look like `Name-Realm`, 64 bytes at most, with no `|` or control characters. Board names (BoardMeta) must be 1–64 bytes of strict UTF-8 with at least one non-space character, and no `|` or control characters at all. `color` must be 1–8 (the UI uses 1–5), `deleted` must be a boolean, `kind` must be absent, `"gear"`, `"recipes"`, `"quests"` or `"player"` (reason `kind`, checked after `deleted`), and a tombstone's text must be empty. Unknown fields are ignored, so notes from a newer client still load.
 
   `shared/test-vectors/sanitise.json` fixes the rules and the reason codes.
 - Item and quest IDs are the ones valid on Forever. Links are built by the client, so no ID tables are needed.
@@ -305,7 +307,7 @@ CorkboardCloudData = {
 boards  (id TEXT PK, secret_hash BLOB, created_at INT, seq INT NOT NULL DEFAULT 0,
          name TEXT, name_rev INT, name_editor TEXT, name_seq INT);   -- BoardMeta
 notes   (board_id TEXT, note_id TEXT, author TEXT, created INT, rev INT, editor TEXT,
-         text TEXT, color INT, deleted INT, seq INT, kind TEXT,  -- kind: NULL, "gear" (§9.1), "recipes" (§9.2) or "quests" (§9.3)
+         text TEXT, color INT, deleted INT, seq INT, kind TEXT,  -- kind: NULL, "gear" (§9.1), "recipes" (§9.2), "quests" (§9.3) or "player" (§9.4)
          PRIMARY KEY (board_id, note_id));
 members (board_id TEXT, name TEXT, role TEXT, rev INT, editor TEXT, removed INT, seq INT,
          PRIMARY KEY (board_id, name));
@@ -374,11 +376,11 @@ corkboard.<domain> {
 ## 9. UI
 
 - **Board list:** name, members, who's online (from recent HELLOs), and a sync badge such as "P2P: Bob 3m ago · Cloud: 2h ago", "Queued (restricted)", or "N behind: /reload after cloud sync".
-- **Tabs:** Notes, Members, Gear (§9.1) and Professions (§9.2) along the bottom of the window.
+- **Tabs:** Notes, Members, Gear (§9.1), Professions (§9.2), Quests (§9.3) and Players (§9.4) along the bottom of the window.
 - **Board view:** sticky-card grid (colour, author, relative time, live links).
 - **Editor:** multiline EditBox, shift-click links, character counter, colour picker. The counter counts bytes, since the sanitiser's 2,000 limit is in bytes. Save stays disabled while `Sanitise.text` would reject the text, and the editor says why. An unchanged save writes nothing, so it doesn't bump the rev and resend the note.
 - **Share:** "Copy invite" produces `CORK1:<base64(boardId|secret|ownerName)>`. "Join" takes a pasted string.
-- **Slash commands:** `/cork`, `/cork join <invite>`, `/cork invite`, `/cork members`, `/cork remove <Name-Realm>`, `/cork rotate`, `/cork cloud on|off`, `/cork guild on|off`, `/cork sync` (HELLO on every board now), `/cork debug`, `/cork minimap` (show or hide the minimap button), and `/cork quests [name]` and `/cork quests on|off` (§9.3).
+- **Slash commands:** `/cork`, `/cork join <invite>`, `/cork invite`, `/cork members`, `/cork remove <Name-Realm>`, `/cork rotate`, `/cork cloud on|off`, `/cork guild on|off`, `/cork sync` (HELLO on every board now), `/cork debug`, `/cork minimap` (show or hide the minimap button), `/cork quests [name]` and `/cork quests on|off` (§9.3), and `/cork player <name>` (§9.4).
 - **Opening the window:** `/cork` with nothing after it, the addon compartment by the minimap (`## AddonCompartmentFunc`), the LibDataBroker launcher in a broker display, or the minimap button (LibDBIcon). The button starts at LibDBIcon's default spot on the rim, can be dragged round it, and keeps its angle and hidden state in `CorkboardDB.global.minimap`.
 - Boards and notes are created, renamed, edited and deleted in the window only. (The Phase 1 store commands, `/cork create`, `add`, `list` and the rest, were removed once the window covered them; the specs drive the store directly instead.) Command output goes to the default chat frame with a gold `Corkboard:` prefix.
 - Works with Forever's modern and Classic visual presets (no reliance on retail-only art atlases; verify in Phase 1).
@@ -427,12 +429,37 @@ Added on 2026-09-26 at Will's request, to answer "what quests are you on?". Each
 - **Volume.** One live record per character per board, rewritten in place, so rows don't pile up against the API's 1,000-row cap. Each accepted, abandoned or completed quest costs one PUT.
 - **Older clients** show the log as an ordinary note of numbers, as with gear. Accepted for the same reason.
 
+### 9.4 Player notes (avoid and good players)
+
+Added on 2026-09-27 at Will's request: a place on each board to note a character by name, say what they did, and mark them as someone to **avoid** or a **good player**. A sixth window tab, **Players**, lists them, and the addon brings them up where they matter: on the player's tooltip and when they join your group.
+
+- **Records.** An entry is a Note with `kind = "player"`, so like the other kinds it rides every existing path unchanged: live PUTs, anti-entropy, the digest, the cloud and the API. Only the sanitiser learned the kind. Its text is a header line, then the reason:
+
+  ```
+  P1;<verdict>;<character name>
+  <why, free text with links, optional>
+  ```
+
+  For example `P1;avoid;Gankalot` then `Rolled need on [Tidal Charm] and left.` The verdict is `avoid` or `good`. The name is as typed or taken from the target, tidied (spaces trimmed and collapsed; a pasted line break becomes a space), 1–64 bytes with no `;`, `|` or control characters, and a letter or digit in the first word. The whole text must pass `Sanitise.text` like any note, so the reason can hold item, quest and spell links. A header this client doesn't understand (a verdict from a newer client, say) is left off the tab and out of the lookups; the note still syncs.
+- **Entries are notes.** Each entry has its own note id, so several members can note the same character, and each shows with its author. Any member can edit or delete any entry, as with notes (§14.3). Deleting leaves a tombstone. `Store.notes` leaves entries out; `Players.entries` lists them.
+- **Matching.** Entries are matched on the character's first name, ASCII lower-cased: the first word before any space (a Forever surname, §2) or `-` (a realm). Units, chat and typed names don't agree on whether the surname or realm is there, and the first name is the part every form shares. Two characters on different realms can share a first name, so the tab, tooltip and chat always show the name as written, realm and all when it was given.
+- **The tab.** Two checkboxes, **Avoid** and **Good players** (both ticked), a search box and **Add Player** across the top. Below, one row per entry, by name and then newest first: a ready-check cross or tick, the name and the verdict in the game's red or green, "author · age" on the right (Edit and Delete in its place on hover, as on note cards), and the reason under it in `ChatFontNormal` with live links. A search matches every word against the name, reason, verdict and who wrote or edited the entry. The count at the bottom reads "2 to avoid · 3 good players".
+- **The editor.** A small window: **Character** (with a **Target** button, and filled from the target when you open it while targeting a player), **Avoid** or **Good player**, and **Why**, a multi-line box that takes shift-clicked links. The byte counter counts the whole entry. Save stays disabled until the entry would pass the sanitiser, and says why not. An unchanged save writes nothing.
+- **Tooltips.** Hovering a player adds a line per entry on any of your boards (avoid entries first, at most 3, then "and N more notes"): "Corkboard: Avoid" in red, or "Corkboard: Good player" in green, with "author · board" on the right, and the reason as plain text cut at 120 bytes. The entries are indexed by first name once and the index is rebuilt after any change to the store, so hovering costs a table lookup.
+- **Group warning.** When the group changes (`GROUP_ROSTER_UPDATE`, checked once a second after a burst), each other member is looked up. A player with an avoid entry prints one chat line per session, "Gankalot is in your group. Avoid: why (Will on Raid, 2d ago)". Good players print nothing. Leaving the group resets it, so the next group they turn up in warns again.
+- **Chat.** `/cork player <name>` prints every entry about that player on all your boards.
+- **Every board.** The tooltip, the warning and `/cork player` use every board on the account, not just the selected one. There's no per-board option: an entry is something a member chose to write, not something the addon shares on its own.
+- **Volume.** One row per entry. Entries count towards the API's 1,000-row cap like notes.
+- **Older clients** drop player entries (sanitiser reason `kind`), as with recipe lists (§9.2): their digest never matches, and anti-entropy keeps offering them the entries. Only dev builds exist before launch, so members update together.
+- **Not in v1:** adding a player from the unit right-click menu (it needs Mainline's `Menu.ModifyMenu`, not yet checked on Forever), and turning the tooltip line or the group warning off.
+
 ---
 
 ## 10. Trust model and risks
 
 - **Membership = holding the secret.** Revoking someone means rotating the secret (new channel password and cloud credential), then re-sharing it with the remaining members.
 - **Transport identity is server-verified; relayed authorship is not.** A malicious member could forge `author`. This is accepted for v1.
+- **Player notes are opinions** (§9.4). They are only as good as the member who wrote them, which is why each shows its author. They stay inside the board: only members (and the board's cloud copy) hold them, and nothing is ever sent to the player or posted in public chat.
 - **Public API surface:** auth on every board route, strict size and rate limits, the same sanitiser as the addon, and no admin endpoints.
 - **Platform risk:** Forever is pre-launch. API names, restrictions, the throttle and the install layout can all change before and after 2026-11-04. Re-run the Phase 1–4 in-game checks at launch.
 

@@ -16,6 +16,8 @@ files["addon/Corkboard/Corkboard.lua"] = {
 		"NORMAL_FONT_COLOR_CODE", "UnitClass", "GetPlayerInfoByGUID", "UnitGUID", "issecretvalue",
 		"C_Item", "GetInventoryItemLink", "GetInventoryItemQuality", "C_Spell", "C_TradeSkillUI", "GetSpellInfo",
 		"C_QuestLog", "GetNumQuestLogEntries", "GetQuestLogTitle",
+		"Enum", "GameTooltip", "GetNumGroupMembers", "IsInGroup", "IsInRaid", "TooltipDataProcessor", "UnitExists",
+		"UnitIsPlayer", "UnitName",
 	},
 }
 files["addon/Corkboard/Net.lua"] = {

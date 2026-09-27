@@ -234,6 +234,7 @@ function Corkboard:OnInitialize()
 	}
 	self.sync = ns.Sync.new(self.store, self.outbox, self.syncEnv)
 	self.store:listen(function(change)
+		self.playerIndex = nil -- rebuilt on the next tooltip or group check (§9.4)
 		if change.kind == "board" or change.kind == "deleted" then
 			ns.Net:Refresh()
 		end
@@ -257,6 +258,7 @@ function Corkboard:OnEnable()
 	self:WatchGear()
 	self:WatchProfessions()
 	self:WatchQuests()
+	self:WatchPlayers()
 	ns.Net:Init(self)
 	C_Timer.NewTicker(PUMP, function()
 		self.outbox:pump()
@@ -537,6 +539,140 @@ function Corkboard:QuestTitle(id)
 			C_QuestLog.RequestLoadQuestByID(id)
 		end
 	end
+end
+
+-- Player notes (§9.4) ---------------------------------------------------------------
+
+-- A player unit's name ("Name", or "Name-Realm" for another realm), or nil
+-- for a unit that isn't a player or a name the client keeps secret.
+-- GetPlayerInfoByGUID gives Forever's whole name, surname and all; UnitName
+-- is the fallback while the client hasn't cached the player.
+function Corkboard:UnitPlayerName(unit)
+	if not UnitExists(unit) or not UnitIsPlayer then
+		return nil
+	end
+	local isPlayer = UnitIsPlayer(unit)
+	if secret(isPlayer) or not isPlayer then
+		return nil
+	end
+	local guid = UnitGUID(unit)
+	if guid and not secret(guid) then
+		local name, realm = select(6, GetPlayerInfoByGUID(guid))
+		if type(name) == "string" and name ~= "" and not secret(name) and not secret(realm) then
+			if type(realm) == "string" and realm ~= "" then
+				name = name .. "-" .. realm
+			end
+			return name
+		end
+	end
+	local name = UnitName(unit)
+	if type(name) == "string" and name ~= "" and not secret(name) then
+		return name
+	end
+end
+
+-- What the boards on this account say about a player (Players.lookup), from
+-- an index rebuilt after any change to the store.
+function Corkboard:PlayerNotes(name)
+	local key = ns.Players.key(name)
+	if not key then
+		return {}
+	end
+	self.playerIndex = self.playerIndex or ns.Players.index(self.store:boards())
+	return self.playerIndex[key] or {}
+end
+
+-- Adds the boards' verdicts on a player to their unit tooltip.
+function Corkboard:AddPlayerLines(tooltip, unit)
+	local name = self:UnitPlayerName(unit)
+	local found = name and self:PlayerNotes(name) or {}
+	if #found == 0 then
+		return
+	end
+	for _, line in ipairs(ns.View.playerTooltip(found, ns.View.realmOf(self.env.me))) do
+		local c = line.color
+		if line.right then
+			tooltip:AddDoubleLine(line.left, line.right, c[1], c[2], c[3], 0.62, 0.62, 0.62)
+		else
+			tooltip:AddLine(line.left, c[1], c[2], c[3])
+		end
+		if line.reason then
+			tooltip:AddLine(line.reason, 0.9, 0.9, 0.9, true)
+		end
+	end
+	tooltip:Show() -- resizes it to the new lines
+end
+
+-- The units in the player's group, other than the player.
+local function groupUnits()
+	local count = GetNumGroupMembers and GetNumGroupMembers() or 0
+	if type(count) ~= "number" or secret(count) then
+		return {}
+	end
+	local units = {}
+	if IsInRaid() then
+		for i = 1, count do
+			units[#units + 1] = "raid" .. i
+		end
+	else
+		for i = 1, count - 1 do
+			units[#units + 1] = "party" .. i
+		end
+	end
+	return units
+end
+
+-- Warns in chat, once per session, about each player in the group whom a
+-- board says to avoid. Leaving the group resets it, so the next group they
+-- turn up in warns again.
+function Corkboard:CheckGroup()
+	if not IsInGroup() then
+		self.warnedPlayers = {}
+		return
+	end
+	self.warnedPlayers = self.warnedPlayers or {}
+	local myKey = ns.Players.key(self:Identify())
+	for _, unit in ipairs(groupUnits()) do
+		local name = self:UnitPlayerName(unit)
+		local key = name and ns.Players.key(name)
+		if key and key ~= myKey and not self.warnedPlayers[key] then
+			local found = self:PlayerNotes(name)
+			if found[1] and found[1].verdict == "avoid" then
+				self.warnedPlayers[key] = true
+				self:Print(ns.Commands.playerWarning(found, self.env.me, GetServerTime()))
+			end
+		end
+	end
+end
+
+function Corkboard:WatchPlayers()
+	local function onTooltip(tooltip)
+		if tooltip ~= GameTooltip or not tooltip.GetUnit then
+			return
+		end
+		local _, unit = tooltip:GetUnit()
+		if unit and not secret(unit) then
+			self:AddPlayerLines(tooltip, unit)
+		end
+	end
+	if TooltipDataProcessor and TooltipDataProcessor.AddTooltipPostCall and Enum.TooltipDataType then
+		TooltipDataProcessor.AddTooltipPostCall(Enum.TooltipDataType.Unit, onTooltip)
+	elseif GameTooltip:HasScript("OnTooltipSetUnit") then
+		GameTooltip:HookScript("OnTooltipSetUnit", onTooltip) -- a post-hook, like hooksecurefunc
+	end
+	-- The roster changes in bursts as a group forms, so check once it settles.
+	local events = CreateFrame("Frame")
+	events:RegisterEvent("GROUP_ROSTER_UPDATE")
+	events:SetScript("OnEvent", function()
+		if self.groupCheckPending then
+			return
+		end
+		self.groupCheckPending = true
+		C_Timer.After(1, function()
+			self.groupCheckPending = false
+			self:CheckGroup()
+		end)
+	end)
 end
 
 function Corkboard:OnSlash(input)

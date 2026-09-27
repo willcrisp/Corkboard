@@ -8,6 +8,7 @@ local Util = ns.Util or require("Core.Util")
 local Sanitise = ns.Sanitise or require("Core.Sanitise")
 local Commands = ns.Commands or require("Core.Commands")
 local Store = ns.Store or require("Core.Store")
+local Players = ns.Players or require("Core.Players")
 local plural = Commands.plural
 
 local find, format, gsub, lower, match = string.find, string.format, string.gsub, string.lower, string.match
@@ -430,6 +431,130 @@ function View.questLog(store, board, name, online, onlyShared, now)
 		out.empty = onlyShared and #list > 0 and "None of these are in your quest log." or "No quests."
 	end
 	return out
+end
+
+-- The Players tab (§9.4) --------------------------------------------------------
+
+-- The game's own red and green (RED_FONT_COLOR, GREEN_FONT_COLOR) for the two
+-- verdicts, and the ready-check marks the tab shows beside each entry.
+View.VERDICT_COLORS = { avoid = { 1, 0.125, 0.125 }, good = { 0.1, 1, 0.1 } }
+View.VERDICT_ICONS = {
+	avoid = "Interface\\RaidFrame\\ReadyCheck-NotReady",
+	good = "Interface\\RaidFrame\\ReadyCheck-Ready",
+}
+
+-- Text cut to at most `limit` bytes without splitting a UTF-8 character,
+-- with "..." when anything was cut.
+function View.clip(text, limit)
+	if #text <= limit then
+		return text
+	end
+	local cut = limit - 3
+	while cut > 0 and string.byte(text, cut + 1) and string.byte(text, cut + 1) >= 0x80
+		and string.byte(text, cut + 1) < 0xC0 do
+		cut = cut - 1
+	end
+	return string.sub(text, 1, cut) .. "..."
+end
+
+-- Rows for the Players tab: the entries (Players.entries) whose verdict is
+-- ticked in `show` ({ avoid = true, good = true }) and that match `query`.
+-- Every word of the query must appear (ASCII case folded) in the character's
+-- name, the reason, the verdict, or who wrote or last edited the entry.
+function View.playerRows(entries, show, query, now, myRealm)
+	local words = {}
+	for word in string.gmatch(lower(query or ""), "%S+") do
+		words[#words + 1] = word
+	end
+	local rows = {}
+	for _, entry in ipairs(entries) do
+		local note = entry.note
+		local label = Players.LABELS[entry.verdict]
+		local haystack = lower(table.concat({ entry.name, View.plainText(entry.reason), label, note.author, note.editor },
+			"\n"))
+		local ok = show[entry.verdict] == true
+		for _, word in ipairs(words) do
+			if ok and not find(haystack, word, 1, true) then
+				ok = false
+			end
+		end
+		if ok then
+			rows[#rows + 1] = {
+				index = #rows + 1,
+				noteId = note.id,
+				name = entry.name,
+				verdict = entry.verdict,
+				label = label,
+				reason = entry.reason,
+				byline = View.byline(note, myRealm),
+				age = View.shortAge(now - note.rev),
+			}
+		end
+	end
+	return rows
+end
+
+-- "2 to avoid · 1 good player", or how many the filters and search show.
+function View.playerCount(entries, shown)
+	local avoid, good = 0, 0
+	for _, entry in ipairs(entries) do
+		if entry.verdict == "avoid" then
+			avoid = avoid + 1
+		else
+			good = good + 1
+		end
+	end
+	local total = format("%d to avoid · %s", avoid, plural(good, "good player"))
+	if shown ~= #entries then
+		return format("%d shown · %s", shown, total)
+	end
+	return total
+end
+
+-- Whether the Players editor may save. Returns true, or false and the
+-- message to show. An empty name just can't be saved yet.
+function View.checkPlayer(name, verdict, reason)
+	if not find(name or "", "%S") then
+		return false, nil
+	end
+	local text, why = Players.encode(name, verdict, reason)
+	if not text then
+		return false, Commands.explain(why)
+	end
+	return true
+end
+
+-- The Players editor's byte counter: the size of the whole entry, header
+-- line included, since the sanitiser's limit is on the note's text.
+function View.playerCounter(name, verdict, reason)
+	local text = Players.encode(name, verdict, reason)
+	local size = text and #text or #format("P1;%s;%s\n%s", verdict or "avoid", name or "", reason or "")
+	return format("%d / %d", size, Sanitise.MAX_TEXT), size > Sanitise.MAX_TEXT
+end
+
+View.TOOLTIP_ENTRIES = 3 -- entries shown on a unit's tooltip
+View.TOOLTIP_REASON = 120 -- bytes of each reason shown there
+
+-- Lines for a player's unit tooltip, from Players.lookup: for each entry, a
+-- coloured verdict on the left with who noted it and on which board on the
+-- right, then the reason as plain text. { left, right, color, reason }.
+function View.playerTooltip(found, myRealm)
+	local lines = {}
+	for i = 1, math.min(#found, View.TOOLTIP_ENTRIES) do
+		local entry = found[i]
+		local reason = gsub(View.plainText(entry.reason), "%s+", " ")
+		lines[i] = {
+			left = "Corkboard: " .. Players.LABELS[entry.verdict],
+			right = format("%s · %s", View.shortName(entry.note.author, myRealm), Store.name(entry.board)),
+			color = View.VERDICT_COLORS[entry.verdict],
+			reason = reason ~= "" and View.clip(reason, View.TOOLTIP_REASON) or nil,
+		}
+	end
+	if #found > View.TOOLTIP_ENTRIES then
+		lines[#lines + 1] = { left = format("and %s", plural(#found - View.TOOLTIP_ENTRIES, "more note")),
+			color = { 0.62, 0.62, 0.62 } }
+	end
+	return lines
 end
 
 ns.View = View
