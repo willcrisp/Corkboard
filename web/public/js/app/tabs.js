@@ -143,12 +143,27 @@ function professionsTab(ctx) {
   if (!lists.length) {
     body = empty(null, "Nobody shares their recipes on this board yet. Members share them from the Professions tab in game.");
   } else if (!/\S/.test(query)) {
+    // A click on a profession opens or closes the recipes it holds.
+    const open = ui.tabState.openRecipes || (ui.tabState.openRecipes = {});
     body = h("div", { class: "striped" }, lists.map((l) => {
       const p = l.profession;
-      return h("div", { class: "list-row" },
+      const key = `${l.author}\n${p.id}`;
+      const row = h("button", { class: "list-row profession-row", type: "button", "aria-expanded": String(!!open[key]) },
+        h("span", { class: "toggle", "aria-hidden": "true" }, open[key] ? "\u2212" : "+"),
         h("div", { class: "main" }, h("span", { style: { color: "#ffffff" } }, p.name),
           h("span", { class: "grey" }, ` ${p.skill}/${p.max} · ${plural(p.learned, "recipe")}`)),
         h("div", { class: "side", title: l.author }, shortName(l.author)));
+      row.addEventListener("click", () => {
+        if (open[key]) delete open[key];
+        else open[key] = true;
+        ctx.render();
+      });
+      if (!open[key]) return row;
+      const recipes = p.recipes.map((id) => ({ id, name: names.get(`spell:${id}`) || `Recipe ${id}` }))
+        .sort((a, b) => a.name.localeCompare(b.name));
+      return [row, recipes.length
+        ? recipes.map((r) => h("div", { class: "list-row recipe-row" }, h("div", { class: "main" }, localLink("enchant", r.id, r.name, "#ffd000"))))
+        : h("div", { class: "list-row recipe-row grey" }, "No recipes learned.")];
     }));
   } else {
     const found = new Map();
@@ -170,7 +185,7 @@ function professionsTab(ctx) {
     if (found.size > RECIPES_SHOWN) body = [h("div", { class: "grey small" }, `Showing ${RECIPES_SHOWN} of ${found.size}.`), body];
   }
   return scroll("professions", h("div", { class: "section" },
-    h("div", { class: "row-line wrap" }, h("div", { class: "grey small spacer" }, "Recipe names come from links seen on this board; the rest show by id."), search),
+    h("div", { class: "row-line wrap" }, h("div", { class: "grey small spacer" }, "Click a profession to see its recipes. Recipe names come from links seen on this board; the rest show by id."), search),
     body));
 }
 

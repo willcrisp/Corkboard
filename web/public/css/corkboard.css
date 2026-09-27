@@ -394,6 +394,10 @@ button { cursor: pointer; }
 .list-row { display: flex; align-items: center; gap: 8px; min-height: 26px; padding: 3px 8px; font-size: 15px; }
 .list-row .main { flex-grow: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .list-row .side { flex-shrink: 0; font-size: 13px; color: var(--grey); }
+.profession-row { width: 100%; background: none; border: 0; color: inherit; font: inherit; text-align: left; }
+.profession-row:hover { background: rgba(255, 209, 0, 0.08); }
+.profession-row .toggle { flex-shrink: 0; width: 14px; height: 14px; line-height: 12px; text-align: center; font-size: 13px; color: var(--gold, #ffd100); border: 1px solid #6b5a2e; background: #1a1714; }
+.recipe-row { padding-left: 38px; }
 
 .split { display: flex; gap: 8px; min-height: 100%; }
 .members-col { width: 170px; flex-shrink: 0; display: flex; flex-direction: column; gap: 2px; }

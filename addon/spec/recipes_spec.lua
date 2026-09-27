@@ -190,10 +190,43 @@ describe("Recipes.lists and rows", function()
 		local rows, cut = Recipes.rows(Recipes.lists(cork), "  ", nameOf, short)
 		assert.is_false(cut)
 		assert.are.same({
-			{ index = 1, text = "Cooking 10/75 · 2 recipes", who = "Bob" },
-			{ index = 2, text = "Leatherworking 47/75 · 1 recipe", who = "Bob" },
-			{ index = 3, text = "Leatherworking 47/75 · 3 recipes", who = "Will" },
+			{ index = 1, text = "Cooking 10/75 · 2 recipes", who = "Bob", key = "Bob-Realm\n185", open = false,
+				empty = false },
+			{ index = 2, text = "Leatherworking 47/75 · 1 recipe", who = "Bob", key = "Bob-Realm\n165", open = false,
+				empty = false },
+			{ index = 3, text = "Leatherworking 47/75 · 3 recipes", who = "Will", key = ME .. "\n165", open = false,
+				empty = false },
 		}, rows)
+	end)
+
+	it("lists an opened profession's recipes under it, sorted by name", function()
+		local rows, cut = Recipes.rows(Recipes.lists(cork), "", nameOf, short, { [ME .. "\n165"] = true })
+		assert.is_false(cut)
+		local got = {}
+		for i, row in ipairs(rows) do
+			assert.are.equal(i, row.index)
+			got[i] = { row.text, row.who, row.key or false, row.open or false, row.nested or false }
+		end
+		assert.are.same({
+			{ "Cooking 10/75 · 2 recipes", "Bob", "Bob-Realm\n185", false, false },
+			{ "Leatherworking 47/75 · 1 recipe", "Bob", "Bob-Realm\n165", false, false },
+			{ "Leatherworking 47/75 · 3 recipes", "Will", ME .. "\n165", true, false },
+			{ Recipes.link(2, "Handstitched Boots"), "", false, false, true },
+			{ Recipes.link(1, "Light Armor Kit"), "", false, false, true },
+			{ Recipes.link(SEWING, "Sewing Machine"), "", false, false, true },
+		}, got)
+		-- A search shows its own results, whatever is open.
+		local found = Recipes.rows(Recipes.lists(cork), "boots", nameOf, short, { [ME .. "\n165"] = true })
+		assert.are.equal(1, #found)
+		assert.is_nil(found[1].key)
+	end)
+
+	it("marks a profession with no recipes listed", function()
+		local rows = Recipes.rows(Recipes.lists(board({ note("a1b2c3d4-0001", ME, T0, "R1;356;20;75;0;Fishing") })), "",
+			nameOf, short, { [ME .. "\n356"] = true })
+		assert.are.equal(1, #rows)
+		assert.is_true(rows[1].empty)
+		assert.is_true(rows[1].open)
 	end)
 
 	it("says when a list holds only some of the recipes", function()
@@ -204,7 +237,8 @@ describe("Recipes.lists and rows", function()
 
 	it("finds recipes by name, with everyone who knows them", function()
 		local rows = Recipes.rows(Recipes.lists(cork), "BOOTS", nameOf, short)
-		assert.are.same({ { index = 1, text = Recipes.link(2, "Handstitched Boots"), who = "Bob, Will" } }, rows)
+		assert.are.same({ { index = 1, text = Recipes.link(2, "Handstitched Boots"), who = "Bob, Will", recipe = true } },
+			rows)
 	end)
 
 	it("finds a member's or a profession's recipes, sorted by name", function()
@@ -437,6 +471,19 @@ describe("the Professions tab in game", function()
 		assert.is_true(row:IsVisible())
 		assert.are.equal("Leatherworking 47/75 · 2 recipes", row.text.text)
 		assert.are.equal("Will", row.who.text)
+		assert.are.equal("Click a profession to see its recipes.", ui.more.text)
+
+		-- Clicking the profession lists what Will can make, as live links;
+		-- clicking again closes it.
+		row:Click()
+		assert.are.equal(3, ui.list.count)
+		assert.are.equal(Recipes.link(2149, "Handstitched Leather Boots"), ui.list.elements[2].text.text)
+		assert.are.equal(Recipes.link(SEWING, "Sewing Machine"), ui.list.elements[3].text.text)
+		assert.is_function(ui.list.elements[3]:GetScript("OnHyperlinkClick"))
+		ui.list.elements[3]:Click() -- a recipe row: nothing to open or close
+		assert.are.equal(3, ui.list.count)
+		ui.list.elements[1]:Click()
+		assert.are.equal(1, ui.list.count)
 		ui.search:SetText("sewing")
 		row = ui.list.elements[1]
 		assert.are.equal(Recipes.link(SEWING, "Sewing Machine"), row.text.text)

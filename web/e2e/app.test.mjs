@@ -129,6 +129,12 @@ test("join, read every tab, write, reload, work offline, and see game changes", 
   await page.locator(".list-row", { hasText: "Helm of Might" }).waitFor();
   await page.click('.tab:has-text("Professions")');
   await page.locator(".list-row", { hasText: "Leatherworking 47/75" }).waitFor();
+  // Clicking a profession lists its recipes; clicking again closes it.
+  await page.click('.profession-row:has-text("Leatherworking 47/75")');
+  assert.equal(await page.locator(".recipe-row").count(), 8);
+  await page.locator(".recipe-row", { hasText: "Handstitched Leather Belt" }).waitFor();
+  await page.click('.profession-row:has-text("Leatherworking 47/75")');
+  assert.equal(await page.locator(".recipe-row").count(), 0);
   await page.fill('[aria-label="Search recipes"]', "belt");
   await page.locator(".list-row", { hasText: "Handstitched Leather Belt" }).waitFor();
   await page.click('.tab:has-text("Quests")');

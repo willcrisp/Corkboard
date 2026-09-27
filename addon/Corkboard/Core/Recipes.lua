@@ -196,27 +196,65 @@ function Recipes.link(id, name)
 	return format("|cffffd000|Henchant:%d|h[%s]|h|r", id, name)
 end
 
+-- The key the tab opens and closes a list by: one character's profession.
+function Recipes.key(item)
+	return item.author .. "\n" .. item.profession.id
+end
+
+-- Recipes by name, then id; a recipe this client can't name sorts first.
+local function byName(a, b)
+	local an, bn = a.name or "", b.name or ""
+	if an ~= bn then
+		return Util.less(an, bn)
+	end
+	return a.id < b.id
+end
+
 -- Rows for the Professions tab. With no search, one row per character and
--- profession. With a search, one row per matching recipe with everyone who
--- knows it; every word must appear in the recipe's name, its profession or a
--- knower's name. nameOf(id) gives a recipe's name or nil; shortName(author)
--- how to show a character. Returns the rows and whether any were cut.
-function Recipes.rows(lists, query, nameOf, shortName)
+-- profession, each followed by its recipes when its key is in `open` (a
+-- set, see Recipes.key). With a search, one row per matching recipe with
+-- everyone who knows it; every word must appear in the recipe's name, its
+-- profession or a knower's name. nameOf(id) gives a recipe's name or nil;
+-- shortName(author) how to show a character. Returns the rows and whether
+-- any were cut.
+function Recipes.rows(lists, query, nameOf, shortName, open)
 	local rows = {}
 	local words = {}
 	for word in string.gmatch(lower(query or ""), "%S+") do
 		words[#words + 1] = word
 	end
 	if #words == 0 then
-		for i, item in ipairs(lists) do
+		open = open or {}
+		for _, item in ipairs(lists) do
 			local p = item.profession
 			local count = #p.recipes == p.learned and format("%d %s", p.learned, p.learned == 1 and "recipe" or "recipes")
 				or format("%d of %d recipes", #p.recipes, p.learned)
-			rows[i] = {
-				index = i,
+			local key = Recipes.key(item)
+			local expanded = open[key] == true
+			rows[#rows + 1] = {
+				index = #rows + 1,
 				text = format("%s %d/%d · %s", p.name, p.skill, p.max, count),
 				who = shortName(item.author),
+				key = key,
+				open = expanded,
+				empty = #p.recipes == 0,
 			}
+			if expanded then
+				local recipes = {}
+				for i, id in ipairs(p.recipes) do
+					recipes[i] = { id = id, name = nameOf(id) }
+				end
+				sort(recipes, byName)
+				for _, recipe in ipairs(recipes) do
+					rows[#rows + 1] = {
+						index = #rows + 1,
+						text = Recipes.link(recipe.id, recipe.name),
+						who = "",
+						recipe = true,
+						nested = true,
+					}
+				end
+			end
 		end
 		return rows, false
 	end
@@ -246,17 +284,16 @@ function Recipes.rows(lists, query, nameOf, shortName)
 			matched[#matched + 1] = recipe
 		end
 	end
-	sort(matched, function(a, b)
-		local an, bn = a.name or "", b.name or ""
-		if an ~= bn then
-			return Util.less(an, bn)
-		end
-		return a.id < b.id
-	end)
+	sort(matched, byName)
 	for i = 1, math.min(#matched, Recipes.SHOWN) do
 		local recipe = matched[i]
 		sort(recipe.knowers, Util.less)
-		rows[i] = { index = i, text = Recipes.link(recipe.id, recipe.name), who = concat(recipe.knowers, ", ") }
+		rows[i] = {
+			index = i,
+			text = Recipes.link(recipe.id, recipe.name),
+			who = concat(recipe.knowers, ", "),
+			recipe = true,
+		}
 	end
 	return rows, #matched > Recipes.SHOWN
 end
