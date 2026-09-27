@@ -11,7 +11,7 @@ local PlayersTab = {}
 ns.PlayersTab = PlayersTab
 
 local PAD = 10
-local TOP = 32 -- the filters, search and Add Player row
+local TOP = 62 -- the filters, search and Add Player row, then what the tab is for
 local ICON = 14
 local TEXT_LEFT = 24 -- where the name and reason start, right of the mark
 local BYLINE_WIDTH = 130
@@ -22,6 +22,9 @@ local LIST_WIDTH = 720 - 2 * 10 - 180 - 8 - 2 * PAD - 14
 local REASON_WIDTH = LIST_WIDTH - TEXT_LEFT - 8
 local DIM = { 0x9d / 255, 0x9d / 255, 0x9d / 255 }
 local TEXT = { 0.9, 0.9, 0.9 }
+
+PlayersTab.ABOUT = "Note players this board should avoid, or vouch for good ones, and say why. Everyone on the "
+	.. "board sees these notes on the player's tooltip, and gets a warning if someone to avoid joins their group."
 
 local panel, ui
 local boardId
@@ -173,6 +176,14 @@ function PlayersTab.Build(_, inset)
 	ui.search:HookScript("OnTextChanged", function()
 		PlayersTab:Refresh(store():board(boardId))
 	end)
+
+	-- What the tab is for, in a line or two under the controls.
+	ui.about = panel:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+	ui.about:SetPoint("TOPLEFT", PAD, -PAD - 30)
+	ui.about:SetWidth(LIST_WIDTH)
+	ui.about:SetJustifyH("LEFT")
+	ui.about:SetWordWrap(true)
+	ui.about:SetText(PlayersTab.ABOUT)
 
 	ui.list = CreateFrame("Frame", nil, panel, "WowScrollBoxList")
 	ui.list:SetPoint("TOPLEFT", PAD, -PAD - TOP)

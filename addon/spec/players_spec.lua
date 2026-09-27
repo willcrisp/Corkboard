@@ -342,6 +342,8 @@ describe("player notes in game", function()
 		b:slash("/cork")
 		b.env.CorkboardFrameTab6:Click()
 		local ui = b.ns.PlayersTab.Widgets()
+		assert.are.equal(b.ns.PlayersTab.ABOUT, ui.about.text)
+		assert.is_true(ui.about:IsVisible())
 		assert.are.equal(1, ui.list.count)
 		local row = ui.list.elements[1]
 		assert.are.equal("Gankalot  |cffff2020Avoid|r", row.name.text)
