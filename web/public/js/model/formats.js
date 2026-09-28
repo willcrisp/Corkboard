@@ -1,7 +1,8 @@
 // The note kinds the game writes, read (and for player notes, written) the
 // same way the addon does: player notes (Core/Players.lua, §9.4), recipe
-// lists (Core/Recipes.lua, §9.2), quest logs (Store.decodeQuests, §9.3) and
-// the gear feed (Store.gear, §9.1).
+// lists (Core/Recipes.lua, §9.2), quest logs with completed quests and
+// chains (Store.decodeQuests and decodeDone, §9.3) and the gear feed
+// (Store.gear, §9.1).
 
 import * as sanitise from "../core/sanitise.js";
 import { byteLen, compare, isInteger, isUtf8 } from "../core/util.js";
@@ -174,18 +175,132 @@ export function recipeLists(board) {
 export const QUESTS_KIND = "quests";
 export const QUESTS_MAX = 50;
 
-// The quests in a log's text, as { id, level } in the order stored.
+const QUEST_ID_MAX = 999999999;
+const QUEST_LEVEL_MAX = 999;
+const TIME_MAX = 2147483647;
+
+function questNumber(digits, low, high) {
+  if (!digits) return null;
+  const n = Number(digits);
+  return isInteger(n, low, high) ? n : null;
+}
+
+// The quests in a log's text, as { id, level } in the order stored, with
+// prev for a quest known to follow another ("id:level/prev"). Only the first
+// line is the log; the completed quests follow on the next (decodeDone).
 export function decodeQuests(text) {
   const quests = [];
-  for (const m of (text || "").matchAll(/(\d+):(\d+)/g)) {
-    const id = Number(m[1]);
-    const level = Number(m[2]);
-    if (isInteger(id, 1, 999999999) && isInteger(level, 0, 999)) {
-      quests.push({ id, level });
+  const line = (text || "").split("\n")[0];
+  for (const m of line.matchAll(/(\d+):(\d+)\/?(\d*)/g)) {
+    const id = questNumber(m[1], 1, QUEST_ID_MAX);
+    const level = questNumber(m[2], 0, QUEST_LEVEL_MAX);
+    const prev = questNumber(m[3], 1, QUEST_ID_MAX);
+    if (id !== null && level !== null) {
+      const quest = { id, level };
+      if (prev !== null && prev !== id) quest.prev = prev;
+      quests.push(quest);
       if (quests.length >= QUESTS_MAX) break;
     }
   }
   return quests;
+}
+
+export const QUESTS_DONE_MAX = 30;
+
+// The quests a member has turned in, from the "D1;" line of their log:
+// { id, level, at, prev? }, newest first (Store.decodeDone).
+export function decodeDone(text) {
+  const m = /(?:^|\n)D1;([^\n]*)/.exec(text || "");
+  const entries = [];
+  const seen = new Set();
+  for (const item of (m ? m[1] : "").split(",")) {
+    const f = /^(\d+)\.(\d+)\.(\d+)\.?(\d*)$/.exec(item);
+    if (!f) continue;
+    const id = questNumber(f[1], 1, QUEST_ID_MAX);
+    const level = questNumber(f[2], 0, QUEST_LEVEL_MAX);
+    const at = questNumber(f[3], 0, TIME_MAX);
+    const prev = questNumber(f[4], 1, QUEST_ID_MAX);
+    if (id === null || level === null || at === null || seen.has(id)) continue;
+    seen.add(id);
+    const entry = { id, level, at };
+    if (prev !== null && prev !== id) entry.prev = prev;
+    entries.push(entry);
+    if (entries.length >= QUESTS_DONE_MAX) break;
+  }
+  return entries;
+}
+
+// Every quest link on the board (id -> the quest it follows), from each
+// member's log and completed quests; where they disagree, the link most
+// hold, then the lower id. Also each quest's level where one is known
+// (Store:questLinks, less the addon's own learned links).
+export function questLinks(board) {
+  const votes = new Map();
+  const levels = new Map();
+  const add = (id, level, prev) => {
+    if (level > 0) levels.set(id, level);
+    if (prev === undefined) return;
+    const counts = votes.get(id) || new Map();
+    counts.set(prev, (counts.get(prev) || 0) + 1);
+    votes.set(id, counts);
+  };
+  for (const log of questLogs(board).values()) {
+    for (const q of decodeQuests(log.text)) add(q.id, q.level, q.prev);
+    for (const e of decodeDone(log.text)) add(e.id, e.level, e.prev);
+  }
+  const links = new Map();
+  for (const [id, counts] of votes) {
+    let best = null;
+    let most = 0;
+    for (const [prev, n] of counts) {
+      if (n > most || (n === most && prev < best)) [best, most] = [prev, n];
+    }
+    links.set(id, best);
+  }
+  return { links, levels };
+}
+
+export const CHAIN_MAX = 20;
+
+// The quests before `id` in its chain, oldest first (View.chainBefore).
+export function chainBefore(links, id) {
+  const before = [];
+  const seen = new Set([id]);
+  let prev = links.get(id);
+  while (prev !== undefined && !seen.has(prev) && before.length < CHAIN_MAX) {
+    seen.add(prev);
+    before.unshift(prev);
+    prev = links.get(prev);
+  }
+  return before;
+}
+
+// Completed quests with each chain kept together: groups in the order of
+// their newest turn-in, newest first within one. Rows in a group of two or
+// more get up / down for the line joining them.
+export function groupChains(entries, links) {
+  const inList = new Set(entries.map((e) => e.id));
+  const root = (id) => {
+    const seen = new Set([id]);
+    while (links.has(id) && inList.has(links.get(id)) && !seen.has(links.get(id))) {
+      id = links.get(id);
+      seen.add(id);
+    }
+    return id;
+  };
+  const groups = new Map();
+  for (const entry of entries) {
+    const key = root(entry.id);
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(entry);
+  }
+  const out = [];
+  for (const group of groups.values()) {
+    group.forEach((entry, i) => {
+      out.push({ ...entry, up: group.length > 1 && i > 0, down: group.length > 1 && i < group.length - 1 });
+    });
+  }
+  return out;
 }
 
 // Each character's quest log: author -> note (the newer if there are two).

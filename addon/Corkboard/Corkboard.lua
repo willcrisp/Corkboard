@@ -218,6 +218,30 @@ local QUEST_DELAY = 2
 local QUEST_EVENTS = { "QUEST_LOG_UPDATE", "QUEST_ACCEPTED", "QUEST_REMOVED", "QUEST_TURNED_IN",
 	"QUEST_DATA_LOAD_RESULT" }
 
+-- The NPC whose quest window is open, as a GUID, or nil. A quest accepted
+-- from the NPC a quest was just turned in to is that chain's next part
+-- (§9.3 "Chains").
+local function questGiver()
+	for _, unit in ipairs({ "questnpc", "npc" }) do
+		local guid = UnitGUID(unit)
+		if type(guid) == "string" and guid ~= "" and not secret(guid) then
+			return guid
+		end
+	end
+end
+
+-- Whether this character has ever turned in quest `id`, from the client's
+-- own record, or nil where the client can't say.
+local function questDone(id)
+	local check = C_QuestLog and C_QuestLog.IsQuestFlaggedCompleted or IsQuestFlaggedCompleted
+	if check then
+		local done = check(id)
+		if type(done) == "boolean" and not secret(done) then
+			return done
+		end
+	end
+end
+
 local function classToken()
 	local _, class = UnitClass("player")
 	if not secret(class) and type(class) == "string" then
@@ -241,9 +265,11 @@ function Corkboard:OnInitialize()
 		questTitle = function(id)
 			return self:QuestTitle(id)
 		end,
+		questDone = questDone,
 	}
 	self.store = ns.Store.new(self.db, self.env)
 	self.questTitles, self.questRequested = {}, {} -- quest id -> title, and titles asked for (§9.3)
+	self.questLevels = {} -- quest id -> level, from the last read of the log
 	self.gate = ns.Gate.new(function(name)
 		return _G[name]
 	end)
@@ -560,6 +586,7 @@ function Corkboard:ScanQuests()
 		if quest.title then
 			self.questTitles[quest.id] = quest.title
 		end
+		self.questLevels[quest.id] = quest.level
 	end
 	self:Identify()
 	local boards, changed = self.store:questLog(quests)
@@ -584,16 +611,47 @@ function Corkboard:WatchQuests()
 	for _, event in ipairs(QUEST_EVENTS) do
 		pcall(events.RegisterEvent, events, event) -- a client without the event raises an error
 	end
-	events:SetScript("OnEvent", function(_, event)
+	events:SetScript("OnEvent", function(_, event, ...)
 		if event == "QUEST_DATA_LOAD_RESULT" then
 			self:ChangedSoon() -- a title the Quests tab asked for has arrived
 			return
+		elseif event == "QUEST_TURNED_IN" then
+			self:QuestTurnedIn(...)
+		elseif event == "QUEST_ACCEPTED" then
+			self:QuestAccepted(...)
 		end
 		if event == "QUEST_LOG_UPDATE" then
 			self.questsReady = true
 		end
 		self:ScanQuestsSoon()
 	end)
+end
+
+-- QUEST_TURNED_IN: the quest goes to the front of this character's completed
+-- quests, which the read of the log that follows publishes with the log.
+function Corkboard:QuestTurnedIn(id)
+	if secret(id) or type(id) ~= "number" then
+		return
+	end
+	self.lastTurnIn = { id = id, at = GetTime(), npc = questGiver() }
+	self.store:questTurnedIn(id, self.questLevels[id] or 0, GetServerTime())
+end
+
+-- QUEST_ACCEPTED: learns that the quest follows the one just turned in, when
+-- it does (Store.follows). Mainline passes the quest id; Classic passes the
+-- log index first and the quest id second.
+function Corkboard:QuestAccepted(first, second)
+	if secret(first) or secret(second) then
+		return
+	end
+	local id = second ~= nil and second or first
+	if type(id) ~= "number" then
+		return
+	end
+	local prev = ns.Store.follows(self.lastTurnIn, id, GetTime(), questGiver())
+	if prev then
+		self.store:questAccepted(id, prev)
+	end
 end
 
 -- A quest's title: from our own quest log, or the client's quest data, which

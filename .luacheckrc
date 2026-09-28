@@ -15,7 +15,7 @@ files["addon/Corkboard/Corkboard.lua"] = {
 		"C_Timer", "CreateFrame", "DEFAULT_CHAT_FRAME", "GetNormalizedRealmName", "GetServerTime", "GetTime", "LibStub",
 		"NORMAL_FONT_COLOR_CODE", "UnitClass", "UnitLevel", "GetPlayerInfoByGUID", "UnitGUID", "issecretvalue",
 		"C_Item", "GetItemInfo", "GetInventoryItemLink", "GetInventoryItemQuality", "C_Spell", "C_TradeSkillUI", "GetSpellInfo",
-		"C_QuestLog", "GetNumQuestLogEntries", "GetQuestLogTitle",
+		"C_QuestLog", "GetNumQuestLogEntries", "GetQuestLogTitle", "IsQuestFlaggedCompleted",
 		"Enum", "GameTooltip", "GetNumGroupMembers", "IsInGroup", "IsInRaid", "TooltipDataProcessor", "UnitExists",
 		"UnitIsPlayer", "UnitName",
 	},
@@ -33,7 +33,8 @@ files["addon/Corkboard/UI/**"] = {
 	globals = { "StaticPopupDialogs", "UISpecialFrames" },
 	read_globals = {
 		"ButtonFrameTemplate_HideButtonBar", "ButtonFrameTemplate_HidePortrait", "C_ClassColor", "C_Timer", "CANCEL",
-		"OKAY", "PanelTemplates_SetNumTabs", "PanelTemplates_SetTab", "PanelTemplates_TabResize", "RAID_CLASS_COLORS",
+		"OKAY", "PanelTemplates_DeselectTab", "PanelTemplates_SelectTab", "PanelTemplates_SetNumTabs",
+		"PanelTemplates_SetTab", "PanelTemplates_TabResize", "RAID_CLASS_COLORS",
 		"ReloadUI", "date",
 		"ChatEdit_InsertLink", "ChatFontNormal", "ChatFrameUtil", "ClearCursor", "CreateDataProvider", "CreateFrame",
 		"CreateScrollBoxListLinearView", "DEFAULT_CHAT_FRAME", "DELETE", "GameTooltip", "GetCursorInfo", "SAVE",

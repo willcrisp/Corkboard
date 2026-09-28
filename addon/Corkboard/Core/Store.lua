@@ -17,6 +17,7 @@ local Merge = ns.Merge or require("Core.Merge")
 local Invite = ns.Invite or require("Core.Invite")
 local Recipes = ns.Recipes or require("Core.Recipes")
 local Players = ns.Players or require("Core.Players")
+local Sanitise = ns.Sanitise or require("Core.Sanitise")
 
 local format, gmatch, lower, match, sub = string.format, string.gmatch, string.lower, string.match, string.sub
 local floor = math.floor
@@ -486,38 +487,110 @@ end
 -- A quest log as note text: "id:level" pairs joined by commas, by id, so the
 -- same log always gives the same text. Only ids and levels travel, which
 -- keeps a full log of 40 quests near 400 bytes; each client shows titles
--- from its own quest data. Invalid and repeated ids are skipped.
+-- from its own quest data. Invalid and repeated ids are skipped. A quest
+-- known to follow another (quest.prev, §9.3 "Chains") is written
+-- "id:level/prev"; older readers take the pair and skip the rest.
 function Store.encodeQuests(quests)
-	local levels, ids = {}, {}
+	local levels, prevs, ids = {}, {}, {}
 	for _, quest in ipairs(quests) do
 		local id = questNumber(quest.id, 1, MAX_QUEST_ID)
 		if id and not levels[id] then
 			levels[id] = questNumber(quest.level, 0, MAX_QUEST_LEVEL) or 0
+			local prev = questNumber(quest.prev, 1, MAX_QUEST_ID)
+			prevs[id] = prev ~= id and prev or nil
 			ids[#ids + 1] = id
 		end
 	end
 	sort(ids)
 	local parts = {}
 	for i = 1, math.min(#ids, Store.QUESTS_MAX) do
-		parts[i] = format("%d:%d", ids[i], levels[ids[i]])
+		local id = ids[i]
+		parts[i] = format("%d:%d", id, levels[id]) .. (prevs[id] and "/" .. prevs[id] or "")
 	end
 	return concat(parts, ",")
 end
 
--- The quests in a log's text, as { id, level } in the order stored. Anything
--- that isn't an "id:level" pair (a newer client's extra fields) is skipped.
+-- The quests in a log's text, as { id, level, prev } in the order stored
+-- (prev only for a quest known to follow another). Only the first line is
+-- the log: the completed quests follow on the next (Store.decodeDone).
+-- Anything that isn't an "id:level" pair (a newer client's extra fields) is
+-- skipped.
 function Store.decodeQuests(text)
 	local quests = {}
-	for id, level in gmatch(text or "", "(%d+):(%d+)") do
-		id, level = questNumber(id, 1, MAX_QUEST_ID), questNumber(level, 0, MAX_QUEST_LEVEL)
+	for id, level, prev in gmatch(match(text or "", "^[^\n]*"), "(%d+):(%d+)/?(%d*)") do
+		id, level, prev = questNumber(id, 1, MAX_QUEST_ID), questNumber(level, 0, MAX_QUEST_LEVEL),
+			questNumber(prev, 1, MAX_QUEST_ID)
 		if id and level then
-			quests[#quests + 1] = { id = id, level = level }
+			quests[#quests + 1] = { id = id, level = level, prev = prev ~= id and prev or nil }
 			if #quests >= Store.QUESTS_MAX then
 				break
 			end
 		end
 	end
 	return quests
+end
+
+-- Completed quests (§9.3 "Completed") -------------------------------------------
+
+Store.QUESTS_DONE_MAX = 30 -- turn-ins kept, newest first
+Store.FOLLOW_WINDOW = 60 -- seconds after a turn-in in which an accepted quest follows it
+local DONE_TAG = "D1;"
+local MAX_TIME = 2147483647
+
+-- The completed quests as the text after "D1;": "id.level.time" entries,
+-- newest first, with ".prev" when the quest is known to follow another. The
+-- dots keep older clients, which read "id:level" pairs anywhere in a log,
+-- from taking these for quests in the log. Invalid entries are skipped, and
+-- a repeated quest keeps only its newest turn-in.
+function Store.encodeDone(entries)
+	local parts, seen = {}, {}
+	for _, entry in ipairs(entries) do
+		local id = questNumber(entry.id, 1, MAX_QUEST_ID)
+		local at = questNumber(entry.at, 0, MAX_TIME)
+		if id and at and not seen[id] and #parts < Store.QUESTS_DONE_MAX then
+			seen[id] = true
+			local prev = questNumber(entry.prev, 1, MAX_QUEST_ID)
+			parts[#parts + 1] = format("%d.%d.%d", id, questNumber(entry.level, 0, MAX_QUEST_LEVEL) or 0, at)
+				.. (prev and prev ~= id and "." .. prev or "")
+		end
+	end
+	return concat(parts, ",")
+end
+
+-- The completed quests in a log's text (or in the bare "D1;" payload, with
+-- `bare`), as { id, level, at, prev }, newest first.
+function Store.decodeDone(text, bare)
+	local payload = bare and (text or "") or match("\n" .. (text or ""), "\n" .. DONE_TAG .. "([^\n]*)") or ""
+	local entries, seen = {}, {}
+	for item in gmatch(payload, "[^,]+") do
+		local id, level, at, prev = match(item, "^(%d+)%.(%d+)%.(%d+)%.?(%d*)$")
+		id, level, at, prev = questNumber(id, 1, MAX_QUEST_ID), questNumber(level, 0, MAX_QUEST_LEVEL),
+			questNumber(at, 0, MAX_TIME), questNumber(prev, 1, MAX_QUEST_ID)
+		if id and level and at and not seen[id] then
+			seen[id] = true
+			entries[#entries + 1] = { id = id, level = level, at = at, prev = prev ~= id and prev or nil }
+			if #entries >= Store.QUESTS_DONE_MAX then
+				break
+			end
+		end
+	end
+	return entries
+end
+
+-- Whether a quest accepted now follows the last one turned in: it was taken
+-- within Store.FOLLOW_WINDOW seconds of the turn-in, and from the same NPC
+-- when both are known. That's how a chain's next part is offered in the
+-- game, so it's how chains are learned (§9.3 "Chains"). `last` is { id, at,
+-- npc }; returns the id the accepted quest follows, or nil.
+function Store.follows(last, id, at, npc)
+	if type(last) ~= "table" or not questNumber(last.id, 1, MAX_QUEST_ID) or last.id == id
+		or type(last.at) ~= "number" or type(at) ~= "number" or at < last.at or at - last.at > Store.FOLLOW_WINDOW then
+		return nil
+	end
+	if last.npc and npc and last.npc ~= npc then
+		return nil
+	end
+	return last.id
 end
 
 -- The id of a character's quest log on every board: its note-id prefix with
@@ -553,6 +626,42 @@ function Store:myQuests()
 	return mine
 end
 
+-- The quests this character has turned in (Store.decodeDone), newest first.
+function Store:myDone()
+	return Store.decodeDone(self.db.char.questsDone, true)
+end
+
+-- The links this account has learned itself (id -> the quest it follows).
+-- Kept for the whole account and never pruned, so what one character learns
+-- about a chain is known on the next, and outlives the capped history.
+function Store:knownLinks()
+	local links = self.db.global.questLinks
+	if type(links) ~= "table" then
+		links = {}
+		self.db.global.questLinks = links
+	end
+	return links
+end
+
+-- The text shared for this character's quest log: the log, then the
+-- completed quests on a second line. The oldest turn-ins are dropped if the
+-- whole wouldn't fit in a note. Nil until the log has been read once.
+function Store:questText()
+	local log = self.db.char.quests
+	if log == nil then
+		return nil
+	end
+	local done = self:myDone()
+	while #done > 0 do
+		local text = log .. "\n" .. DONE_TAG .. Store.encodeDone(done)
+		if #text <= Sanitise.MAX_TEXT then
+			return text
+		end
+		done[#done] = nil
+	end
+	return log
+end
+
 -- Brings this character's quest log on one board in line with the board's
 -- option (board.quests, local, on by default): the latest log while sharing
 -- is on and the board hasn't removed the player, a tombstone otherwise. An
@@ -565,7 +674,7 @@ function Store:shareQuests(boardId)
 	end
 	local id = Store.questLogId(self.env.prefix)
 	local note = board.notes and board.notes[id]
-	local text = self.db.char.quests
+	local text = self:questText()
 	local mine = board.members and board.members[author]
 	local now = self.env.now()
 	if text == nil or board.quests == false or (mine and mine.removed) then
@@ -601,15 +710,10 @@ function Store:shareQuests(boardId)
 	return false
 end
 
--- The player's quest log, read from the client: a list of { id, level }.
--- It's kept for this character (so the Quests tab can mark the quests you
--- share), then published to every board with sharing on. Returns how many
--- boards changed and whether the log did, or nil and a reason while the
--- player's name isn't known (the log is still kept).
-function Store:questLog(quests)
-	local text = Store.encodeQuests(quests)
-	local logChanged = self.db.char.quests ~= text
-	self.db.char.quests = text
+-- Publishes this character's quest log to every board with sharing on.
+-- Returns how many boards changed, or nil and a reason while the player's
+-- name isn't known.
+function Store:publishQuests()
 	local _, reason = me(self)
 	if reason then
 		return nil, reason
@@ -620,7 +724,107 @@ function Store:questLog(quests)
 			changed = changed + 1
 		end
 	end
+	return changed
+end
+
+-- The player's quest log, read from the client: a list of { id, level }.
+-- Each quest takes the link learned when it was accepted (Store:questAccepted).
+-- It's kept for this character (so the Quests tab can mark the quests you
+-- share), then published to every board with sharing on. Returns how many
+-- boards changed and whether the log did, or nil and a reason while the
+-- player's name isn't known (the log is still kept).
+function Store:questLog(quests)
+	local links, linked = self:knownLinks(), {}
+	for i, quest in ipairs(quests) do
+		linked[i] = { id = quest.id, level = quest.level, prev = links[quest.id] }
+	end
+	local text = Store.encodeQuests(linked)
+	local logChanged = self.db.char.quests ~= text
+	self.db.char.quests = text
+	local changed, reason = self:publishQuests()
+	if not changed then
+		return nil, reason
+	end
 	return changed, logChanged
+end
+
+-- The player accepted quest `id`, which follows quest `prev` (Store.follows).
+-- The link is kept for the account and goes out with the next read of the
+-- log. Returns true when it's new.
+function Store:questAccepted(id, prev)
+	id, prev = questNumber(id, 1, MAX_QUEST_ID), questNumber(prev, 1, MAX_QUEST_ID)
+	if not id or not prev or id == prev then
+		return false
+	end
+	local links = self:knownLinks()
+	if links[id] == prev then
+		return false
+	end
+	links[id] = prev
+	return true
+end
+
+-- The player turned in quest `id` (at `level`, 0 if unknown) at server time
+-- `at`. It goes to the front of this character's completed quests, with the
+-- quest it follows if that's known; a quest done again moves to the front.
+-- The next read of the log publishes it along with the log (one PUT for the
+-- two, since the quest leaves the log at the same time).
+function Store:questTurnedIn(id, level, at)
+	id = questNumber(id, 1, MAX_QUEST_ID)
+	if not id then
+		return false
+	end
+	local done = self:myDone()
+	table.insert(done, 1, { id = id, level = level, at = at, prev = self:knownLinks()[id] })
+	self.db.char.questsDone = Store.encodeDone(done)
+	return true
+end
+
+-- Every quest link seen on the board (id -> the quest it follows): from each
+-- member's log and completed quests, and this account's own (which win).
+-- Where members disagree, the link most of them hold counts, then the lower
+-- id. Also returns what's known of each quest: id -> { level }.
+function Store:questLinks(board)
+	local votes, levels = {}, {}
+	local function note(id, level, prev)
+		if level and level > 0 then
+			levels[id] = level
+		end
+		if prev then
+			votes[id] = votes[id] or {}
+			votes[id][prev] = (votes[id][prev] or 0) + 1
+		end
+	end
+	for _, log in pairs(Store.questLogs(board)) do
+		for _, quest in ipairs(Store.decodeQuests(log.text)) do
+			note(quest.id, quest.level, quest.prev)
+		end
+		for _, entry in ipairs(Store.decodeDone(log.text)) do
+			note(entry.id, entry.level, entry.prev)
+		end
+	end
+	for _, quest in ipairs(Store.decodeQuests(self.db.char.quests)) do
+		note(quest.id, quest.level)
+	end
+	for _, entry in ipairs(self:myDone()) do
+		note(entry.id, entry.level)
+	end
+	local links = {}
+	for id, counts in pairs(votes) do
+		local best, most
+		for prev, n in pairs(counts) do
+			if not most or n > most or (n == most and prev < best) then
+				best, most = prev, n
+			end
+		end
+		links[id] = best
+	end
+	for id, prev in pairs(self:knownLinks()) do
+		if questNumber(id, 1, MAX_QUEST_ID) and questNumber(prev, 1, MAX_QUEST_ID) and id ~= prev then
+			links[id] = prev
+		end
+	end
+	return links, levels
 end
 
 -- Player notes (§9.4) -----------------------------------------------------------

@@ -396,12 +396,30 @@ button { cursor: pointer; }
 .list-row .side { flex-shrink: 0; font-size: 13px; color: var(--grey); }
 .profession-row { width: 100%; background: none; border: 0; color: inherit; font: inherit; text-align: left; }
 .profession-row:hover { background: rgba(255, 209, 0, 0.08); }
-.profession-row .toggle { flex-shrink: 0; width: 14px; height: 14px; line-height: 12px; text-align: center; font-size: 13px; color: var(--gold, #ffd100); border: 1px solid #6b5a2e; background: #1a1714; }
 .recipe-row { padding-left: 38px; }
 .recipe-filters { gap: 10px; }
 .recipe-filters .check { font-size: 14px; }
 .level-box { width: 44px; text-align: center; }
 .list-row .side.info { width: 130px; text-align: left; }
+
+/* Quests: Quest log / Completed tabs, chain toggles and the line joining a chain. */
+.subtabs { display: flex; gap: 3px; align-items: flex-end; border-bottom: 2px solid var(--inset-edge); margin-top: 4px; }
+.subtab { height: 24px; padding: 0 12px; background: #121110; border: 2px solid #26231f; border-bottom: 0; border-radius: 6px 6px 0 0; box-shadow: 0 0 0 1px #000; color: var(--gold); font-family: var(--heading); font-size: 13px; cursor: pointer; }
+.subtab:hover { color: #fff2a8; }
+.subtab[aria-selected="true"] { height: 27px; background: var(--frame); border-color: var(--frame-edge); color: var(--white); }
+.quest-row .gutter { position: relative; flex: 0 0 14px; align-self: stretch; }
+.profession-row .toggle, .quest-row .toggle { flex-shrink: 0; width: 14px; height: 14px; padding: 0; line-height: 12px; text-align: center; font-size: 13px; color: var(--gold); border: 1px solid #6b5a2e; background: #1a1714; }
+.quest-row .toggle { cursor: pointer; }
+.quest-row .toggle:hover { border-color: var(--gold); }
+.quest-row .side.when { width: 60px; text-align: right; }
+.quest-row .side.part { width: 48px; text-align: right; }
+.quest-row .side.level { width: 22px; text-align: right; }
+.quest-row.nested { padding-left: 30px; }
+.quest-row.caption { min-height: 22px; font-size: 13px; color: var(--grey); }
+.gutter.chain::before { content: ""; position: absolute; left: 5px; top: 50%; width: 4px; height: 4px; margin-top: -2px; background: var(--grey); }
+.gutter.chain::after { content: ""; position: absolute; left: 6px; width: 2px; top: 50%; bottom: 50%; background: rgba(157, 157, 157, 0.55); }
+.gutter.chain.up::after { top: -3px; }
+.gutter.chain.down::after { bottom: -3px; }
 
 .split { display: flex; gap: 8px; min-height: 100%; }
 .members-col { width: 170px; flex-shrink: 0; display: flex; flex-direction: column; gap: 2px; }

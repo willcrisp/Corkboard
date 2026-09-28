@@ -7,8 +7,8 @@ import assert from "node:assert/strict";
 import * as sanitise from "../public/js/core/sanitise.js";
 import { collectLinks, nameIndex, parse, plain, toEditable, toText } from "../public/js/model/text.js";
 import {
-  cleanPlayerName, decodePlayer, decodeQuests, decodeRecipes, encodePlayer, gear, notes, playerEntries, playerKey,
-  questLogs, recipeLists,
+  chainBefore, CHAIN_MAX, cleanPlayerName, decodeDone, decodePlayer, decodeQuests, decodeRecipes, encodePlayer, gear,
+  groupChains, notes, playerEntries, playerKey, questLinks, questLogs, QUESTS_DONE_MAX, recipeLists,
 } from "../public/js/model/formats.js";
 import { byline, editorHeader, matches, nextNoteId, shortAge, shortName, webName } from "../public/js/model/view.js";
 
@@ -94,6 +94,35 @@ test("recipe lists and quest logs decode", () => {
     "R1;165;47;75;1;Leatherworking\n1,2",
   ]) assert.equal(decodeRecipes(bad), null, bad);
   assert.deepEqual(decodeQuests("7:5,46:10,x:1,166:18"), [{ id: 7, level: 5 }, { id: 46, level: 10 }, { id: 166, level: 18 }]);
+});
+
+test("completed quests and chains decode as the addon writes them", () => {
+  // The same texts as quest_history_spec.lua.
+  assert.deepEqual(decodeQuests("7:5,15:3/7,46:10/46\nD1;46.10.1790000050.7"),
+    [{ id: 7, level: 5 }, { id: 15, level: 3, prev: 7 }, { id: 46, level: 10 }]);
+  const done = [{ id: 46, level: 10, at: 1790000050, prev: 7 }, { id: 7, level: 5, at: 1790000000 }, { id: 9, level: 0, at: 1789999991 }];
+  assert.deepEqual(decodeDone("7:5,166:18\nD1;46.10.1790000050.7,7.5.1790000000,9.0.1789999991"), done);
+  assert.deepEqual(decodeDone("\nD1;46.10.1790000050.7,7.5.1790000000,9.0.1789999991"), done);
+  assert.deepEqual(decodeDone("7:5,166:18"), []);
+  assert.deepEqual(decodeDone("\nD1;x.1.2,0.5.1,5.5.5.5,9.3.100,9.3.50,12.1.2.3.4,13.1"),
+    [{ id: 5, level: 5, at: 5 }, { id: 9, level: 3, at: 100 }]);
+  const many = Array.from({ length: 40 }, (_, i) => `${i + 1}.1.${1000 - i}`).join(",");
+  assert.equal(decodeDone(`\nD1;${many}`).length, QUESTS_DONE_MAX);
+
+  const base = { editor: "B-R", color: 1, deleted: false, created: 10, rev: 10, kind: "quests" };
+  const board = { notes: {
+    "aaaaaaaa-0": { ...base, id: "aaaaaaaa-0", author: "Bob-R", text: "166:18/54\nD1;54.7.300.15,46.10.200,15.3.100.7,7.5.50" },
+    "bbbbbbbb-0": { ...base, id: "bbbbbbbb-0", author: "Carol-R", text: "15:3/8,54:7/15" },
+    "cccccccc-0": { ...base, id: "cccccccc-0", author: "Dan-R", text: "15:3/7" },
+  } };
+  const { links, levels } = questLinks(board);
+  assert.deepEqual([...links].sort((a, b) => a[0] - b[0]), [[15, 7], [54, 15], [166, 54]]);
+  assert.equal(levels.get(166), 18);
+  assert.deepEqual(chainBefore(links, 166), [7, 15, 54]);
+  assert.deepEqual(chainBefore(new Map([[3, 1], [1, 2], [2, 1]]), 3), [2, 1]);
+  assert.equal(chainBefore(new Map(Array.from({ length: 49 }, (_, i) => [i + 2, i + 1])), 50).length, CHAIN_MAX);
+  const grouped = groupChains(decodeDone(board.notes["aaaaaaaa-0"].text), links);
+  assert.deepEqual(grouped.map((e) => [e.id, e.up, e.down]), [[54, false, true], [15, true, true], [7, true, false], [46, false, false]]);
 });
 
 test("board views pick the right kinds", () => {

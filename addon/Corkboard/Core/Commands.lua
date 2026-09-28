@@ -99,10 +99,16 @@ end
 
 local plural = Commands.plural
 
+Commands.RECENT_DONE = 3 -- turn-ins /cork quests <name> lists
+
 -- Quest logs (§9.3) -----------------------------------------------------------
 
--- The mark on a quest you're on too, in the Quests tab and in chat.
+-- The mark on a quest you're on too, in the Quests tab and in chat. On a
+-- completed quest or an earlier step of a chain, the same tick means you've
+-- done it; the others say it's in your quest log now, or not done (§9.3).
 Commands.SHARED_ICON = "Interface\\RaidFrame\\ReadyCheck-Ready"
+Commands.LOG_ICON = "Interface\\RaidFrame\\ReadyCheck-Waiting"
+Commands.MISSING_ICON = "Interface\\RaidFrame\\ReadyCheck-NotReady"
 local SHARED = "|T" .. Commands.SHARED_ICON .. ":0|t"
 
 -- "as of 5m ago": how current a member's quest log is. That's the later of
@@ -358,6 +364,18 @@ function handlers.quests(store, name)
 	for _, quest in ipairs(list) do
 		local level = quest.level > 0 and format(" %s(%d)|r", GREY, quest.level) or ""
 		out[#out + 1] = "  " .. quest.link .. level .. (quest.shared and who ~= me and " " .. SHARED or "")
+	end
+	-- The last few turned in; the Quests tab lists them all, chains grouped.
+	local done = Store.decodeDone(logs[who].text)
+	if #done > 0 then
+		local recent = {}
+		for i = 1, math.min(#done, Commands.RECENT_DONE) do
+			local entry = done[i]
+			recent[i] = Commands.questLink(entry.id, entry.level, Commands.questTitle(store, entry.id))
+				.. format(" %s(%s)|r", GREY, Commands.shortAge(math.max(0, now - entry.at)))
+		end
+		local more = #done > #recent and format(" %sand %d more on the Quests tab|r", GREY, #done - #recent) or ""
+		out[#out + 1] = "Last turned in: " .. concat(recent, ", ") .. more
 	end
 	return out
 end

@@ -2,7 +2,7 @@
 
 The handoff between sessions. Read this after `CLAUDE.md`. Before you finish, update it: move what you finished into "Where things stand" and rewrite "Next steps".
 
-Last updated: 2026-09-27 (thirteenth session: opening a profession to see its recipes, and level and armour filters).
+Last updated: 2026-09-28 (fourteenth session: completed quests and quest chains on the Quests tab).
 
 ## Where things stand
 
@@ -23,12 +23,13 @@ On 2026-09-26 Will asked for the remaining work to be built on best assumptions,
 | Phase 5: companion | `companion/`, `addon/Corkboard_Cloud/` | Passes pytest, including the real addon loading the `Data.lua` it writes. |
 | Phase 5: hosting | `infra/` | Compose, Caddyfile and `infra/README.md`; not deployed. |
 | Professions tab (§9.2) | `Core/Recipes.lua`, `Store:learned`/`shareRecipes`, `UI/Professions.lua`, the scan in `Corkboard.lua` | Built; passes between fake clients. Not run in game. |
+| Completed quests and chains (§9.3) | `Store:questTurnedIn`/`questAccepted`/`questLinks`, `Store.follows`, `View.questLog` modes, `UI/Quests.lua`, the events in `Corkboard.lua`; web `formats.js`/`tabs.js` | Built; passes between fake clients and in the web e2e. Not run in game. |
 | Player notes (§9.4) | `Core/Players.lua`, `Store:addPlayer`/`editPlayer`, `UI/Players.lua`, `UI/PlayerEditor.lua`, the tooltip and group check in `Corkboard.lua` | Built; passes between fake clients. Not run in game. |
 | Phase 6: packaging | `tools/package_addon.py`, `.pkgmeta`, `.github/workflows/release.yml`, `companion/corkboard-companion.spec`, `companion/corkboard_companion/gui.py` | Zip builder tested; the GUI, PyInstaller build and store uploads are untested. |
 | Phase 7: web app (§7.4) | `web/`, Caddy and compose in `infra/`, `CORK_WEB` in `api/` | Built; passes its unit tests and an end-to-end test (real API, headless Chromium, desktop and phone). Not deployed, not tried on a real phone. |
 | CI | `.github/workflows/ci.yml`, `api-image.yml` | Green on the branch: luacheck, busted, coverage gate (≥ 95%), spike smoke tests, pytest for corkcore, API, companion and packaging, and a check that the fuzz corpus is current. |
 
-Tests: `busted` runs 691 (Core coverage 98.5%, merge core 100%; the coverage run skips `#slow` specs); pytest runs 142 (corkcore), 23 (API), 32 (companion) and 6 (packaging and deploy, `tools/tests`); `node --test` runs 41 web unit tests and 2 end-to-end tests.
+Tests: `busted` runs 712 (Core coverage 98.6%, merge core 100%; the coverage run skips `#slow` specs); pytest runs 142 (corkcore), 23 (API), 32 (companion) and 6 (packaging and deploy, `tools/tests`); `node --test` runs 42 web unit tests and 2 end-to-end tests.
 
 ### First in-game run (fourth session)
 
@@ -130,6 +131,17 @@ Will then asked for recipe filters by level range and armour type (design.md §9
 - **Tab:** a Level min–max and Cloth / Leather / Mail / Plate checkboxes under the top row; any filter switches to the recipe list across members, like a search, and recipe rows show "Level 25 · Leather". Same in the web app.
 - **Tests:** `busted` 691 (encode/decode, capacity with details, the filters, two fake clients sharing details with an uncached cloak, the tab's filter widgets); the fake client gained `C_Item`. `npm test` 41, `npm run e2e` 2 (the demo board's Leatherworking list carries details and the e2e filters it), luacheck clean.
 
+### Fourteenth session: completed quests and chains (design.md §9.3 "Completed", "Chains")
+
+Will asked for the quests each member has turned in (the last 20 or so) next to their current log, with chains linked, so you can see whether someone is lined up with the earlier steps and what you'd need to have done to reach a quest.
+
+- **Records:** no new kind. The quest-log note gains a second line, `D1;id.level.time[.prev],…`, the last 30 turn-ins newest first; the first line's quests can carry `/prev`. Older clients read only `id:level` pairs, so they skip both. A turn-in rides the log's next read, so it's still one PUT per quest event. If the whole wouldn't fit in 2,000 bytes, the oldest turn-ins are dropped. No sanitiser change and no new shared vectors (the merge rules are untouched).
+- **Chains are learned, not looked up:** a quest accepted within 60 s of a turn-in, from the same NPC when both GUIDs are known, follows it. Links are kept account-wide in `CorkboardDB.global.questLinks` and merged across the board's members (most held wins, your own first). Known limits are in design.md; if Forever turns out to have `C_QuestLine` data or we ship a prerequisite table, it would slot in behind `Store:questLinks`.
+- **Addon UI:** the Quests tab's right side has **Quest log (N)** / **Completed (N)** top tabs. A quest with a known chain shows "Part N" and a plus; opening it lists the earlier steps with where *you* are (tick done, waiting mark in your log, cross not done) and when the member did each. Completed groups each chain together, joined by a grey line. Filters: "Only quests I'm on too" / "Only ones I haven't done". `/cork quests <name>` ends with "Last turned in:" and the three newest.
+- **Web app:** the same two lists, chain toggle and joining line, without marks.
+- **Tests:** `addon/spec/quest_history_spec.lua` (formats, `Store.follows`, store rules, the byte limit, board-wide links, both view modes, `/cork quests`, and two fake clients turning in and accepting quests from NPCs, the tab's clicks and `/reload`). The fake client gained `turnInQuest`, `acceptQuest`, a quest-giver unit and `IsQuestFlaggedCompleted`. `web/test/model.test.mjs` runs the same texts; the e2e opens Kaelthra's chain and her Completed list. The e2e's note edit now waits for the editor to take focus first: filling before the editor's own caret move could append the text instead of replacing it, a race this change's extra steps made show up about half the time.
+- **Not seen in game yet:** the event payloads, `UnitGUID("questnpc")` and `IsQuestFlaggedCompleted` (new §2 row). Step 4 below now checks them.
+
 ### Spec changes (earlier sessions)
 
 Each is written into `docs/design.md` with its reason:
@@ -211,6 +223,8 @@ Do these in order unless Will says otherwise.
    5. A unticks "Share my quest log with this board": A disappears from B's list. A ticks it again: A is back.
    6. On B, `/cork quests` and `/cork quests <A's first name>` in chat. On the Members tab, clicking A opens A's log.
    7. `/reload` on A: nothing changes on B, and A's list isn't briefly empty. Send any Lua errors and a screenshot of the tab.
+   8. **Completed and chains.** On A, turn in a quest whose next part the same NPC offers (Elwynn: "Kobold Camp Cleanup", then "Investigate Echo Ridge" from Marshal McBride) and accept it. On B, pick A: the Quest log shows the new quest with "Part 2" and a plus; click it: "Earlier in the chain" and the first quest, with your mark. Click **Completed (1)**: the turned-in quest, "just now". If the new quest has no plus, send `/dump UnitGUID("questnpc"), UnitGUID("npc")` with a quest window open.
+   9. On B, `/dump C_QuestLog.IsQuestFlaggedCompleted(<a quest you've done>)`; it should be `true`. If Forever has quest lines, `/dump C_QuestLine.GetQuestLineInfo(<a chain quest's id>)` would give a better chain source: send the output.
 5. **Will: the player notes check.** Two characters on one board, plus a third player (anyone) to target:
    1. On A, target the third player, open `/cork`, **Players** tab, **Add Player**: the Character box already holds their name. Pick **Avoid**, write a reason with a shift-clicked item, Save. The row shows a red cross, the name, "Avoid" in red, the reason with a working item link, and "You · now" or your name.
    2. On B within a few seconds: the same row. Hover it: Edit and Delete appear. Edit it to **Good player**; A's row turns green.

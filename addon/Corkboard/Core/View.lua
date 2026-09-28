@@ -383,11 +383,129 @@ function View.questMembers(store, board, online)
 	return rows
 end
 
--- One member's side of the tab: { title, detail, rows, empty }. rows are
--- their quests (Commands.questList), only the ones you share when
--- `onlyShared` is set. `name` may be a member without a log, when the
--- Members tab sent you here.
-function View.questLog(store, board, name, online, onlyShared, now)
+-- Chains (§9.3 "Chains") --------------------------------------------------------
+
+View.CHAIN_MAX = 20 -- earlier steps followed back from one quest
+View.PROGRESS_ICONS = {
+	done = Commands.SHARED_ICON, -- you've turned it in
+	log = Commands.LOG_ICON, -- it's in your quest log now
+	no = Commands.MISSING_ICON, -- you haven't done it
+}
+
+-- The quests before `id` in its chain, oldest first, as far as `links`
+-- (Store:questLinks) knows.
+function View.chainBefore(links, id)
+	local before, seen = {}, { [id] = true }
+	local prev = links[id]
+	while prev and not seen[prev] and #before < View.CHAIN_MAX do
+		seen[prev] = true
+		table.insert(before, 1, prev)
+		prev = links[prev]
+	end
+	return before
+end
+
+-- Where you are with a quest: "log" while it's in your quest log, "done"
+-- once you've turned it in (your completed quests, or the client's own
+-- record through env.questDone), "no" when the client says you haven't, and
+-- nil when this client can't tell.
+local function progress(store, id, mine, myDone)
+	if mine[id] then
+		return "log"
+	elseif myDone[id] then
+		return "done"
+	end
+	local check = store.env.questDone
+	local done = check and check(id)
+	if done == true then
+		return "done"
+	elseif done == false then
+		return "no"
+	end
+end
+
+local function partLabel(before)
+	return #before > 0 and format("Part %d", #before + 1) or ""
+end
+
+-- The rows under an opened quest: a caption, then the earlier steps oldest
+-- first, each with your progress (for someone else's quest) and when the
+-- member turned it in, if their completed quests say.
+local function chainRows(store, before, ctx)
+	local rows, done = {}, 0
+	for i, id in ipairs(before) do
+		local status = progress(store, id, ctx.mine, ctx.myDone)
+		done = done + (status == "done" and 1 or 0)
+		local title = Commands.questTitle(store, id)
+		local level = ctx.levels[id] or 0
+		local at = ctx.theirDone[id]
+		rows[#rows + 1] = {
+			nested = true,
+			id = id,
+			level = level,
+			title = title,
+			link = Commands.questLink(id, level, title),
+			status = status,
+			mark = not ctx.self and View.PROGRESS_ICONS[status] or nil,
+			part = format("Part %d", i),
+			when = at and Commands.age(math.max(0, ctx.now - at)) or "",
+		}
+	end
+	local caption = "Earlier in the chain"
+	if not ctx.self then
+		caption = format("%s · you've done %d of %d", caption, done, #before)
+	end
+	table.insert(rows, 1, { nested = true, caption = true, text = caption })
+	return rows
+end
+
+-- A member's completed quests with each chain kept together: groups in the
+-- order of their newest turn-in, newest first within a group. A group of
+-- two or more marks its rows `up` and `down` for the line joining them.
+local function groupChains(entries, links)
+	local inList = {}
+	for _, entry in ipairs(entries) do
+		inList[entry.id] = true
+	end
+	local function root(id)
+		local seen = { [id] = true }
+		while links[id] and inList[links[id]] and not seen[links[id]] do
+			id = links[id]
+			seen[id] = true
+		end
+		return id
+	end
+	local groups, order = {}, {}
+	for _, entry in ipairs(entries) do
+		local key = root(entry.id)
+		if not groups[key] then
+			groups[key] = {}
+			order[#order + 1] = key
+		end
+		local group = groups[key]
+		group[#group + 1] = entry
+	end
+	local out = {}
+	for _, key in ipairs(order) do
+		local group = groups[key]
+		for i, entry in ipairs(group) do
+			entry.up = #group > 1 and i > 1
+			entry.down = #group > 1 and i < #group
+			out[#out + 1] = entry
+		end
+	end
+	return out
+end
+
+-- One member's side of the tab: { title, detail, rows, empty, counts,
+-- filterable, filterLabel }. In the "log" mode (the default) rows are their
+-- quests (Commands.questList), only the ones you share when `filtered` is
+-- set; a quest with earlier steps known has a `key`, and when `opened` (a
+-- set of quest ids) holds it, its chain follows under it (chainRows). In the
+-- "done" mode rows are the quests they've turned in, chains grouped, only
+-- the ones you haven't done when `filtered` is set. `name` may be a member
+-- without a log, when the Members tab sent you here.
+function View.questLog(store, board, name, online, filtered, now, mode, opened)
 	local me = store.env.me
 	local myRealm = View.realmOf(me)
 	local log = name and Store.questLogs(board)[name]
@@ -396,41 +514,118 @@ function View.questLog(store, board, name, online, onlyShared, now)
 			title = name and View.shortName(name, myRealm) or "",
 			detail = "",
 			rows = {},
+			counts = { log = 0, done = 0 },
 			empty = name and format("%s doesn't share a quest log on this board.", View.shortName(name, myRealm))
 				or "Nobody shares a quest log on this board yet. Members who tick the box above show up here.",
 		}
 	end
-	local list, shared = Commands.questList(store, log, store:myQuests())
-	local rows = {}
-	for _, quest in ipairs(list) do
-		if not onlyShared or quest.shared then
-			quest.index = #rows + 1
-			quest.shared = quest.shared and name ~= me
-			rows[#rows + 1] = quest
-		end
+	local mine = store:myQuests()
+	local list, shared = Commands.questList(store, log, mine)
+	local entries = Store.decodeDone(log.text)
+	local links, levels = store:questLinks(board)
+	local ctx = {
+		self = name == me,
+		now = now,
+		mine = mine,
+		myDone = {},
+		theirDone = {},
+		levels = levels,
+	}
+	for _, entry in ipairs(store:myDone()) do
+		ctx.myDone[entry.id] = true
 	end
-	local out = { rows = rows }
-	if name == me then
+	for _, entry in ipairs(entries) do
+		ctx.theirDone[entry.id] = entry.at
+	end
+	local out = { rows = {}, counts = { log = #list, done = #entries } }
+	local rows = out.rows
+	local short = View.shortName(name, myRealm)
+	local fresh
+	if ctx.self then
 		out.title = format("You · %s", plural(#list, "quest"))
 		out.detail = board.quests == false and "Not shared: tick the box above to share it."
 			or "What members of this board see."
 	else
-		local short = View.shortName(name, myRealm)
 		out.filterable = true
 		out.title = format("%s · %s", short, plural(#list, "quest"))
-		local fresh
 		for _, who in ipairs(online) do
 			if who == name then
 				fresh = "online now"
 			end
 		end
 		fresh = fresh or Commands.asOf(log, board.seen and board.seen[name], now)
+	end
+
+	if mode == "done" then
+		out.filterLabel = "Only ones I haven't done"
+		local done, kept = 0, {}
+		for _, entry in ipairs(entries) do
+			local status = progress(store, entry.id, mine, ctx.myDone)
+			done = done + (status == "done" and 1 or 0)
+			if not (filtered and not ctx.self and status == "done") then
+				entry.status = status
+				kept[#kept + 1] = entry
+			end
+		end
+		for _, entry in ipairs(groupChains(kept, links)) do
+			local title = Commands.questTitle(store, entry.id)
+			local level = entry.level > 0 and entry.level or levels[entry.id] or 0
+			rows[#rows + 1] = {
+				index = #rows + 1,
+				id = entry.id,
+				level = level,
+				title = title,
+				link = Commands.questLink(entry.id, level, title),
+				status = entry.status,
+				shared = entry.status == "done" and not ctx.self,
+				mark = not ctx.self and entry.status ~= "no" and View.PROGRESS_ICONS[entry.status] or nil,
+				part = partLabel(View.chainBefore(links, entry.id)),
+				when = Commands.age(math.max(0, now - entry.at)),
+				up = entry.up,
+				down = entry.down,
+			}
+		end
+		if not ctx.self then
+			out.detail = format("%s · you've done %d of %d", fresh, done, #entries)
+		end
+		if #entries == 0 then
+			out.empty = format("Nothing turned in yet. Quests show up here as %s hands them in.",
+				ctx.self and "your character" or short)
+		elseif #rows == 0 then
+			out.empty = "You've done all of these too."
+		end
+		return out
+	end
+
+	out.filterLabel = "Only quests I'm on too"
+	for _, quest in ipairs(list) do
+		if not filtered or quest.shared then
+			local before = View.chainBefore(links, quest.id)
+			quest.index = #rows + 1
+			quest.shared = quest.shared and not ctx.self
+			quest.mark = quest.shared and Commands.SHARED_ICON or nil
+			quest.part = partLabel(before)
+			quest.when = ""
+			if #before > 0 then
+				quest.key = quest.id
+				quest.open = opened and opened[quest.id] == true or false
+			end
+			rows[#rows + 1] = quest
+			if quest.open then
+				for _, row in ipairs(chainRows(store, before, ctx)) do
+					row.index = #rows + 1
+					rows[#rows + 1] = row
+				end
+			end
+		end
+	end
+	if not ctx.self then
 		local together = shared == 0 and format("you share none with %s", short)
 			or format("you share %s with %s", plural(shared, "quest"), short)
 		out.detail = fresh .. " · " .. together
 	end
 	if #rows == 0 then
-		out.empty = onlyShared and #list > 0 and "None of these are in your quest log." or "No quests."
+		out.empty = filtered and #list > 0 and "None of these are in your quest log." or "No quests."
 	end
 	return out
 end

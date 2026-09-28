@@ -153,7 +153,21 @@ test("join, read every tab, write, reload, work offline, and see game changes", 
   await page.locator(".profession-row", { hasText: "Leatherworking 47/75" }).waitFor();
   await page.click('.tab:has-text("Quests")');
   await page.click('.members-col button:has-text("Kaelthra")');
-  await page.locator(".list-row", { hasText: "Attunement to the Core" }).waitFor();
+  // A quest whose earlier steps are known opens to list them.
+  const molten = page.locator(".quest-row", { hasText: "Quest #6822" });
+  await molten.locator(".part", { hasText: "Part 4" }).waitFor();
+  await molten.locator(".toggle").click();
+  await page.locator(".quest-row.caption", { hasText: "Earlier in the chain" }).waitFor();
+  assert.equal(await page.locator(".quest-row.nested:not(.caption)").count(), 3);
+  await molten.locator(".toggle").click();
+  assert.equal(await page.locator(".quest-row.nested").count(), 0);
+  // Completed: newest first, the chain kept together and joined.
+  await page.click('.subtab:has-text("Completed (4)")');
+  await page.locator(".quest-row", { hasText: "Attunement to the Core" }).waitFor();
+  assert.equal(await page.locator(".quest-row .gutter.chain").count(), 3);
+  assert.deepEqual(await page.locator(".quest-row .main").allTextContents(),
+    ["[Quest #6821]", "[Quest #6805]", "[Quest #6804]", "[Attunement to the Core]"]);
+  await page.click('.subtab:has-text("Quest log (4)")');
   await page.click('.tab:has-text("Players")');
   assert.equal(await page.locator(".player-row").count(), 3);
 
@@ -179,6 +193,9 @@ test("join, read every tab, write, reload, work offline, and see game changes", 
   const repair = page.locator(".card", { hasText: "Repair before you zone in" });
   await repair.hover();
   await repair.locator('[aria-label="Edit note"]').click();
+  // The editor puts the cursor at the end on the next frame; filling before
+  // that can land the text after what's there instead of replacing it.
+  await page.locator('[aria-label="Note"]:focus').waitFor();
   await page.fill('[aria-label="Note"]', "Repair first. Vendor at Thorium Point.");
   await page.click('.dialog button:has-text("Save")');
   await page.locator(".card", { hasText: "Repair first" }).waitFor();

@@ -70,7 +70,10 @@ export function demoBoard(now = Math.floor(Date.now() / 1000)) {
   add(B, 3, bob, 2 * 86400, recipes({ id: 171, name: "Alchemy" }, 280, 300, [17555, 17556, 17557, 17570, 17573, 17574, 17575, 17577]), 1, "recipes");
   add(W, 4, will, 3 * 3600, `Crafting |cffffd000|Henchant:3753|h[Leatherworking: Handstitched Leather Belt]|h|r for anyone levelling. Bob has |cffffd000|Henchant:17573|h[Alchemy: Greater Arcane Elixir]|h|r.`, 2);
 
-  add(K, 0, kael, 900, "7848:60,6822:60,6823:60,4262:56,5063:58", 1, "quests");
+  // Kaelthra is on the fourth part of the Hydraxian Waterlords chain, with the
+  // first three and the Core attunement among her turn-ins.
+  add(K, 0, kael, 900, `6822:60/6821,6823:60,4262:56,5063:58\nD1;6821.60.${now - 2000}.6805,7848.60.${now - 5000},`
+    + `6805.60.${now - 9000}.6804,6804.58.${now - 90000}`, 1, "quests");
   add(B, 0, bob, 3000, "7848:60,5063:58,8288:60", 1, "quests");
 
   add(W, 5, will, 4 * 86400, `P1;avoid;Gankalot\nRolled need on ${item(18814, "Choker of the Fire Lord", EPIC)} as a hunter and left the group.`, 1, "player");

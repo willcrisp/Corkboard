@@ -440,6 +440,7 @@ function Client.new(options)
 		-- The quest log, in order: { id, level } for a quest (its title comes
 		-- from Client.QUEST_DB) or { header = "Zone" }.
 		quests = options.quests or {},
+		questsDone = options.questsDone or {}, -- quest id -> true, for IsQuestFlaggedCompleted
 		questCache = {}, -- quest id -> title, for quests loaded from QUEST_DB
 		questRequests = {},
 		-- Other players' units: token ("target", "party1", "raid3") -> { name,
@@ -850,6 +851,9 @@ function Client:makeEnv()
 			return { title = Client.QUEST_DB[entry.id], questID = entry.id, level = entry.level, isHeader = false,
 				isHidden = false }
 		end,
+		IsQuestFlaggedCompleted = function(id)
+			return client.questsDone[id] == true
+		end,
 		GetTitleForQuestID = function(id)
 			for _, entry in ipairs(client.quests) do
 				if entry.id == id then
@@ -965,6 +969,8 @@ function Client:makeEnv()
 		local u = other(unit)
 		if u then
 			return u.guid
+		elseif unit == "npc" or unit == "questnpc" then
+			return nil -- no quest window open
 		end
 		return client.guid
 	end
@@ -1344,6 +1350,42 @@ end
 -- event without a change, as killing a mob for an objective does.
 function Client:setQuests(quests)
 	self.quests = quests or self.quests
+	self.fire("QUEST_LOG_UPDATE")
+	return self:check()
+end
+
+-- Talks to quest giver `npc` (a GUID, or nil for none the client names) while
+-- `fn` runs, as the quest window does.
+function Client:atQuestGiver(npc, fn)
+	self.units.questnpc = npc and { name = "Quest Giver", guid = npc, player = false } or nil
+	fn()
+	self.units.questnpc = nil
+end
+
+-- Turns in quest `id` to `npc`: QUEST_TURNED_IN, then the quest leaves the
+-- log (QUEST_REMOVED, QUEST_LOG_UPDATE), as in the game.
+function Client:turnInQuest(id, npc)
+	self:atQuestGiver(npc, function()
+		self.fire("QUEST_TURNED_IN", id, 0, 0)
+	end)
+	self.questsDone[id] = true
+	for i = #self.quests, 1, -1 do
+		if self.quests[i].id == id then
+			table.remove(self.quests, i)
+		end
+	end
+	self.fire("QUEST_REMOVED", id)
+	self.fire("QUEST_LOG_UPDATE")
+	return self:check()
+end
+
+-- Accepts quest `id` at `level` from `npc`: it joins the log, then
+-- QUEST_ACCEPTED and QUEST_LOG_UPDATE fire.
+function Client:acceptQuest(id, level, npc)
+	self.quests[#self.quests + 1] = { id = id, level = level }
+	self:atQuestGiver(npc, function()
+		self.fire("QUEST_ACCEPTED", id)
+	end)
 	self.fire("QUEST_LOG_UPDATE")
 	return self:check()
 end

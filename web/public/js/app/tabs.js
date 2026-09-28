@@ -6,7 +6,8 @@ import { checkbox, h, icon, ICONS, searchBox, tick } from "./dom.js";
 import { localLink, renderText } from "./links.js";
 import { compute as computeDigest } from "../core/digest.js";
 import {
-  ARMOUR, ARMOUR_NAMES, decodeQuests, gear, GEAR_SHOWN, members, playerEntries, questLogs, recipeLists, VERDICT_LABELS,
+  ARMOUR, ARMOUR_NAMES, chainBefore, decodeDone, decodeQuests, gear, GEAR_SHOWN, groupChains, members, playerEntries,
+  questLinks, questLogs, recipeLists, VERDICT_LABELS,
 } from "../model/formats.js";
 import { collectLinks, nameIndex, plain } from "../model/text.js";
 import { age, byline, byName, digestLabel, matches, plural, shortAge, shortName, tag } from "../model/view.js";
@@ -269,16 +270,82 @@ function questsTab(ctx) {
     detail = [h("div", { class: "heading", style: { fontSize: "15px" } }, shortName(chosen)),
       empty(null, `${shortName(chosen)} doesn't share a quest log on this board.`)];
   } else {
-    const quests = decodeQuests(log.text).map((q) => ({ ...q, title: names.get(`quest:${q.id}`) || `Quest #${q.id}` }))
+    const titled = (q) => ({ ...q, title: names.get(`quest:${q.id}`) || `Quest #${q.id}` });
+    const quests = decodeQuests(log.text).map(titled)
       .sort((a, b) => a.level - b.level || a.title.localeCompare(b.title));
+    const done = decodeDone(log.text);
+    const doneAt = new Map(done.map((e) => [e.id, e.at]));
+    const { links, levels } = questLinks(board);
+    const mode = ui.tabState.questMode === "done" ? "done" : "log";
+    const open = ui.tabState.openQuests || (ui.tabState.openQuests = {});
+    const link = (q) => localLink("quest", q.id, q.title, "#ffff00");
+    const columns = (q, when, part) => [
+      h("div", { class: "side when" }, when || ""),
+      h("div", { class: "side part" }, part),
+      h("div", { class: "side level" }, q.level > 0 ? String(q.level) : ""),
+    ];
+    const partOf = (id) => {
+      const before = chainBefore(links, id).length;
+      return before ? `Part ${before + 1}` : "";
+    };
+    // Quest log and Completed, as small tabs over the list.
+    const modeTab = (which, label) => {
+      const b = h("button", { class: "subtab", type: "button", role: "tab", "aria-selected": String(mode === which) }, label);
+      b.addEventListener("click", () => {
+        ui.tabState.questMode = which;
+        ctx.render();
+      });
+      return b;
+    };
+    let rows;
+    if (mode === "log") {
+      // A quest whose earlier steps are known opens on a click to list them.
+      rows = quests.length
+        ? h("div", { class: "striped" }, quests.map((q) => {
+          const before = chainBefore(links, q.id);
+          const key = `${chosen}\n${q.id}`;
+          let toggle = h("span", { class: "gutter" });
+          if (before.length) {
+            toggle = h("button", { class: "toggle", type: "button", "aria-expanded": String(!!open[key]),
+              "aria-label": `${open[key] ? "Hide" : "Show"} the earlier steps of ${q.title}` }, open[key] ? "\u2212" : "+");
+            toggle.addEventListener("click", () => {
+              if (open[key]) delete open[key];
+              else open[key] = true;
+              ctx.render();
+            });
+          }
+          const row = h("div", { class: "list-row quest-row" }, toggle, h("div", { class: "main" }, link(q)),
+            columns(q, "", partOf(q.id)));
+          if (!open[key]) return row;
+          return [row,
+            h("div", { class: "list-row quest-row nested caption" }, h("span", { class: "gutter" }), "Earlier in the chain"),
+            before.map((id, i) => {
+              const step = titled({ id, level: levels.get(id) || 0 });
+              const at = doneAt.get(id);
+              return h("div", { class: "list-row quest-row nested" }, h("span", { class: "gutter" }),
+                h("div", { class: "main" }, link(step)),
+                columns(step, at ? age(Math.max(0, now - at)) : "", `Part ${i + 1}`));
+            })];
+        }))
+        : empty(null, "No quests.");
+    } else {
+      // Newest first, each chain kept together and joined by a line.
+      rows = done.length
+        ? h("div", { class: "striped" }, groupChains(done, links).map((e) => {
+          const q = titled({ ...e, level: e.level || levels.get(e.id) || 0 });
+          const gutter = ["gutter", e.up || e.down ? "chain" : "", e.up ? "up" : "", e.down ? "down" : ""];
+          return h("div", { class: "list-row quest-row" },
+            h("span", { class: gutter.filter(Boolean).join(" "), "aria-hidden": "true" }),
+            h("div", { class: "main" }, link(q)), columns(q, age(Math.max(0, now - e.at)), partOf(e.id)));
+        }))
+        : empty(null, `Nothing turned in yet. Quests show up here as ${shortName(chosen)} hands them in.`);
+    }
     detail = [
       h("div", { class: "heading", style: { fontSize: "15px" } }, `${shortName(chosen)} · ${plural(quests.length, "quest")}`),
       h("div", { class: "grey small" }, `as of ${age(Math.max(0, now - log.rev))}`),
-      quests.length
-        ? h("div", { class: "striped" }, quests.map((q) => h("div", { class: "list-row" },
-          h("div", { class: "main" }, localLink("quest", q.id, q.title, "#ffff00")),
-          h("div", { class: "side" }, String(q.level)))))
-        : empty(null, "No quests."),
+      h("div", { class: "subtabs", role: "tablist" },
+        modeTab("log", `Quest log (${quests.length})`), modeTab("done", `Completed (${done.length})`)),
+      rows,
     ];
   }
   return scroll("quests", h("div", { class: "split" }, list, h("div", { class: "detail-col" }, detail)));
